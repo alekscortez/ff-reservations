@@ -1,0 +1,30 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 12px;
+  border-right: 1px solid #eee;
+  background: #fafafa;
+  min-height: 100%;
+}
+
+.section {
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666;
+}
+
+a {
+  color: #222;
+  text-decoration: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+a.active {
+  background: #111;
+  color: #fff;
+}

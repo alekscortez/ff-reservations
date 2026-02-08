@@ -1,14 +1,22 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideAppInitializer, inject } from '@angular/core';
+import {
+  ApplicationConfig,
+  provideBrowserGlobalErrorListeners,
+  provideAppInitializer,
+  inject,
+} from '@angular/core';
 import { provideRouter } from '@angular/router';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 
 import { routes } from './app.routes';
-import { authConfig } from './auth/auth.config';
+import { authConfig } from './core/auth/auth.config';
 import { provideAuth, OidcSecurityService } from 'angular-auth-oidc-client';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes), provideAuth(authConfig),
+    provideRouter(routes),
+    provideHttpClient(withInterceptorsFromDi()),
+    provideAuth(authConfig),
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
 
@@ -24,5 +32,5 @@ export const appConfig: ApplicationConfig = {
         });
       });
     }),
-  ]
+  ],
 };

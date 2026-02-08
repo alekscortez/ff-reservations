@@ -1,15 +1,15 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
-import { Observable } from 'rxjs';
+import { buildCognitoLogoutUrl } from './core/config/app-config';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [CommonModule, RouterOutlet],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App implements OnInit {
   private oidc = inject(OidcSecurityService);
@@ -47,11 +47,7 @@ export class App implements OnInit {
     window.localStorage.clear();
 
     // Cognito Hosted UI logout
-    const logoutUrl =
-      'https://us-east-1upsi9q2tc.auth.us-east-1.amazoncognito.com/logout' +
-      '?client_id=1kdkvis45qo915plp7lvj03u16' +
-      '&logout_uri=' + encodeURIComponent(window.location.origin);
-
+    const logoutUrl = buildCognitoLogoutUrl(window.location.origin);
     window.location.replace(logoutUrl);
   }
 }

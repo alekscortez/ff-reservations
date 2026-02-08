@@ -1,0 +1,25 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  background: #ffffff;
+}
+
+.brand {
+  font-weight: 700;
+  color: #111;
+  text-decoration: none;
+}
+
+.links {
+  display: flex;
+  gap: 12px;
+}
+
+.links a {
+  color: #333;
+  text-decoration: none;
+  font-size: 14px;
+}
