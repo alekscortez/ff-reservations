@@ -40,14 +40,18 @@ export class AuthCallback implements OnInit {
 }
 
 function decodeGroups(token: string | null | undefined): string[] {
-  if (!token) return [];
+  const claims = decodeClaims(token);
+  return claims?.['cognito:groups'] ?? [];
+}
+
+function decodeClaims(token: string | null | undefined): any {
+  if (!token) return null;
   const parts = token.split('.');
-  if (parts.length !== 3) return [];
+  if (parts.length !== 3) return null;
   const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
   try {
-    const claims = JSON.parse(atob(payload));
-    return claims?.['cognito:groups'] ?? [];
+    return JSON.parse(atob(payload));
   } catch {
-    return [];
+    return null;
   }
 }
