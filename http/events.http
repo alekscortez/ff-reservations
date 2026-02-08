@@ -1,0 +1,40 @@
+### Get all events
+GET {{baseUrl}}/events
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Create event
+POST {{baseUrl}}/events
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventName": "Saturday Night",
+  "eventDate": "2026-02-21",
+  "minDeposit": 20
+}
+
+###
+
+### Get event by date
+GET {{baseUrl}}/events/by-date/2026-02-21
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Update event
+@eventId = 1770508830523-dd669096-3adf-4a8f-9942-d5ac35eebfb5
+PUT {{baseUrl}}/events/{{eventId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "status": "INACTIVE"
+}
+
+###
+
+### Delete event
+DELETE {{baseUrl}}/events/{{eventId}}
+Authorization: Bearer {{accessToken}}

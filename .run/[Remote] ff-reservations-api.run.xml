@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="[Remote] ff-reservations-api" type="aws.lambda" factoryName="Remote" nameIsGenerated="true">
+    <option name="credentialProviderId" value="profile:default" />
+    <option name="regionId" value="us-east-1" />
+    <option name="functionName" value="ff-reservations-api" />
+    <option name="input" />
+    <option name="inputIsFile" value="false" />
+    <method v="2" />
+  </configuration>
+</component>
