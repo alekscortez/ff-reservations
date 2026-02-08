@@ -13,6 +13,13 @@ export const routes: Routes = [
       import('./features/public/home/home').then((m) => m.Home),
   },
   {
+    path: 'auth/callback',
+    loadComponent: () =>
+      import('./features/public/auth-callback/auth-callback').then(
+        (m) => m.AuthCallback
+      ),
+  },
+  {
     path: 'unauthorized',
     loadComponent: () =>
       import('./features/public/unauthorized/unauthorized').then(
