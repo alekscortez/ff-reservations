@@ -1,1 +1,95 @@
-<p>events works!</p>
+<section class="page">
+  <header class="page-header">
+    <h1>Events</h1>
+    <p>Manage event dates and deposits</p>
+  </header>
+
+  <section class="card">
+    <h2>Create Event</h2>
+    <form [formGroup]="form" (ngSubmit)="createEvent()">
+      <div class="row">
+        <label>
+          Event Name
+          <input type="text" formControlName="eventName" placeholder="Saturday Night" />
+        </label>
+        <label>
+          Event Date
+          <input type="date" formControlName="eventDate" />
+        </label>
+        <label>
+          Min Deposit
+          <input type="number" formControlName="minDeposit" min="0" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" [disabled]="form.invalid || loading">Create</button>
+        <button type="button" (click)="loadEvents()" [disabled]="loading">Refresh</button>
+      </div>
+    </form>
+    <p class="error" *ngIf="error">{{ error }}</p>
+  </section>
+
+  <section class="card">
+    <h2>All Events</h2>
+    <div *ngIf="loading" class="muted">Loading…</div>
+    <div *ngIf="!loading && items.length === 0" class="muted">No events yet.</div>
+
+    <table *ngIf="items.length > 0">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Min Deposit</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let e of items">
+          <tr *ngIf="editingId !== e.eventId">
+            <td>{{ e.eventDate }}</td>
+            <td>{{ e.eventName }}</td>
+            <td>{{ e.status }}</td>
+            <td>{{ e.minDeposit }}</td>
+            <td class="actions">
+              <button type="button" (click)="startEdit(e)">Edit</button>
+              <button type="button" class="danger" (click)="deleteEvent(e)">Delete</button>
+            </td>
+          </tr>
+
+          <tr *ngIf="editingId === e.eventId">
+            <td colspan="5">
+              <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="edit-form">
+                <div class="row">
+                  <label>
+                    Event Name
+                    <input type="text" formControlName="eventName" />
+                  </label>
+                  <label>
+                    Event Date
+                    <input type="date" formControlName="eventDate" />
+                  </label>
+                  <label>
+                    Min Deposit
+                    <input type="number" formControlName="minDeposit" min="0" />
+                  </label>
+                  <label>
+                    Status
+                    <select formControlName="status">
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="actions">
+                  <button type="submit" [disabled]="editForm.invalid || loading">Save</button>
+                  <button type="button" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+  </section>
+</section>

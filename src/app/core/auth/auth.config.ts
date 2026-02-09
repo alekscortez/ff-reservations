@@ -9,6 +9,9 @@ export const authConfig: PassedInitialConfig = {
     clientId: APP_CONFIG.cognito.clientId,
     scope: APP_CONFIG.cognito.scope,
     responseType: 'code',
+    // Keep the user on the callback route after the OIDC library processes login,
+    // so our AuthCallback component can route based on Cognito groups.
+    postLoginRoute: '/auth/callback',
     silentRenew: true,
     useRefreshToken: true,
     renewTimeBeforeTokenExpiresInSeconds: 30,

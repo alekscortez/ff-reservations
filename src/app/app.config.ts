@@ -5,11 +5,16 @@ import {
   inject,
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import {
+  HTTP_INTERCEPTORS,
+  provideHttpClient,
+  withInterceptorsFromDi,
+} from '@angular/common/http';
 
 import { routes } from './app.routes';
 import { authConfig } from './core/auth/auth.config';
 import { provideAuth, OidcSecurityService } from 'angular-auth-oidc-client';
+import { AuthInterceptor } from './core/http/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,6 +22,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withInterceptorsFromDi()),
     provideAuth(authConfig),
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
 
