@@ -21,9 +21,10 @@
 }
 
 .filters {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 280px) auto;
   align-items: end;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -50,10 +51,9 @@ button {
   cursor: pointer;
 }
 
-button.ghost {
-  background: #fff;
-  color: #111;
-  border-color: #dcdcdc;
+button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .muted {
@@ -61,6 +61,7 @@ button.ghost {
 }
 
 .error {
+  margin-top: 8px;
   color: #b00020;
 }
 
@@ -76,4 +77,10 @@ td {
   padding: 8px 6px;
   border-bottom: 1px solid #eee;
   font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
 }

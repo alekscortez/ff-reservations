@@ -1,13 +1,20 @@
 <nav class="sidebar">
-  <div class="section">Staff</div>
-  <a routerLink="/staff/dashboard" routerLinkActive="active">Dashboard</a>
-  <a routerLink="/staff/reservations" routerLinkActive="active">Reservations</a>
-  <a routerLink="/staff/reservations/new" routerLinkActive="active">New Reservation</a>
-  <a routerLink="/staff/check-in" routerLinkActive="active">Check In</a>
+  <ng-container *ngIf="(isStaff$ | async) || (isAdmin$ | async)">
+    <div class="section">Staff</div>
+    <a routerLink="/staff/dashboard" routerLinkActive="active">Dashboard</a>
+    <a routerLink="/staff/events" routerLinkActive="active">Events</a>
+    <a routerLink="/staff/reservations" routerLinkActive="active">Reservations</a>
+    <a routerLink="/staff/reservations/new" routerLinkActive="active">New Reservation</a>
+    <a routerLink="/staff/check-in" routerLinkActive="active">Check In</a>
+  </ng-container>
 
-  <div class="section">Admin</div>
-  <a routerLink="/admin/dashboard" routerLinkActive="active">Dashboard</a>
-  <a routerLink="/admin/events" routerLinkActive="active">Events</a>
-  <a routerLink="/admin/users" routerLinkActive="active">Users</a>
-  <a routerLink="/admin/financials" routerLinkActive="active">Financials</a>
+  <ng-container *ngIf="(isAdmin$ | async)">
+    <div class="section">Admin</div>
+    <a routerLink="/admin/dashboard" routerLinkActive="active">Dashboard</a>
+    <a routerLink="/admin/events" routerLinkActive="active">Events</a>
+    <a routerLink="/admin/frequent-clients" routerLinkActive="active">Frequent Clients</a>
+    <a routerLink="/admin/clients" routerLinkActive="active">Clients CRM</a>
+    <a routerLink="/admin/users" routerLinkActive="active">Users</a>
+    <a routerLink="/admin/financials" routerLinkActive="active">Financials</a>
+  </ng-container>
 </nav>

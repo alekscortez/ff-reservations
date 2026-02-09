@@ -1,0 +1,9 @@
+### Get table template (default pricing + list)
+GET {{baseUrl}}/tables/template
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Get tables for event (effective pricing + disabled flags)
+GET {{baseUrl}}/tables/for-event/2026-02-21
+Authorization: Bearer {{accessToken}}

@@ -1,0 +1,33 @@
+### Reservations endpoints (TODO: implement backend)
+### Create reservation
+POST {{baseUrl}}/reservations
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "tableId": "A01",
+  "holdId": "HOLD_ID",
+  "customerName": "John Doe",
+  "phone": "555-123-1234",
+  "depositAmount": 40,
+  "paymentMethod": "cash"
+}
+
+###
+
+### Get reservations by date
+GET {{baseUrl}}/reservations?eventDate=2026-02-21
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Cancel reservation
+PUT {{baseUrl}}/reservations/RES_ID/cancel
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "tableId": "A01"
+}

@@ -4,13 +4,13 @@ import { roleGuard } from './core/guards/role.guard';
 import { Shell } from './core/layout/shell/shell';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'home' },
+  { path: '', pathMatch: 'full', redirectTo: 'login' },
 
   // Public
   {
-    path: 'home',
+    path: 'login',
     loadComponent: () =>
-      import('./features/public/home/home').then((m) => m.Home),
+      import('./features/public/login/login').then((m) => m.Login),
   },
   {
     path: 'auth/callback',
@@ -25,6 +25,11 @@ export const routes: Routes = [
       import('./features/public/unauthorized/unauthorized').then(
         (m) => m.Unauthorized
       ),
+  },
+  {
+    path: 'home',
+    loadComponent: () =>
+      import('./features/public/login/login').then((m) => m.Login),
   },
 
   // ✅ Staff (must be logged in)
@@ -59,6 +64,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/staff/check-in/check-in').then((m) => m.CheckIn),
       },
+      {
+        path: 'events',
+        loadComponent: () =>
+          import('./features/staff/events/events').then((m) => m.StaffEvents),
+      },
     ],
   },
 
@@ -91,6 +101,18 @@ export const routes: Routes = [
         path: 'events',
         loadComponent: () =>
           import('./features/admin/events/events').then((m) => m.Events),
+      },
+      {
+        path: 'frequent-clients',
+        loadComponent: () =>
+          import('./features/admin/frequent-clients/frequent-clients').then(
+            (m) => m.FrequentClients
+          ),
+      },
+      {
+        path: 'clients',
+        loadComponent: () =>
+          import('./features/admin/clients/clients').then((m) => m.Clients),
       },
     ],
   },

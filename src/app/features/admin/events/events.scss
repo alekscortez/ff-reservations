@@ -20,6 +20,18 @@
   background: #fff;
 }
 
+.filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 240px)) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.filters label {
+  min-width: 220px;
+}
+
 .row {
   display: grid;
   gap: 12px;
@@ -98,6 +110,81 @@ select {
   border-radius: 6px;
   font-size: 14px;
   background: #fff;
+}
+
+.subhead {
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.tables-grid {
+  margin-top: 8px;
+}
+
+.section-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.tables-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clients-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.table-chip {
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #111;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-chip.disabled {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+.table-chip.optout {
+  border-color: #c47a00;
+  color: #7a4c00;
+  background: #fff7e6;
+}
+
+.table-chip.optout.disabled {
+  background: #c47a00;
+  border-color: #c47a00;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .section-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {

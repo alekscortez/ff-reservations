@@ -12,7 +12,16 @@ Content-Type: application/json
 {
   "eventName": "Saturday Night",
   "eventDate": "2026-02-21",
-  "minDeposit": 20
+  "minDeposit": 20,
+  "sectionPricing": {
+    "A": 40,
+    "B": 50,
+    "C": 70,
+    "D": 100,
+    "E": 250
+  },
+  "disabledTables": ["A01", "A02"],
+  "disabledClients": []
 }
 
 ###
@@ -31,6 +40,17 @@ Content-Type: application/json
 
 {
   "status": "INACTIVE"
+}
+
+###
+
+### Reactivate event (will fail with 409 if another event exists for the date)
+PUT {{baseUrl}}/events/{{eventId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "status": "ACTIVE"
 }
 
 ###

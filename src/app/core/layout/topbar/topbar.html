@@ -1,7 +1,18 @@
 <header class="topbar">
-  <a class="brand" routerLink="/home">FF Reservations</a>
-  <div class="links">
-    <a routerLink="/staff/dashboard">Staff</a>
-    <a routerLink="/admin/events">Admin</a>
+  <a class="brand" routerLink="/home">
+    <img class="brand-logo" src="/assets/ff-logo.svg" alt="Famoso Fuego" />
+    <span>Reservation System</span>
+  </a>
+  <div class="right">
+    <ng-container *ngIf="isAuthenticated$ | async; else loggedOut">
+      <span class="user">
+        <span class="name">{{ (name$ | async) || 'User' }}</span>
+        <span class="role">{{ (role$ | async) || 'User' }}</span>
+      </span>
+      <button class="ghost" type="button" (click)="logout()">Log out</button>
+    </ng-container>
+    <ng-template #loggedOut>
+      <button class="primary" type="button" (click)="login()">Log in</button>
+    </ng-template>
   </div>
 </header>

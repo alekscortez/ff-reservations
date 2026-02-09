@@ -20,10 +20,10 @@
   background: #fff;
 }
 
-.filters {
-  display: flex;
-  gap: 10px;
-  align-items: end;
+.row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 12px;
 }
 
@@ -34,11 +34,18 @@ label {
   color: #555;
 }
 
-input {
+input,
+select {
   padding: 8px 10px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 button {
@@ -50,10 +57,9 @@ button {
   cursor: pointer;
 }
 
-button.ghost {
-  background: #fff;
-  color: #111;
-  border-color: #dcdcdc;
+button.danger {
+  background: #b00020;
+  border-color: #b00020;
 }
 
 .muted {
@@ -76,4 +82,18 @@ td {
   padding: 8px 6px;
   border-bottom: 1px solid #eee;
   font-size: 14px;
+}
+
+.edit-form {
+  padding: 8px 0;
+}
+
+.wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
 }

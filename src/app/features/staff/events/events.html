@@ -1,0 +1,54 @@
+<section class="page">
+  <header class="page-header">
+    <h1>Events</h1>
+    <p>Select an event date for reservations</p>
+  </header>
+
+  <section class="card">
+    <div class="filters">
+      <label>
+        Filter by Date
+        <input type="date" [formControl]="filterDate" />
+      </label>
+      <label>
+        Filter by Name
+        <input type="text" [formControl]="filterName" placeholder="Saturday Night" />
+      </label>
+      <button
+        type="button"
+        (click)="filterDate.setValue(''); filterName.setValue('')"
+        [disabled]="loading"
+      >
+        Clear
+      </button>
+    </div>
+    <div *ngIf="loading" class="muted">Loading…</div>
+    <div *ngIf="!loading && filteredItems().length === 0" class="muted">No events found.</div>
+    <p class="error" *ngIf="error">{{ error }}</p>
+
+    <table *ngIf="filteredItems().length > 0">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Min Deposit</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let e of filteredItems()">
+          <td>{{ e.eventDate }}</td>
+          <td>{{ e.eventName }}</td>
+          <td>{{ e.status }}</td>
+          <td>{{ e.minDeposit }}</td>
+          <td>
+            <button type="button" (click)="goToReservations(e.eventDate)">
+              Select
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</section>

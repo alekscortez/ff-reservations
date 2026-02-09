@@ -5,6 +5,9 @@ export interface EventItem {
   status: 'ACTIVE' | 'INACTIVE';
   minDeposit: number;
   tablePricing?: Record<string, number>;
+  sectionPricing?: Record<string, number>;
+  disabledTables?: string[];
+  disabledClients?: string[];
   createdAt?: number;
   updatedAt?: number;
   createdBy?: string;
@@ -15,4 +18,7 @@ export interface CreateEventPayload {
   eventDate: string; // YYYY-MM-DD
   minDeposit: number;
   tablePricing?: Record<string, number>;
+  sectionPricing?: Record<string, number>;
+  disabledTables?: string[];
+  disabledClients?: string[];
 }

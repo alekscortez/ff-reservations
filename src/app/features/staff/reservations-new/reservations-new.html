@@ -1,1 +1,148 @@
-<p>reservations-new works!</p>
+<section class="page">
+  <header class="page-header">
+    <h1>New Reservation</h1>
+    <p *ngIf="event">Event: {{ event.eventName }} ({{ event.eventDate }})</p>
+  </header>
+
+  <div *ngIf="!eventDate" class="card muted">
+    Select an event from the Events page.
+  </div>
+
+  <section class="card" *ngIf="eventDate">
+    <div class="status">
+      <div class="left">
+        <span *ngIf="loading">Loading tables…</span>
+        <span class="error" *ngIf="error">{{ error }}</span>
+        <span class="muted" *ngIf="!loading && !error">
+          Total {{ tableCounts().total }} · Available {{ tableCounts().available }} · Hold
+          {{ tableCounts().hold }} · Reserved {{ tableCounts().reserved }} · Disabled
+          {{ tableCounts().disabled }}
+        </span>
+      </div>
+      <button type="button" class="ghost" (click)="loadTables(eventDate!)" [disabled]="loading">
+        Refresh
+      </button>
+    </div>
+
+    <div class="filters">
+      <label>
+        Search Table
+        <input type="text" [formControl]="filterQuery" placeholder="A01, B38..." />
+      </label>
+      <label>
+        Status
+        <select [formControl]="filterStatus">
+          <option value="ALL">All</option>
+          <option value="AVAILABLE">Available</option>
+          <option value="HOLD">Hold</option>
+          <option value="RESERVED">Reserved</option>
+          <option value="DISABLED">Disabled</option>
+        </select>
+      </label>
+      <label class="only-available">
+        <input type="checkbox" [checked]="onlyAvailable" (change)="toggleOnlyAvailable($event)" />
+        Only Available
+      </label>
+      <label>
+        Section
+        <select [formControl]="filterSection">
+          <option value="ALL">All</option>
+          <option *ngFor="let s of sections" [value]="s">Section {{ s }}</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="legend">
+      <span class="chip available">AVAILABLE</span>
+      <span class="chip hold">HOLD</span>
+      <span class="chip reserved">RESERVED</span>
+      <span class="chip disabled">DISABLED</span>
+    </div>
+
+    <div class="section-legend" *ngIf="sections.length > 0">
+      <span class="chip section" *ngFor="let s of sections" [class]="'chip section s-' + s.toLowerCase()">
+        Section {{ s }}
+      </span>
+    </div>
+
+    <div class="grid">
+      <button
+        class="table"
+        *ngFor="let t of filteredTables()"
+        [class.selected]="selectedTable?.id === t.id"
+        [class.hold]="t.status === 'HOLD'"
+        [class.reserved]="t.status === 'RESERVED'"
+        [class.disabled]="t.status === 'DISABLED'"
+        type="button"
+        (click)="selectTable(t)"
+        [disabled]="t.status !== 'AVAILABLE'"
+      >
+        <div class="id">{{ t.id }}</div>
+        <div class="price">${{ t.price }}</div>
+        <div class="section-chip" [class]="'section-chip s-' + t.section.toLowerCase()">
+          {{ t.section }}
+        </div>
+        <div class="status-chip">{{ t.status }}</div>
+      </button>
+    </div>
+  </section>
+
+  <section class="card" *ngIf="selectedTable">
+    <h2>Reservation Details</h2>
+    <p class="muted">Selected: {{ selectedTable.id }} — ${{ selectedTable.price }}</p>
+    <p class="muted" *ngIf="selectedTable.status !== 'AVAILABLE'">
+      Status: {{ selectedTable.status }}
+    </p>
+    <form [formGroup]="form" class="form">
+      <label>
+        Customer Name
+        <input type="text" formControlName="customerName" />
+      </label>
+      <label>
+        Phone
+        <input type="text" formControlName="phone" />
+      </label>
+      <label>
+        Deposit Amount
+        <input type="number" min="0" formControlName="depositAmount" />
+      </label>
+      <label>
+        Payment Method
+        <select formControlName="paymentMethod">
+          <option value="cash">Cash</option>
+          <option value="cashapp">CashApp</option>
+          <option value="square">Square</option>
+        </select>
+      </label>
+    </form>
+
+    <div class="actions">
+      <button type="button" (click)="createHold()" [disabled]="loading">
+        Hold Table (5 min)
+      </button>
+      <button
+        type="button"
+        class="ghost"
+        (click)="releaseHold()"
+        [disabled]="loading || selectedTable.status !== 'HOLD'"
+      >
+        Release Hold
+      </button>
+      <button
+        type="button"
+        class="primary"
+        (click)="confirmReservation()"
+        [disabled]="loading || !holdId || form.invalid"
+      >
+        Confirm Reservation
+      </button>
+    </div>
+
+    <p class="hint" *ngIf="!holdId">
+      You must create a hold before confirming.
+    </p>
+    <p class="hint" *ngIf="holdId">
+      Hold active. Confirm within 5 minutes or the table will auto-release.
+    </p>
+  </section>
+</section>

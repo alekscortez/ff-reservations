@@ -1,0 +1,21 @@
+### Holds endpoints (TODO: implement backend)
+# POST {{baseUrl}}/holds
+# Authorization: Bearer {{accessToken}}
+# Content-Type: application/json
+#
+# {
+#   "eventDate": "2026-02-21",
+#   "tableId": "A01",
+#   "customerName": "John Doe",
+#   "phone": "555-123-1234"
+# }
+#
+# ###
+#
+# DELETE {{baseUrl}}/holds/2026-02-21/A01
+# Authorization: Bearer {{accessToken}}
+#
+# ###
+#
+# GET {{baseUrl}}/holds?eventDate=2026-02-21
+# Authorization: Bearer {{accessToken}}

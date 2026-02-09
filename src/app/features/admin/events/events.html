@@ -27,14 +27,73 @@
       </div>
     </form>
     <p class="error" *ngIf="error">{{ error }}</p>
+    <p class="error" *ngIf="conflictDate">
+      An event already exists for {{ conflictDate }}.
+    </p>
+
+    <div class="subhead">Section Pricing</div>
+    <div class="section-grid">
+      <label *ngFor="let s of templateSections">
+        Section {{ s }}
+        <input type="number" min="0" [formControl]="getSectionControl(createSectionPricing, s)" />
+      </label>
+    </div>
+
+    <div class="subhead">Disable Tables (per event)</div>
+    <p class="hint">Selected = table disabled for this event.</p>
+    <div class="tables-grid" *ngFor="let s of templateSections">
+      <div class="section-label">Section {{ s }}</div>
+      <div class="tables-row">
+        <button
+          type="button"
+          class="table-chip"
+          *ngFor="let t of templateTablesBySection[s]"
+          [class.disabled]="isCreateDisabled(t.id)"
+          (click)="toggleCreateDisabled(t.id)"
+        >
+          {{ t.id }}
+        </button>
+      </div>
+    </div>
+
+    <div class="subhead">Frequent Clients Not Coming (tables become available)</div>
+    <p class="hint">Selected = client NOT coming. Their table becomes available.</p>
+    <div class="clients-grid">
+      <button
+        type="button"
+        class="table-chip optout"
+        *ngFor="let c of frequentClients"
+        [class.disabled]="isCreateDisabledClient(c.clientId)"
+        (click)="toggleCreateDisabledClient(c.clientId)"
+      >
+        {{ c.name }} · {{ c.defaultTableId }}
+      </button>
+    </div>
   </section>
 
   <section class="card">
     <h2>All Events</h2>
+    <div class="filters">
+      <label>
+        Filter by Date
+        <input type="date" [formControl]="filterDate" />
+      </label>
+      <label>
+        Filter by Name
+        <input type="text" [formControl]="filterName" placeholder="Saturday Night" />
+      </label>
+      <button
+        type="button"
+        (click)="filterDate.setValue(''); filterName.setValue('')"
+        [disabled]="loading"
+      >
+        Clear
+      </button>
+    </div>
     <div *ngIf="loading" class="muted">Loading…</div>
-    <div *ngIf="!loading && items.length === 0" class="muted">No events yet.</div>
+    <div *ngIf="!loading && filteredItems().length === 0" class="muted">No events found.</div>
 
-    <table *ngIf="items.length > 0">
+    <table *ngIf="filteredItems().length > 0">
       <thead>
         <tr>
           <th>Date</th>
@@ -45,7 +104,7 @@
         </tr>
       </thead>
       <tbody>
-        <ng-container *ngFor="let e of items">
+        <ng-container *ngFor="let e of filteredItems()">
           <tr *ngIf="editingId !== e.eventId">
             <td>{{ e.eventDate }}</td>
             <td>{{ e.eventName }}</td>
@@ -86,6 +145,45 @@
                   <button type="button" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
                 </div>
               </form>
+
+              <div class="subhead">Section Pricing</div>
+              <div class="section-grid">
+                <label *ngFor="let s of templateSections">
+                  Section {{ s }}
+                  <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" />
+                </label>
+              </div>
+
+              <div class="subhead">Disable Tables (per event)</div>
+              <p class="hint">Selected = table disabled for this event.</p>
+              <div class="tables-grid" *ngFor="let s of templateSections">
+                <div class="section-label">Section {{ s }}</div>
+                <div class="tables-row">
+                  <button
+                    type="button"
+                    class="table-chip"
+                    *ngFor="let t of templateTablesBySection[s]"
+                    [class.disabled]="isEditDisabled(t.id)"
+                    (click)="toggleEditDisabled(t.id)"
+                  >
+                    {{ t.id }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="subhead">Frequent Clients Not Coming (tables become available)</div>
+              <p class="hint">Selected = client NOT coming. Their table becomes available.</p>
+              <div class="clients-grid">
+                <button
+                  type="button"
+                  class="table-chip optout"
+                  *ngFor="let c of frequentClients"
+                  [class.disabled]="isEditDisabledClient(c.clientId)"
+                  (click)="toggleEditDisabledClient(c.clientId)"
+                >
+                  {{ c.name }} · {{ c.defaultTableId }}
+                </button>
+              </div>
             </td>
           </tr>
         </ng-container>

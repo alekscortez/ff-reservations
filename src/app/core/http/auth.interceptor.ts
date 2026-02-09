@@ -17,6 +17,7 @@ export class AuthInterceptor implements HttpInterceptor {
     const isApi = req.url.startsWith(APP_CONFIG.apiBaseUrl);
     if (!isApi) return next.handle(req);
 
+    // Use access token for API calls (groups are injected via pre-token trigger).
     return this.oidc.getAccessToken().pipe(
       take(1),
       switchMap((token) => {

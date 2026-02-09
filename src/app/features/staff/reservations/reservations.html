@@ -1,1 +1,59 @@
-<p>reservations works!</p>
+<section class="page">
+  <header class="page-header">
+    <h1>Reservations</h1>
+    <p>View and manage reservations by date</p>
+  </header>
+
+  <section class="card">
+    <div class="filters">
+      <label>
+        Event Date
+        <input type="date" [formControl]="filterDate" />
+      </label>
+      <button type="button" (click)="load()">Load</button>
+      <button type="button" (click)="filterDate.setValue(''); items = []">Clear</button>
+    </div>
+
+    <div *ngIf="loading" class="muted">Loading…</div>
+    <div *ngIf="!loading && items.length === 0" class="muted">No reservations.</div>
+    <p class="error" *ngIf="error">{{ error }}</p>
+
+    <table *ngIf="items.length > 0">
+      <thead>
+        <tr>
+          <th>Table</th>
+          <th>Customer</th>
+          <th>Phone</th>
+          <th>Deposit</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th>Created By</th>
+          <th>Cancel Reason</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let r of items">
+          <td>{{ r.tableId }}</td>
+          <td>{{ r.customerName }}</td>
+          <td>{{ r.phone }}</td>
+          <td>{{ r.depositAmount }}</td>
+          <td>{{ r.paymentMethod }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.createdBy || '—' }}</td>
+          <td class="muted">{{ r.cancelReason || '—' }}</td>
+          <td>
+            <button
+              type="button"
+              class="ghost"
+              (click)="cancel(r)"
+              [disabled]="r.status !== 'CONFIRMED'"
+            >
+              Cancel
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</section>

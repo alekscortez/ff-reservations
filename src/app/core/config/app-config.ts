@@ -6,7 +6,7 @@ export const APP_CONFIG = {
     clientId: '1kdkvis45qo915plp7lvj03u16',
     scope: 'openid email profile',
     redirectPath: '/auth/callback',
-    postLogoutPath: '/home',
+    postLogoutPath: '/login',
   },
 } as const;
 

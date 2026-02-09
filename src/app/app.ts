@@ -2,12 +2,12 @@ import { Component, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
-import { buildCognitoLogoutUrl } from './core/config/app-config';
+import { Topbar } from './core/layout/topbar/topbar';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet],
+  imports: [CommonModule, RouterOutlet, Topbar],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -41,13 +41,6 @@ export class App implements OnInit {
   }
 
   logout(): void {
-    // Local cleanup
-    this.oidc.logoffLocal();
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-
-    // Cognito Hosted UI logout
-    const logoutUrl = buildCognitoLogoutUrl(window.location.origin);
-    window.location.replace(logoutUrl);
+    this.oidc.logoff();
   }
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
+import { buildCognitoLogoutUrl } from '../config/app-config';
 import { Observable, map } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
@@ -27,6 +28,20 @@ export class AuthService {
     );
   }
 
+  /** Best-effort display name from ID token */
+  displayName$(): Observable<string> {
+    return this.idTokenClaims$().pipe(
+      map(claims => claims?.name || claims?.email || claims?.['cognito:username'] || 'User')
+    );
+  }
+
+  /** Role label for UI (Admin > Staff > User) */
+  roleLabel$(): Observable<string> {
+    return this.groups$().pipe(
+      map(groups => (groups.includes('Admin') ? 'Admin' : groups.includes('Staff') ? 'Staff' : 'User'))
+    );
+  }
+
   /** Role check helper */
   hasGroup$(group: string): Observable<boolean> {
     return this.groups$().pipe(
@@ -39,7 +54,14 @@ export class AuthService {
   }
 
   logout(): void {
-    this.oidc.logoff();
+    // Local cleanup
+    this.oidc.logoffLocal();
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+
+    // Cognito Hosted UI logout
+    const logoutUrl = buildCognitoLogoutUrl(window.location.origin);
+    window.location.replace(logoutUrl);
   }
 }
 

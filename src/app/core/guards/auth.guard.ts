@@ -10,7 +10,7 @@ export const authGuard: CanMatchFn = () => {
   return oidc.checkAuth().pipe(
     take(1),
     map(({ isAuthenticated }) =>
-      isAuthenticated ? true : router.createUrlTree(['/unauthorized'])
+      isAuthenticated ? true : router.createUrlTree(['/login'])
     )
   );
 };

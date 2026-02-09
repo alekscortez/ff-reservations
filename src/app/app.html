@@ -1,12 +1,4 @@
-<header style="padding:12px; border-bottom:1px solid #ddd;">
-  <button (click)="login()">Login</button>
-  <button (click)="logout()">Logout</button>
-
-  <div style="margin-top:8px; font-size:12px;">
-    Authenticated: {{ isAuthenticated }}
-  </div>
-</header>
-
-<main style="padding:12px;">
+<app-topbar *ngIf="isAuthenticated"></app-topbar>
+<main class="app-main">
   <router-outlet></router-outlet>
 </main>
