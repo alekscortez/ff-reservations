@@ -17,7 +17,8 @@
     <div *ngIf="!loading && filteredItems().length === 0" class="muted">No clients.</div>
     <p class="error" *ngIf="error">{{ error }}</p>
 
-    <table *ngIf="filteredItems().length > 0">
+    <div class="table-wrap" *ngIf="filteredItems().length > 0">
+      <table>
       <thead>
         <tr>
           <th>Name</th>
@@ -70,6 +71,40 @@
           </tr>
         </ng-container>
       </tbody>
-    </table>
+      </table>
+    </div>
+
+    <div class="cards" *ngIf="filteredItems().length > 0">
+      <div class="client-card" *ngFor="let c of filteredItems()">
+        <div class="card-head">
+          <div>
+            <div class="name">{{ c.name }}</div>
+            <div class="phone">{{ c.phone }}</div>
+          </div>
+          <div class="meta">
+            <div>Total ${{ formatMoney(c.totalSpend) }}</div>
+            <div>{{ c.totalReservations || 0 }} reservations</div>
+          </div>
+        </div>
+        <div class="card-row">
+          <span>Last Event</span>
+          <span>{{ c.lastEventDate || '—' }}</span>
+        </div>
+        <div class="card-row">
+          <span>Last Table</span>
+          <span>{{ c.lastTableId || '—' }}</span>
+        </div>
+        <div class="card-row">
+          <span>Updated By</span>
+          <span>{{ c.updatedBy || '—' }}</span>
+        </div>
+        <div class="actions">
+          <button type="button" (click)="startEdit(c)">Edit</button>
+          <button type="button" class="ghost danger" (click)="deleteClient(c)">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </section>

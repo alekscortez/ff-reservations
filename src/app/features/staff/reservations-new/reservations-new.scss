@@ -156,7 +156,11 @@
   text-align: left;
   cursor: pointer;
   display: grid;
-  gap: 4px;
+  grid-template-areas:
+    "id price"
+    "status status";
+  grid-template-columns: 1fr auto;
+  gap: 6px;
   color: #111;
 }
 
@@ -182,55 +186,28 @@
 }
 
 .id {
+  grid-area: id;
   font-weight: 600;
+  font-size: 18px;
 }
 
 .price {
+  grid-area: price;
   color: #333;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .section-chip {
-  width: fit-content;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid #ddd;
-}
-
-.section-chip.s-a {
-  background: #eaf3ff;
-  border-color: #b7d3ff;
-  color: #1e4fa5;
-}
-
-.section-chip.s-b {
-  background: #e9f9f1;
-  border-color: #b1e6cd;
-  color: #1f6b4d;
-}
-
-.section-chip.s-c {
-  background: #fff3e8;
-  border-color: #f5c9a6;
-  color: #9a4b16;
-}
-
-.section-chip.s-d {
-  background: #f3eaff;
-  border-color: #cdb4ff;
-  color: #55308a;
-}
-
-.section-chip.s-e {
-  background: #ffeef0;
-  border-color: #f2b9c0;
-  color: #8a1f2f;
+  display: none;
 }
 
 .status-chip {
+  grid-area: status;
   font-size: 11px;
   color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .form {
@@ -345,6 +322,11 @@
 
 .reservation-modal {
   width: min(720px, 94vw);
+}
+
+.modal-inner {
+  display: grid;
+  gap: 12px;
 }
 
 .modal-head {
@@ -573,6 +555,10 @@ button[disabled] {
       calc(16px + env(safe-area-inset-right))
       calc(16px + env(safe-area-inset-bottom))
       calc(16px + env(safe-area-inset-left));
+  }
+
+  .modal-inner {
+    padding: 12px;
   }
 
   .modal-head {

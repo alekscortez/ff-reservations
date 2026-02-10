@@ -16,10 +16,39 @@
   border: 1px solid #dcdcdc;
   background: #fff;
   color: #111;
-  padding: 8px 10px;
+  padding: 8px;
   border-radius: 8px;
   font-size: 12px;
   z-index: 12;
+}
+
+.hamburger {
+  width: 18px;
+  height: 12px;
+  position: relative;
+  display: inline-block;
+  background: #111;
+  height: 2px;
+  border-radius: 2px;
+}
+
+.hamburger::before,
+.hamburger::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+}
+
+.hamburger::before {
+  top: -5px;
+}
+
+.hamburger::after {
+  top: 5px;
 }
 
 .brand {
@@ -99,6 +128,7 @@ button {
 @media (max-width: 900px) {
   .topbar {
     padding: 10px 12px;
+    justify-content: space-between;
   }
 
   .menu-btn {

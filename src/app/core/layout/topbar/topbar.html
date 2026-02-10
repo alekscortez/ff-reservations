@@ -1,5 +1,7 @@
 <header class="topbar">
-  <button class="menu-btn" type="button" (click)="toggleMobileNav()">Menu</button>
+  <button class="menu-btn" type="button" (click)="toggleMobileNav()" aria-label="Open menu">
+    <span class="hamburger" aria-hidden="true"></span>
+  </button>
   <a class="brand" routerLink="/home">
     <img class="brand-logo" src="/assets/ff-logo.svg" alt="Famoso Fuego" />
     <span>Reservation System</span>

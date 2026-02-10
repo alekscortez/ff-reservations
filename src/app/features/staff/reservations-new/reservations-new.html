@@ -153,10 +153,7 @@
       >
         <div class="id">{{ t.id }}</div>
         <div class="price">${{ t.price }}</div>
-        <div class="section-chip" [class]="'section-chip s-' + t.section.toLowerCase()">
-          {{ t.section }}
-        </div>
-        <div class="status-chip">{{ t.status }}</div>
+        <div class="status-chip">{{ t.status === 'AVAILABLE' ? 'Available' : t.status }}</div>
       </button>
     </div>
   </section>
@@ -164,138 +161,140 @@
   <div class="modal" *ngIf="showReservationModal && selectedTable">
     <div class="modal-backdrop" (click)="closeReservationModal()"></div>
     <div class="modal-card reservation-modal">
-      <div class="modal-head">
-        <div>
-          <h3>Reservation Details</h3>
-          <p class="muted">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
-        </div>
-        <button type="button" class="ghost" (click)="closeReservationModal()">Close</button>
-      </div>
-      <form [formGroup]="form" class="form">
-        <label>
-          Customer Name
-          <input type="text" formControlName="customerName" />
-        </label>
-        <label>
-          Phone
-          <input type="text" formControlName="phone" />
-        </label>
-        <div class="row">
-          <label>
-            Payment Status
-            <select formControlName="paymentStatus" (change)="onPaymentStatusChange()">
-              <option value="PAID">PAID</option>
-              <option value="PARTIAL">PARTIAL</option>
-              <option value="PENDING">PENDING</option>
-              <option value="COURTESY">COURTESY</option>
-            </select>
-          </label>
-          <label>
-            Total Amount Due
-            <input
-              type="number"
-              min="0"
-              formControlName="amountDue"
-              [readonly]="!allowCustomDeposit"
-              [class.readonly]="!allowCustomDeposit"
-            />
-          </label>
-        </div>
-        <div
-          class="autocomplete"
-          *ngIf="clientLoading || clientMatches.length > 0 || noClientMatch"
-        >
-          <div class="match info" *ngIf="clientLoading">Searching…</div>
-          <div class="match info" *ngIf="noClientMatch">
-            No match found. This will create a new client.
+      <div class="modal-inner">
+        <div class="modal-head">
+          <div>
+            <h3>Reservation Details</h3>
+            <p class="muted">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
           </div>
-          <button
-            class="match"
-            type="button"
-            *ngFor="let c of clientMatches"
-            [class.exact]="isExactMatch(c)"
-            (click)="selectClient(c)"
-          >
-            <span class="match-name">{{ c.name }}</span>
-            <span class="match-phone">{{ c.phone }}</span>
-          </button>
+          <button type="button" class="ghost" (click)="closeReservationModal()">Close</button>
         </div>
-        <label>
-          Deposit Amount
-          <div class="deposit-row">
-            <input
-              type="number"
-              min="0"
-              formControlName="depositAmount"
-              [readonly]="!allowCustomDeposit"
-              [class.readonly]="!allowCustomDeposit"
-            />
-            <button type="button" class="ghost" (click)="toggleCustomDeposit()">
-              {{ allowCustomDeposit ? 'Lock to Table Price' : 'Modify' }}
+        <form [formGroup]="form" class="form">
+          <label>
+            Customer Name
+            <input type="text" formControlName="customerName" />
+          </label>
+          <label>
+            Phone
+            <input type="text" formControlName="phone" />
+          </label>
+          <div class="row">
+            <label>
+              Payment Status
+              <select formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+                <option value="PAID">PAID</option>
+                <option value="PARTIAL">PARTIAL</option>
+                <option value="PENDING">PENDING</option>
+                <option value="COURTESY">COURTESY</option>
+              </select>
+            </label>
+            <label>
+              Total Amount Due
+              <input
+                type="number"
+                min="0"
+                formControlName="amountDue"
+                [readonly]="!allowCustomDeposit"
+                [class.readonly]="!allowCustomDeposit"
+              />
+            </label>
+          </div>
+          <div
+            class="autocomplete"
+            *ngIf="clientLoading || clientMatches.length > 0 || noClientMatch"
+          >
+            <div class="match info" *ngIf="clientLoading">Searching…</div>
+            <div class="match info" *ngIf="noClientMatch">
+              No match found. This will create a new client.
+            </div>
+            <button
+              class="match"
+              type="button"
+              *ngFor="let c of clientMatches"
+              [class.exact]="isExactMatch(c)"
+              (click)="selectClient(c)"
+            >
+              <span class="match-name">{{ c.name }}</span>
+              <span class="match-phone">{{ c.phone }}</span>
             </button>
           </div>
-          <span class="hint">
-            Default is full table price.
-          </span>
-        </label>
-        <div class="deadline">
-          <label class="deadline-toggle">
-            <input
-              type="checkbox"
-              [checked]="paymentDeadlineEnabled"
-              (change)="paymentDeadlineEnabled = !paymentDeadlineEnabled"
-            />
-            Set payment deadline (required if not fully paid)
+          <label>
+            Deposit Amount
+            <div class="deposit-row">
+              <input
+                type="number"
+                min="0"
+                formControlName="depositAmount"
+                [readonly]="!allowCustomDeposit"
+                [class.readonly]="!allowCustomDeposit"
+              />
+              <button type="button" class="ghost" (click)="toggleCustomDeposit()">
+                {{ allowCustomDeposit ? 'Lock to Table Price' : 'Modify' }}
+              </button>
+            </div>
+            <span class="hint">
+              Default is full table price.
+            </span>
           </label>
-          <div class="deadline-fields" *ngIf="paymentDeadlineEnabled">
-            <label>
-              Deadline Date
-              <input type="date" [formControl]="paymentDeadlineDate" />
+          <div class="deadline">
+            <label class="deadline-toggle">
+              <input
+                type="checkbox"
+                [checked]="paymentDeadlineEnabled"
+                (change)="paymentDeadlineEnabled = !paymentDeadlineEnabled"
+              />
+              Set payment deadline (required if not fully paid)
             </label>
-            <label>
-              Deadline Time (America/Chicago)
-              <input type="time" [formControl]="paymentDeadlineTime" />
-            </label>
+            <div class="deadline-fields" *ngIf="paymentDeadlineEnabled">
+              <label>
+                Deadline Date
+                <input type="date" [formControl]="paymentDeadlineDate" />
+              </label>
+              <label>
+                Deadline Time (America/Chicago)
+                <input type="time" [formControl]="paymentDeadlineTime" />
+              </label>
+            </div>
           </div>
+          <label>
+            Payment Method
+            <select formControlName="paymentMethod">
+              <option value="cash">Cash</option>
+              <option value="cashapp">CashApp</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+        </form>
+
+        <div class="actions">
+          <button type="button" (click)="createHold()" [disabled]="loading">
+            Hold Table (5 min)
+          </button>
+          <button
+            type="button"
+            class="ghost"
+            (click)="releaseHold()"
+            [disabled]="loading || selectedTable.status !== 'HOLD'"
+          >
+            Release Hold
+          </button>
+          <button
+            type="button"
+            class="primary"
+            (click)="confirmReservation()"
+            [disabled]="loading || !holdId || form.invalid"
+          >
+            Confirm Reservation
+          </button>
         </div>
-        <label>
-          Payment Method
-          <select formControlName="paymentMethod">
-            <option value="cash">Cash</option>
-            <option value="cashapp">CashApp</option>
-            <option value="square">Square</option>
-          </select>
-        </label>
-      </form>
 
-      <div class="actions">
-        <button type="button" (click)="createHold()" [disabled]="loading">
-          Hold Table (5 min)
-        </button>
-        <button
-          type="button"
-          class="ghost"
-          (click)="releaseHold()"
-          [disabled]="loading || selectedTable.status !== 'HOLD'"
-        >
-          Release Hold
-        </button>
-        <button
-          type="button"
-          class="primary"
-          (click)="confirmReservation()"
-          [disabled]="loading || !holdId || form.invalid"
-        >
-          Confirm Reservation
-        </button>
+        <p class="hint" *ngIf="!holdId">
+          You must create a hold before confirming.
+        </p>
+        <p class="hint" *ngIf="holdId">
+          Hold active. Confirm within 5 minutes or the table will auto-release.
+        </p>
       </div>
-
-      <p class="hint" *ngIf="!holdId">
-        You must create a hold before confirming.
-      </p>
-      <p class="hint" *ngIf="holdId">
-        Hold active. Confirm within 5 minutes or the table will auto-release.
-      </p>
     </div>
   </div>
 </section>
