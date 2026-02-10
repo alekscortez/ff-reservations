@@ -31,7 +31,9 @@ export const appConfig: ApplicationConfig = {
       // ✅ return a Promise directly (NOT a function)
       return new Promise<void>((resolve, reject) => {
         oidc.checkAuth().subscribe({
-          next: (r) => console.log('[APP_INIT checkAuth]', r),
+          next: (r) => {
+            console.log('[APP_INIT checkAuth]', r);
+          },
           error: (e) => {
             console.error('[APP_INIT checkAuth] error', e);
             reject(e);

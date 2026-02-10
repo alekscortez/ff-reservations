@@ -278,6 +278,15 @@ export class Events implements OnInit {
     return this.editDisabledClients.has(id);
   }
 
+  formatClientTables(client: FrequentClient): string {
+    const list = client.defaultTableIds?.length
+      ? client.defaultTableIds
+      : client.defaultTableId
+        ? [client.defaultTableId]
+        : [];
+    return list.join(', ');
+  }
+
   private sectionPricingValue(value: any): Record<string, number> {
     const out: Record<string, number> = {};
     for (const [k, v] of Object.entries(value ?? {})) {

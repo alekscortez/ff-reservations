@@ -4,8 +4,82 @@
     <p *ngIf="event">Event: {{ event.eventName }} ({{ event.eventDate }})</p>
   </header>
 
-  <div *ngIf="!eventDate" class="card muted">
-    Select an event from the Events page.
+  <section class="card event-picker" *ngIf="!eventDate">
+    <div class="picker-head">
+      <div>
+        <h2>Select Event</h2>
+        <p>Choose the correct date before taking reservations.</p>
+      </div>
+      <button type="button" class="ghost" (click)="loadEvents()" [disabled]="eventsLoading">
+        Refresh
+      </button>
+    </div>
+
+    <div *ngIf="eventsLoading" class="muted">Loading events…</div>
+    <div *ngIf="eventsError" class="error">{{ eventsError }}</div>
+
+    <div class="event-grid" *ngIf="!eventsLoading && upcomingEvents().length > 0">
+      <button
+        type="button"
+        class="event-card"
+        *ngFor="let e of upcomingEvents()"
+        [class.week]="isThisWeek(e.eventDate)"
+        (click)="selectEvent(e.eventDate!)"
+      >
+        <div class="event-date">
+          <span class="day">{{ formatEventDate(e.eventDate) }}</span>
+          <span class="full">{{ e.eventDate }}</span>
+        </div>
+        <div class="event-name">{{ e.eventName }}</div>
+        <div class="event-status">{{ e.status || 'ACTIVE' }}</div>
+      </button>
+    </div>
+
+    <div class="event-actions">
+      <button type="button" class="ghost" (click)="showPastModal = true">
+        Search past events
+      </button>
+    </div>
+  </section>
+
+  <div class="modal" *ngIf="showPastModal">
+    <div class="modal-backdrop" (click)="showPastModal = false"></div>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Past Events</h3>
+        <button type="button" class="ghost" (click)="showPastModal = false">Close</button>
+      </div>
+      <div class="modal-filters">
+        <label>
+          Date
+          <input type="date" [formControl]="pastFilterDate" />
+        </label>
+        <label>
+          Name
+          <input type="text" [formControl]="pastFilterName" placeholder="Saturday Night" />
+        </label>
+        <button
+          type="button"
+          class="ghost"
+          (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')"
+        >
+          Clear
+        </button>
+      </div>
+      <div class="modal-list">
+        <button
+          type="button"
+          class="event-row"
+          *ngFor="let e of pastEvents()"
+          (click)="selectEvent(e.eventDate!)"
+        >
+          <span class="date">{{ e.eventDate }}</span>
+          <span class="name">{{ e.eventName }}</span>
+          <span class="status">{{ e.status || 'ACTIVE' }}</span>
+        </button>
+        <div class="muted" *ngIf="pastEvents().length === 0">No past events found.</div>
+      </div>
+    </div>
   </div>
 
   <section class="card" *ngIf="eventDate">
@@ -87,62 +161,141 @@
     </div>
   </section>
 
-  <section class="card" *ngIf="selectedTable">
-    <h2>Reservation Details</h2>
-    <p class="muted">Selected: {{ selectedTable.id }} — ${{ selectedTable.price }}</p>
-    <p class="muted" *ngIf="selectedTable.status !== 'AVAILABLE'">
-      Status: {{ selectedTable.status }}
-    </p>
-    <form [formGroup]="form" class="form">
-      <label>
-        Customer Name
-        <input type="text" formControlName="customerName" />
-      </label>
-      <label>
-        Phone
-        <input type="text" formControlName="phone" />
-      </label>
-      <label>
-        Deposit Amount
-        <input type="number" min="0" formControlName="depositAmount" />
-      </label>
-      <label>
-        Payment Method
-        <select formControlName="paymentMethod">
-          <option value="cash">Cash</option>
-          <option value="cashapp">CashApp</option>
-          <option value="square">Square</option>
-        </select>
-      </label>
-    </form>
+  <div class="modal" *ngIf="showReservationModal && selectedTable">
+    <div class="modal-backdrop" (click)="closeReservationModal()"></div>
+    <div class="modal-card reservation-modal">
+      <div class="modal-head">
+        <div>
+          <h3>Reservation Details</h3>
+          <p class="muted">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
+        </div>
+        <button type="button" class="ghost" (click)="closeReservationModal()">Close</button>
+      </div>
+      <form [formGroup]="form" class="form">
+        <label>
+          Customer Name
+          <input type="text" formControlName="customerName" />
+        </label>
+        <label>
+          Phone
+          <input type="text" formControlName="phone" />
+        </label>
+        <div class="row">
+          <label>
+            Payment Status
+            <select formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+              <option value="PAID">PAID</option>
+              <option value="PARTIAL">PARTIAL</option>
+              <option value="PENDING">PENDING</option>
+              <option value="COURTESY">COURTESY</option>
+            </select>
+          </label>
+          <label>
+            Total Amount Due
+            <input
+              type="number"
+              min="0"
+              formControlName="amountDue"
+              [readonly]="!allowCustomDeposit"
+              [class.readonly]="!allowCustomDeposit"
+            />
+          </label>
+        </div>
+        <div
+          class="autocomplete"
+          *ngIf="clientLoading || clientMatches.length > 0 || noClientMatch"
+        >
+          <div class="match info" *ngIf="clientLoading">Searching…</div>
+          <div class="match info" *ngIf="noClientMatch">
+            No match found. This will create a new client.
+          </div>
+          <button
+            class="match"
+            type="button"
+            *ngFor="let c of clientMatches"
+            [class.exact]="isExactMatch(c)"
+            (click)="selectClient(c)"
+          >
+            <span class="match-name">{{ c.name }}</span>
+            <span class="match-phone">{{ c.phone }}</span>
+          </button>
+        </div>
+        <label>
+          Deposit Amount
+          <div class="deposit-row">
+            <input
+              type="number"
+              min="0"
+              formControlName="depositAmount"
+              [readonly]="!allowCustomDeposit"
+              [class.readonly]="!allowCustomDeposit"
+            />
+            <button type="button" class="ghost" (click)="toggleCustomDeposit()">
+              {{ allowCustomDeposit ? 'Lock to Table Price' : 'Modify' }}
+            </button>
+          </div>
+          <span class="hint">
+            Default is full table price.
+          </span>
+        </label>
+        <div class="deadline">
+          <label class="deadline-toggle">
+            <input
+              type="checkbox"
+              [checked]="paymentDeadlineEnabled"
+              (change)="paymentDeadlineEnabled = !paymentDeadlineEnabled"
+            />
+            Set payment deadline (required if not fully paid)
+          </label>
+          <div class="deadline-fields" *ngIf="paymentDeadlineEnabled">
+            <label>
+              Deadline Date
+              <input type="date" [formControl]="paymentDeadlineDate" />
+            </label>
+            <label>
+              Deadline Time (America/Chicago)
+              <input type="time" [formControl]="paymentDeadlineTime" />
+            </label>
+          </div>
+        </div>
+        <label>
+          Payment Method
+          <select formControlName="paymentMethod">
+            <option value="cash">Cash</option>
+            <option value="cashapp">CashApp</option>
+            <option value="square">Square</option>
+          </select>
+        </label>
+      </form>
 
-    <div class="actions">
-      <button type="button" (click)="createHold()" [disabled]="loading">
-        Hold Table (5 min)
-      </button>
-      <button
-        type="button"
-        class="ghost"
-        (click)="releaseHold()"
-        [disabled]="loading || selectedTable.status !== 'HOLD'"
-      >
-        Release Hold
-      </button>
-      <button
-        type="button"
-        class="primary"
-        (click)="confirmReservation()"
-        [disabled]="loading || !holdId || form.invalid"
-      >
-        Confirm Reservation
-      </button>
+      <div class="actions">
+        <button type="button" (click)="createHold()" [disabled]="loading">
+          Hold Table (5 min)
+        </button>
+        <button
+          type="button"
+          class="ghost"
+          (click)="releaseHold()"
+          [disabled]="loading || selectedTable.status !== 'HOLD'"
+        >
+          Release Hold
+        </button>
+        <button
+          type="button"
+          class="primary"
+          (click)="confirmReservation()"
+          [disabled]="loading || !holdId || form.invalid"
+        >
+          Confirm Reservation
+        </button>
+      </div>
+
+      <p class="hint" *ngIf="!holdId">
+        You must create a hold before confirming.
+      </p>
+      <p class="hint" *ngIf="holdId">
+        Hold active. Confirm within 5 minutes or the table will auto-release.
+      </p>
     </div>
-
-    <p class="hint" *ngIf="!holdId">
-      You must create a hold before confirming.
-    </p>
-    <p class="hint" *ngIf="holdId">
-      Hold active. Confirm within 5 minutes or the table will auto-release.
-    </p>
-  </section>
+  </div>
 </section>

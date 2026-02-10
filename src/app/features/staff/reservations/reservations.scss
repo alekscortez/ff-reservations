@@ -77,3 +77,15 @@ td {
   border-bottom: 1px solid #eee;
   font-size: 14px;
 }
+
+@media (max-width: 900px) {
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}

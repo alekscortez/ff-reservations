@@ -20,11 +20,28 @@
   background: #fff;
 }
 
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.create-form {
+  display: grid;
+  gap: 10px;
+}
+
 .row {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.row .wide {
+  grid-column: span 2;
 }
 
 label {
@@ -43,9 +60,143 @@ select {
   background: #fff;
 }
 
+.search {
+  flex: 1;
+  min-width: 220px;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
 .actions {
   display: flex;
   gap: 8px;
+  margin-top: 12px;
+}
+
+.selected-tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.pill {
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.picker {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 6px 0 12px;
+}
+
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tab {
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #111;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+.tables-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.table-chip {
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #111;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-chip.selected {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+.settings {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 1fr 1fr 1.4fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-row.header {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.table-meta small {
+  color: #666;
+  font-size: 12px;
+}
+
+.deadline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.courtesy-note {
+  font-size: 12px;
+  color: #333;
+  padding: 6px 8px;
+  border: 1px dashed #ddd;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.courtesy-note.muted {
+  color: #666;
 }
 
 button {
@@ -57,9 +208,28 @@ button {
   cursor: pointer;
 }
 
+button.icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #111;
+  border-color: #dcdcdc;
+}
+
 button.danger {
   background: #b00020;
   border-color: #b00020;
+}
+
+button.ghost {
+  background: #fff;
+  color: #111;
+  border-color: #dcdcdc;
 }
 
 .muted {
@@ -86,6 +256,8 @@ td {
 
 .edit-form {
   padding: 8px 0;
+  display: grid;
+  gap: 10px;
 }
 
 .wide {
@@ -95,5 +267,22 @@ td {
 @media (max-width: 900px) {
   .row {
     grid-template-columns: 1fr;
+  }
+
+  .row .wide {
+    grid-column: span 1;
+  }
+
+  .settings-row {
+    grid-template-columns: 1fr;
+  }
+
+  .deadline {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
   }
 }

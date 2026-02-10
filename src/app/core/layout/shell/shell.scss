@@ -16,3 +16,13 @@
   padding: 16px;
   background: #fff;
 }
+
+@media (max-width: 900px) {
+  .shell-body {
+    grid-template-columns: 1fr;
+  }
+
+  .shell-content {
+    padding: 12px;
+  }
+}

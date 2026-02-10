@@ -26,6 +26,8 @@
           <th>Phone</th>
           <th>Deposit</th>
           <th>Method</th>
+          <th>Payment</th>
+          <th>Deadline</th>
           <th>Status</th>
           <th>Created By</th>
           <th>Cancel Reason</th>
@@ -39,6 +41,8 @@
           <td>{{ r.phone }}</td>
           <td>{{ r.depositAmount }}</td>
           <td>{{ r.paymentMethod }}</td>
+          <td>{{ r.paymentStatus || '—' }}</td>
+          <td>{{ r.paymentDeadlineAt || '—' }}</td>
           <td>{{ r.status }}</td>
           <td>{{ r.createdBy || '—' }}</td>
           <td class="muted">{{ r.cancelReason || '—' }}</td>

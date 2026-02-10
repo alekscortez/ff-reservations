@@ -8,6 +8,18 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  gap: 12px;
+}
+
+.menu-btn {
+  display: none;
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  color: #111;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 12;
 }
 
 .brand {
@@ -82,4 +94,24 @@ button {
   background: #fff;
   color: #111;
   border-color: #dcdcdc;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    padding: 10px 12px;
+  }
+
+  .menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .user {
+    padding: 4px 8px;
+  }
 }

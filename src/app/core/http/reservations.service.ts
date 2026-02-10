@@ -10,7 +10,11 @@ export interface CreateReservationPayload {
   customerName: string;
   phone: string;
   depositAmount: number;
+  amountDue?: number;
+  paymentStatus?: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
   paymentMethod: 'cash' | 'cashapp' | 'square';
+  paymentDeadlineAt?: string | null;
+  paymentDeadlineTz?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

@@ -27,18 +27,48 @@
           <th>Last Event</th>
           <th>Last Table</th>
           <th>Updated By</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let c of filteredItems()">
-          <td>{{ c.name }}</td>
-          <td>{{ c.phone }}</td>
-          <td>${{ formatMoney(c.totalSpend) }}</td>
-          <td>{{ c.totalReservations || 0 }}</td>
-          <td>{{ c.lastEventDate || '—' }}</td>
-          <td>{{ c.lastTableId || '—' }}</td>
-          <td>{{ c.updatedBy || '—' }}</td>
-        </tr>
+        <ng-container *ngFor="let c of filteredItems()">
+          <tr *ngIf="editingPhone !== c.phone">
+            <td>{{ c.name }}</td>
+            <td>{{ c.phone }}</td>
+            <td>${{ formatMoney(c.totalSpend) }}</td>
+            <td>{{ c.totalReservations || 0 }}</td>
+            <td>{{ c.lastEventDate || '—' }}</td>
+            <td>{{ c.lastTableId || '—' }}</td>
+            <td>{{ c.updatedBy || '—' }}</td>
+            <td class="actions">
+              <button type="button" (click)="startEdit(c)">Edit</button>
+              <button type="button" class="ghost danger" (click)="deleteClient(c)">
+                Delete
+              </button>
+            </td>
+          </tr>
+
+          <tr *ngIf="editingPhone === c.phone">
+            <td colspan="8">
+              <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="edit-form">
+                <label>
+                  Name
+                  <input type="text" formControlName="name" />
+                </label>
+                <label>
+                  Phone
+                  <input type="text" formControlName="phone" />
+                </label>
+                <div class="actions">
+                  <button type="submit" [disabled]="loading">Save</button>
+                  <button type="button" class="ghost" (click)="cancelEdit()" [disabled]="loading">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </td>
+          </tr>
+        </ng-container>
       </tbody>
     </table>
   </section>

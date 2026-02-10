@@ -191,4 +191,9 @@ select {
   .row {
     grid-template-columns: 1fr;
   }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
 }

@@ -1,20 +1,25 @@
+<div class="sidebar-backdrop" (click)="closeMobileNav()"></div>
 <nav class="sidebar">
+  <div class="sidebar-head">
+    <span>Menu</span>
+    <button type="button" class="ghost" (click)="closeMobileNav()">Close</button>
+  </div>
   <ng-container *ngIf="(isStaff$ | async) || (isAdmin$ | async)">
     <div class="section">Staff</div>
-    <a routerLink="/staff/dashboard" routerLinkActive="active">Dashboard</a>
-    <a routerLink="/staff/events" routerLinkActive="active">Events</a>
-    <a routerLink="/staff/reservations" routerLinkActive="active">Reservations</a>
-    <a routerLink="/staff/reservations/new" routerLinkActive="active">New Reservation</a>
-    <a routerLink="/staff/check-in" routerLinkActive="active">Check In</a>
+    <a routerLink="/staff/dashboard" routerLinkActive="active" (click)="closeMobileNav()">Dashboard</a>
+    <a routerLink="/staff/events" routerLinkActive="active" (click)="closeMobileNav()">Events</a>
+    <a routerLink="/staff/reservations" routerLinkActive="active" (click)="closeMobileNav()">Reservations</a>
+    <a routerLink="/staff/reservations/new" routerLinkActive="active" (click)="closeMobileNav()">New Reservation</a>
+    <a routerLink="/staff/check-in" routerLinkActive="active" (click)="closeMobileNav()">Check In</a>
   </ng-container>
 
   <ng-container *ngIf="(isAdmin$ | async)">
     <div class="section">Admin</div>
-    <a routerLink="/admin/dashboard" routerLinkActive="active">Dashboard</a>
-    <a routerLink="/admin/events" routerLinkActive="active">Events</a>
-    <a routerLink="/admin/frequent-clients" routerLinkActive="active">Frequent Clients</a>
-    <a routerLink="/admin/clients" routerLinkActive="active">Clients CRM</a>
-    <a routerLink="/admin/users" routerLinkActive="active">Users</a>
-    <a routerLink="/admin/financials" routerLinkActive="active">Financials</a>
+    <a routerLink="/admin/dashboard" routerLinkActive="active" (click)="closeMobileNav()">Dashboard</a>
+    <a routerLink="/admin/events" routerLinkActive="active" (click)="closeMobileNav()">Events</a>
+    <a routerLink="/admin/frequent-clients" routerLinkActive="active" (click)="closeMobileNav()">Frequent Clients</a>
+    <a routerLink="/admin/clients" routerLinkActive="active" (click)="closeMobileNav()">Clients CRM</a>
+    <a routerLink="/admin/users" routerLinkActive="active" (click)="closeMobileNav()">Users</a>
+    <a routerLink="/admin/financials" routerLinkActive="active" (click)="closeMobileNav()">Financials</a>
   </ng-container>
 </nav>

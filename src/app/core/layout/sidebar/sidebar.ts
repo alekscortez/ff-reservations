@@ -15,4 +15,9 @@ export class Sidebar {
   groups$ = this.auth.groups$();
   isAdmin$ = this.auth.hasGroup$('Admin');
   isStaff$ = this.auth.hasGroup$('Staff');
+
+  closeMobileNav(): void {
+    document.body.classList.remove('mobile-nav-open');
+    document.documentElement.classList.remove('mobile-nav-open');
+  }
 }

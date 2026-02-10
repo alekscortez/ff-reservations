@@ -1,5 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  CognitoIdentityProviderClient,
+  AdminGetUserCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
+import {
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
@@ -14,17 +18,20 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const HOLDS_TABLE = process.env.HOLDS_TABLE;
 const RES_TABLE = process.env.RES_TABLE;
 const FREQUENT_CLIENTS_TABLE = process.env.FREQUENT_CLIENTS_TABLE;
 const CLIENTS_TABLE = process.env.CLIENTS_TABLE;
+const USER_POOL_ID = process.env.USER_POOL_ID;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
 const TABLE_TEMPLATE = JSON.parse(fs.readFileSync(TABLE_TEMPLATE_PATH, "utf8"));
+
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const cognito = new CognitoIdentityProviderClient({});
+const userCache = new Map();
 
 // ---------- helpers ----------
 function json(statusCode, body, extraHeaders = {}) {
@@ -76,21 +83,56 @@ function getGroupsFromEvent(event) {
     } catch {
       // fall through
     }
+    if (groups.startsWith("[") && groups.endsWith("]")) {
+      const trimmed = groups.slice(1, -1).trim();
+      if (!trimmed) return [];
+      return trimmed
+        .split(",")
+        .map((g) => g.replace(/^['"]|['"]$/g, "").trim())
+        .filter(Boolean);
+    }
     return groups.split(",").map((g) => g.trim()).filter(Boolean);
   }
   return [];
 }
 
-function getUserLabel(event) {
+async function getUserLabel(event) {
   const claims = event?.requestContext?.authorizer?.jwt?.claims ?? {};
-  return (
-    claims.name ||
-    claims.email ||
-    claims["cognito:username"] ||
-    claims.username ||
-    claims.sub ||
-    "unknown"
-  );
+  const fromClaims = claims["custom:name"] || claims.name || claims.email;
+  if (fromClaims) return fromClaims;
+
+  const username =
+    claims["cognito:username"] || claims.username || claims.sub || "unknown";
+  const fetched = await fetchUserNameFromCognito(username);
+  return fetched || username || "unknown";
+}
+
+async function fetchUserNameFromCognito(username) {
+  if (!USER_POOL_ID || !username) return null;
+
+  const cached = userCache.get(username);
+  const now = Date.now();
+  if (cached && now - cached.ts < 5 * 60 * 1000) {
+    return cached.value;
+  }
+
+  try {
+    const res = await cognito.send(
+      new AdminGetUserCommand({
+        UserPoolId: USER_POOL_ID,
+        Username: username,
+      })
+    );
+    const attrs = res.UserAttributes ?? [];
+    const nameAttr = attrs.find((a) => a.Name === "name");
+    const emailAttr = attrs.find((a) => a.Name === "email");
+    const value = nameAttr?.Value || emailAttr?.Value || null;
+    userCache.set(username, { value, ts: now });
+    return value;
+  } catch {
+    userCache.set(username, { value: null, ts: now });
+    return null;
+  }
 }
 
 function requireAdmin(event) {
@@ -146,6 +188,155 @@ function getEffectiveTables(eventRecord, extraDisabled = new Set()) {
   });
 }
 
+function getTablePriceForEvent(eventRecord, tableId) {
+  if (!eventRecord || !tableId) return null;
+  const tables = getEffectiveTables(eventRecord);
+  const match = tables.find((t) => t.id === tableId);
+  return match?.price ?? null;
+}
+
+function buildDefaultTableSetting(tableId, tablePrice) {
+  return {
+    tableId,
+    paymentStatus: "PENDING",
+    amountDue: Number(tablePrice ?? 0),
+    amountPaid: 0,
+    paymentDeadlineTime: "00:00",
+    paymentDeadlineTz: "America/Chicago",
+  };
+}
+
+async function createFrequentReservationsForEvent(eventRecord, user) {
+  requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
+  requiredEnv("RES_TABLE", RES_TABLE);
+
+  const disabledClients = new Set(eventRecord?.disabledClients ?? []);
+  const clients = await listFrequentClients();
+  const now = nowEpoch();
+
+  for (const c of clients) {
+    if (c.status && String(c.status).toUpperCase() !== "ACTIVE") continue;
+    if (disabledClients.has(c.clientId)) continue;
+
+    const tableIds = c.tableSettings?.length
+      ? c.tableSettings.map((t) => t.tableId)
+      : normalizeTableList(c.defaultTableIds ?? c.defaultTableId);
+
+    for (const tableId of tableIds) {
+      const tablePrice = getTablePriceForEvent(eventRecord, tableId);
+      if (tablePrice === null) continue;
+
+      const setting =
+        c.tableSettings?.find((t) => t.tableId === tableId) ??
+        buildDefaultTableSetting(tableId, tablePrice);
+
+      const amountDue =
+        setting.paymentStatus === "COURTESY" ? 0 : Number(setting.amountDue ?? tablePrice);
+      let amountPaid = Number(setting.amountPaid ?? 0);
+      if (setting.paymentStatus === "PAID") amountPaid = amountDue;
+      if (setting.paymentStatus === "COURTESY") amountPaid = 0;
+      if (setting.paymentStatus === "PENDING") amountPaid = 0;
+
+      let paymentStatus = String(setting.paymentStatus ?? "PENDING").toUpperCase();
+      if (!["PENDING", "PARTIAL", "PAID", "COURTESY"].includes(paymentStatus)) {
+        paymentStatus = "PENDING";
+      }
+
+      let paymentDeadlineAt = null;
+      let paymentDeadlineTz = setting.paymentDeadlineTz || "America/Chicago";
+      if (paymentStatus === "PENDING" || paymentStatus === "PARTIAL") {
+        const time = setting.paymentDeadlineTime || "00:00";
+        paymentDeadlineAt = `${eventRecord.eventDate}T${time}:00`;
+      }
+
+      const reservationId = randomUUID();
+      const holdKey = { PK: `EVENTDATE#${eventRecord.eventDate}`, SK: `TABLE#${tableId}` };
+
+      try {
+        await ddb.send(
+          new TransactWriteCommand({
+            TransactItems: [
+              {
+                Put: {
+                  TableName: HOLDS_TABLE,
+                  Item: {
+                    ...holdKey,
+                    lockType: "RESERVED",
+                    reservationId,
+                    createdAt: now,
+                    createdBy: user,
+                    customerName: c.name ?? null,
+                    phone: c.phone ?? null,
+                  },
+                  ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+                },
+              },
+              {
+                Put: {
+                  TableName: RES_TABLE,
+                  Item: {
+                    PK: `EVENTDATE#${eventRecord.eventDate}`,
+                    SK: `RES#${reservationId}`,
+                    reservationId,
+                    eventDate: eventRecord.eventDate,
+                    tableId,
+                    customerName: c.name ?? "Frequent Client",
+                    phone: c.phone ?? null,
+                    depositAmount: amountPaid,
+                    amountDue,
+                    tablePrice,
+                    paymentStatus,
+                    paymentDeadlineAt,
+                    paymentDeadlineTz: paymentStatus === "PAID" || paymentStatus === "COURTESY" ? null : paymentDeadlineTz,
+                    paymentMethod: "cash",
+                    status: "CONFIRMED",
+                    createdAt: now,
+                    createdBy: user,
+                  },
+                  ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+                },
+              },
+            ],
+          })
+        );
+      } catch (err) {
+        if (err?.name === "TransactionCanceledException" || err?.name === "ConditionalCheckFailedException") {
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+}
+
+function normalizeTableList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeTableSettings(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((s) => ({
+      tableId: String(s?.tableId ?? "").trim(),
+      paymentStatus: String(s?.paymentStatus ?? "PENDING").toUpperCase(),
+      amountDue: Number(s?.amountDue ?? 0),
+      amountPaid: Number(s?.amountPaid ?? 0),
+      paymentDeadlineTime: String(s?.paymentDeadlineTime ?? "00:00"),
+      paymentDeadlineTz: String(s?.paymentDeadlineTz ?? "America/Chicago"),
+    }))
+    .filter((s) => s.tableId);
+}
+
 async function getDisabledTablesFromFrequent(eventRecord) {
   // disabledClients = opt-out list (clients NOT coming for this event).
   const disabledClients = new Set(eventRecord?.disabledClients ?? []);
@@ -154,7 +345,11 @@ async function getDisabledTablesFromFrequent(eventRecord) {
   for (const c of clients) {
     if (c.status && String(c.status).toUpperCase() !== "ACTIVE") continue;
     if (disabledClients.has(c.clientId)) continue;
-    if (c.defaultTableId) disabledTables.add(c.defaultTableId);
+    const tables =
+      (c.tableSettings?.length
+        ? c.tableSettings.map((t) => t.tableId)
+        : normalizeTableList(c.defaultTableIds ?? c.defaultTableId)) || [];
+    for (const t of tables) disabledTables.add(t);
   }
   return disabledTables;
 }
@@ -187,19 +382,47 @@ async function listFrequentClients() {
       },
     })
   );
-  return res.Items ?? [];
+  return (res.Items ?? []).map((x) => {
+    const tables = normalizeTableList(x.defaultTableIds ?? x.defaultTableId);
+    const tableSettings = normalizeTableSettings(x.tableSettings);
+    return {
+      ...x,
+      defaultTableIds: tables,
+      tableSettings,
+    };
+  });
+}
+
+async function getFrequentClientById(clientId) {
+  requiredEnv("FREQUENT_CLIENTS_TABLE", FREQUENT_CLIENTS_TABLE);
+  const res = await ddb.send(
+    new GetCommand({
+      TableName: FREQUENT_CLIENTS_TABLE,
+      Key: { PK: "CLIENT", SK: `CLIENT#${clientId}` },
+    })
+  );
+  if (!res.Item) return null;
+  const tables = normalizeTableList(res.Item.defaultTableIds ?? res.Item.defaultTableId);
+  const tableSettings = normalizeTableSettings(res.Item.tableSettings);
+  return {
+    ...res.Item,
+    defaultTableIds: tables,
+    tableSettings,
+  };
 }
 
 async function createFrequentClient(payload, user) {
   requiredEnv("FREQUENT_CLIENTS_TABLE", FREQUENT_CLIENTS_TABLE);
+  requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
   const name = String(payload?.name ?? "").trim();
   const phoneRaw = String(payload?.phone ?? "").trim();
   const phone = normalizePhone(phoneRaw);
-  const defaultTableId = String(payload?.defaultTableId ?? "").trim();
+  const defaultTableIds = normalizeTableList(payload?.defaultTableIds ?? payload?.defaultTableId);
+  const tableSettings = normalizeTableSettings(payload?.tableSettings);
   const notes = String(payload?.notes ?? "").trim();
   if (!name) throw httpError(400, "name is required");
   if (!phone) throw httpError(400, "phone is required");
-  if (!defaultTableId) throw httpError(400, "defaultTableId is required");
+  if (!defaultTableIds.length) throw httpError(400, "defaultTableIds is required");
 
   const clientId = randomUUID();
   const item = {
@@ -208,7 +431,8 @@ async function createFrequentClient(payload, user) {
     clientId,
     name,
     phone,
-    defaultTableId,
+    defaultTableIds,
+    tableSettings,
     notes,
     status: "ACTIVE",
     createdAt: nowEpoch(),
@@ -223,22 +447,60 @@ async function createFrequentClient(payload, user) {
     })
   );
 
+  await ddb.send(
+    new UpdateCommand({
+      TableName: CLIENTS_TABLE,
+      Key: { PK: "CLIENT", SK: `PHONE#${phone}` },
+      UpdateExpression:
+        "SET #name = :name, #phone = :phone, #updatedBy = :by, #lastReservationAt = if_not_exists(#lastReservationAt, :now), #lastEventDate = if_not_exists(#lastEventDate, :eventDate), #lastTableId = if_not_exists(#lastTableId, :tableId)",
+      ExpressionAttributeNames: {
+        "#name": "name",
+        "#phone": "phone",
+        "#updatedBy": "updatedBy",
+        "#lastReservationAt": "lastReservationAt",
+        "#lastEventDate": "lastEventDate",
+        "#lastTableId": "lastTableId",
+      },
+      ExpressionAttributeValues: {
+        ":name": name || "Unknown",
+        ":phone": phone,
+        ":by": user,
+        ":now": nowEpoch(),
+        ":eventDate": null,
+        ":tableId": (defaultTableIds[0] ?? null),
+      },
+    })
+  );
+
   return item;
 }
 
 async function updateFrequentClient(clientId, payload) {
   requiredEnv("FREQUENT_CLIENTS_TABLE", FREQUENT_CLIENTS_TABLE);
+  requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
   const updates = [];
   const names = {};
   const values = {};
 
-  const updatable = ["name", "defaultTableId", "notes", "status"];
+  const updatable = ["name", "notes", "status"];
   for (const key of updatable) {
     if (payload?.[key] !== undefined) {
       updates.push(`#${key} = :${key}`);
       names[`#${key}`] = key;
       values[`:${key}`] = payload[key];
     }
+  }
+  if (payload?.defaultTableIds !== undefined || payload?.defaultTableId !== undefined) {
+    const next = normalizeTableList(payload?.defaultTableIds ?? payload?.defaultTableId);
+    updates.push("#defaultTableIds = :defaultTableIds");
+    names["#defaultTableIds"] = "defaultTableIds";
+    values[":defaultTableIds"] = next;
+  }
+  if (payload?.tableSettings !== undefined) {
+    const next = normalizeTableSettings(payload?.tableSettings);
+    updates.push("#tableSettings = :tableSettings");
+    names["#tableSettings"] = "tableSettings";
+    values[":tableSettings"] = next;
   }
   if (payload?.phone !== undefined) {
     updates.push("#phone = :phone");
@@ -261,7 +523,36 @@ async function updateFrequentClient(clientId, payload) {
       ReturnValues: "ALL_NEW",
     })
   );
-  return res.Attributes;
+  const updated = res.Attributes ?? {};
+  const updatedName = String(updated.name ?? "").trim();
+  const updatedPhone = normalizePhone(updated.phone ?? payload?.phone);
+  if (updatedPhone) {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: CLIENTS_TABLE,
+        Key: { PK: "CLIENT", SK: `PHONE#${updatedPhone}` },
+        UpdateExpression:
+          "SET #name = :name, #phone = :phone, #updatedBy = :by, #lastTableId = if_not_exists(#lastTableId, :tableId)",
+        ExpressionAttributeNames: {
+          "#name": "name",
+          "#phone": "phone",
+          "#updatedBy": "updatedBy",
+          "#lastTableId": "lastTableId",
+        },
+        ExpressionAttributeValues: {
+          ":name": updatedName || "Unknown",
+          ":phone": updatedPhone,
+          ":by": "system",
+          ":tableId": (normalizeTableList(updated.defaultTableIds ?? updated.defaultTableId)[0] ?? null),
+        },
+      })
+    );
+  }
+  return {
+    ...updated,
+    defaultTableIds: normalizeTableList(updated.defaultTableIds ?? updated.defaultTableId),
+    tableSettings: normalizeTableSettings(updated.tableSettings),
+  };
 }
 
 async function deleteFrequentClient(clientId) {
@@ -347,7 +638,7 @@ async function listEvents() {
   return items;
 }
 
-async function createEvent(payload) {
+async function createEvent(payload, user) {
   const eventName = String(payload?.eventName ?? "").trim();
   const eventDate = String(payload?.eventDate ?? "").trim(); // "YYYY-MM-DD"
   const minDeposit = Number(payload?.minDeposit ?? 0);
@@ -414,6 +705,7 @@ async function createEvent(payload) {
     throw err;
   }
 
+  await createFrequentReservationsForEvent(eventItem, user ?? "system");
   return eventItem;
 }
 
@@ -447,7 +739,7 @@ async function getEventByDate(eventDate) {
   return await getEventById(lock.eventId);
 }
 
-async function updateEvent(eventId, payload) {
+async function updateEvent(eventId, payload, user) {
   const current = await getEventById(eventId);
   if (!current) throw httpError(404, "Event not found");
 
@@ -555,7 +847,11 @@ async function updateEvent(eventId, payload) {
       throw err;
     }
 
-    return await getEventById(eventId);
+    const updated = await getEventById(eventId);
+    if (updated) {
+      await createFrequentReservationsForEvent(updated, user ?? "system");
+    }
+    return updated;
   }
 
   // CASE C: eventDate change while ACTIVE (optional but recommended)
@@ -727,6 +1023,130 @@ async function listCrmClients() {
   return items;
 }
 
+async function searchCrmClients(phoneQuery) {
+  requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
+  const phone = normalizePhone(phoneQuery);
+  if (!phone) return [];
+
+  const res = await ddb.send(
+    new QueryCommand({
+      TableName: CLIENTS_TABLE,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": "CLIENT",
+        ":sk": `PHONE#${phone}`,
+      },
+      Limit: 10,
+      ScanIndexForward: false,
+    })
+  );
+
+  const items = (res.Items ?? []).map((x) => ({
+    name: x.name,
+    phone: x.phone,
+    totalSpend: x.totalSpend,
+    totalReservations: x.totalReservations,
+    lastReservationAt: x.lastReservationAt,
+    lastEventDate: x.lastEventDate,
+    lastTableId: x.lastTableId,
+    updatedBy: x.updatedBy,
+  }));
+  items.sort((a, b) => (b.lastReservationAt ?? 0) - (a.lastReservationAt ?? 0));
+  return items;
+}
+
+async function updateCrmClient(phoneKey, payload, user) {
+  requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
+  const currentPhone = normalizePhone(phoneKey);
+  if (!currentPhone) throw httpError(400, "phone is required");
+
+  const res = await ddb.send(
+    new GetCommand({
+      TableName: CLIENTS_TABLE,
+      Key: { PK: "CLIENT", SK: `PHONE#${currentPhone}` },
+    })
+  );
+  const current = res.Item;
+  if (!current) throw httpError(404, "Client not found");
+
+  const nextName = payload?.name !== undefined ? String(payload?.name ?? "").trim() : current.name;
+  const nextPhoneRaw =
+    payload?.phone !== undefined ? String(payload?.phone ?? "").trim() : current.phone;
+  const nextPhone = normalizePhone(nextPhoneRaw);
+  if (!nextName) throw httpError(400, "name is required");
+  if (!nextPhone) throw httpError(400, "phone is required");
+
+  if (nextPhone === currentPhone) {
+    const upd = await ddb.send(
+      new UpdateCommand({
+        TableName: CLIENTS_TABLE,
+        Key: { PK: "CLIENT", SK: `PHONE#${currentPhone}` },
+        UpdateExpression: "SET #name = :name, #phone = :phone, #updatedBy = :by",
+        ExpressionAttributeNames: {
+          "#name": "name",
+          "#phone": "phone",
+          "#updatedBy": "updatedBy",
+        },
+        ExpressionAttributeValues: {
+          ":name": nextName,
+          ":phone": nextPhone,
+          ":by": user,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+    return upd.Attributes;
+  }
+
+  await ddb.send(
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: CLIENTS_TABLE,
+            Item: {
+              ...current,
+              name: nextName,
+              phone: nextPhone,
+              PK: "CLIENT",
+              SK: `PHONE#${nextPhone}`,
+              updatedBy: user,
+            },
+            ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+          },
+        },
+        {
+          Delete: {
+            TableName: CLIENTS_TABLE,
+            Key: { PK: "CLIENT", SK: `PHONE#${currentPhone}` },
+          },
+        },
+      ],
+    })
+  );
+
+  return {
+    ...current,
+    name: nextName,
+    phone: nextPhone,
+    PK: "CLIENT",
+    SK: `PHONE#${nextPhone}`,
+    updatedBy: user,
+  };
+}
+
+async function deleteCrmClient(phoneKey) {
+  requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
+  const phone = normalizePhone(phoneKey);
+  if (!phone) throw httpError(400, "phone is required");
+  await ddb.send(
+    new DeleteCommand({
+      TableName: CLIENTS_TABLE,
+      Key: { PK: "CLIENT", SK: `PHONE#${phone}` },
+    })
+  );
+}
+
 async function cancelReservation(eventDate, reservationId, tableId, user, reason) {
   requiredEnv("RES_TABLE", RES_TABLE);
   requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
@@ -796,6 +1216,12 @@ async function createReservation(payload, user, isAdmin) {
   const phone = String(payload?.phone ?? "").trim();
   const paymentMethod = String(payload?.paymentMethod ?? "").trim();
   const depositAmount = Number(payload?.depositAmount ?? 0);
+  const amountDueInput = payload?.amountDue !== undefined ? Number(payload?.amountDue) : null;
+  const paymentStatusInput = payload?.paymentStatus
+    ? String(payload?.paymentStatus).toUpperCase()
+    : "";
+  const paymentDeadlineAt = String(payload?.paymentDeadlineAt ?? "").trim();
+  const paymentDeadlineTz = String(payload?.paymentDeadlineTz ?? "America/Chicago").trim();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     throw httpError(400, "eventDate must be YYYY-MM-DD");
@@ -815,6 +1241,42 @@ async function createReservation(payload, user, isAdmin) {
   if (!eventRecord) throw httpError(404, "Event not found for date");
   if (!isAdmin && depositAmount < (eventRecord.minDeposit ?? 0)) {
     throw httpError(400, "depositAmount is below minimum for this event");
+  }
+  const tablePrice = getTablePriceForEvent(eventRecord, tableId);
+  if (tablePrice === null) throw httpError(400, "Invalid tableId for event");
+
+  const amountDue =
+    amountDueInput !== null && Number.isFinite(amountDueInput) ? amountDueInput : tablePrice;
+  let paymentStatus = "PENDING";
+  if (paymentStatusInput) {
+    if (!["PENDING", "PARTIAL", "PAID", "COURTESY"].includes(paymentStatusInput)) {
+      throw httpError(400, "paymentStatus must be PENDING | PARTIAL | PAID | COURTESY");
+    }
+    paymentStatus = paymentStatusInput;
+  } else {
+    if (depositAmount <= 0) paymentStatus = "PENDING";
+    else if (depositAmount >= amountDue) paymentStatus = "PAID";
+    else paymentStatus = "PARTIAL";
+  }
+
+  let effectiveDeposit = depositAmount;
+  let effectiveAmountDue = amountDue;
+  if (paymentStatus === "COURTESY") {
+    effectiveAmountDue = 0;
+    effectiveDeposit = 0;
+  } else if (paymentStatus === "PAID") {
+    effectiveDeposit = effectiveAmountDue;
+  } else if (paymentStatus === "PENDING") {
+    effectiveDeposit = 0;
+  }
+
+  let effectiveDeadlineAt = paymentDeadlineAt;
+  if (paymentStatus === "PENDING" || paymentStatus === "PARTIAL") {
+    if (!effectiveDeadlineAt) {
+      effectiveDeadlineAt = `${eventDate}T00:00:00`;
+    }
+  } else {
+    effectiveDeadlineAt = "";
   }
 
   const now = nowEpoch();
@@ -855,7 +1317,15 @@ async function createReservation(payload, user, isAdmin) {
               tableId,
               customerName,
               phone,
-              depositAmount,
+              depositAmount: effectiveDeposit,
+              amountDue: effectiveAmountDue,
+              tablePrice,
+              paymentStatus,
+              paymentDeadlineAt: effectiveDeadlineAt || null,
+              paymentDeadlineTz:
+                paymentStatus === "PAID" || paymentStatus === "COURTESY"
+                  ? null
+                  : paymentDeadlineTz,
               paymentMethod,
               status: "CONFIRMED",
               createdAt: now,
@@ -927,7 +1397,8 @@ export const handler = async (event) => {
       const body = getBody(event);
       if (!body) return json(400, { message: "Invalid JSON body" }, cors);
 
-      const item = await createEvent(body);
+      const user = await getUserLabel(event);
+      const item = await createEvent(body, user);
       return json(201, { item }, cors);
     }
 
@@ -955,7 +1426,8 @@ export const handler = async (event) => {
       const body = getBody(event);
       if (!body) return json(400, { message: "Invalid JSON body" }, cors);
 
-      const item = await updateEvent(eventId, body);
+      const user = await getUserLabel(event);
+      const item = await updateEvent(eventId, body, user);
       return json(200, { item }, cors);
     }
 
@@ -975,12 +1447,18 @@ export const handler = async (event) => {
       requireAdmin(event);
       const body = getBody(event);
       if (!body) return json(400, { message: "Invalid JSON body" }, cors);
-      const user = getUserLabel(event);
+      const user = await getUserLabel(event);
       const item = await createFrequentClient(body, user);
       return json(201, { item }, cors);
     }
 
     const frequentMatch = path.match(/^\/frequent-clients\/([^/]+)$/);
+    if (frequentMatch && method === "GET") {
+      const clientId = frequentMatch[1];
+      const item = await getFrequentClientById(clientId);
+      if (!item) return json(404, { message: "Client not found" }, cors);
+      return json(200, { item }, cors);
+    }
     if (frequentMatch && method === "PUT") {
       requireAdmin(event);
       const clientId = frequentMatch[1];
@@ -1004,11 +1482,36 @@ export const handler = async (event) => {
       return json(200, { items }, cors);
     }
 
+    const clientMatch = path.match(/^\/clients\/([^/]+)$/);
+    if (clientMatch && method === "PUT") {
+      requireAdmin(event);
+      const phone = clientMatch[1];
+      const body = getBody(event);
+      if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+      const user = await getUserLabel(event);
+      const item = await updateCrmClient(phone, body, user);
+      return json(200, { item }, cors);
+    }
+    if (clientMatch && method === "DELETE") {
+      requireAdmin(event);
+      const phone = clientMatch[1];
+      await deleteCrmClient(phone);
+      return noContent(204, cors);
+    }
+
+    // ----- /clients/search -----
+    if (method === "GET" && path === "/clients/search") {
+      const phone = event.queryStringParameters?.phone;
+      if (!phone) return json(400, { message: "phone is required" }, cors);
+      const items = await searchCrmClients(phone);
+      return json(200, { items }, cors);
+    }
+
     // ----- /holds -----
     if (method === "POST" && path === "/holds") {
       const body = getBody(event);
       if (!body) return json(400, { message: "Invalid JSON body" }, cors);
-      const user = getUserLabel(event);
+      const user = await getUserLabel(event);
       const item = await createHold(body, user);
       return json(201, { item }, cors);
     }
@@ -1032,7 +1535,7 @@ export const handler = async (event) => {
     if (method === "POST" && path === "/reservations") {
       const body = getBody(event);
       if (!body) return json(400, { message: "Invalid JSON body" }, cors);
-      const user = getUserLabel(event);
+      const user = await getUserLabel(event);
       const groups = getGroupsFromEvent(event);
       const isAdmin = groups.includes("Admin");
       const item = await createReservation(body, user, isAdmin);
@@ -1061,7 +1564,7 @@ export const handler = async (event) => {
       if (!cancelReason) {
         return json(400, { message: "cancelReason is required" }, cors);
       }
-      const user = getUserLabel(event);
+      const user = await getUserLabel(event);
       await cancelReservation(eventDate, reservationId, tableId, user, cancelReason);
       return noContent(204, cors);
     }

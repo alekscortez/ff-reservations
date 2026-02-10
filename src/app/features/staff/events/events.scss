@@ -63,3 +63,14 @@ button {
   color: #fff;
   cursor: pointer;
 }
+
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}

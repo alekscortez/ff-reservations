@@ -25,6 +25,12 @@ export class FrequentClientsService {
     );
   }
 
+  get(clientId: string) {
+    return this.api.get<{ item: FrequentClient }>(`/frequent-clients/${clientId}`).pipe(
+      map((res) => res.item)
+    );
+  }
+
   delete(clientId: string) {
     return this.api.delete<void>(`/frequent-clients/${clientId}`);
   }

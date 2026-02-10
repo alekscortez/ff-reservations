@@ -66,7 +66,7 @@
         [class.disabled]="isCreateDisabledClient(c.clientId)"
         (click)="toggleCreateDisabledClient(c.clientId)"
       >
-        {{ c.name }} · {{ c.defaultTableId }}
+        {{ c.name }} · {{ formatClientTables(c) }}
       </button>
     </div>
   </section>
@@ -181,7 +181,7 @@
                   [class.disabled]="isEditDisabledClient(c.clientId)"
                   (click)="toggleEditDisabledClient(c.clientId)"
                 >
-                  {{ c.name }} · {{ c.defaultTableId }}
+                  {{ c.name }} · {{ formatClientTables(c) }}
                 </button>
               </div>
             </td>

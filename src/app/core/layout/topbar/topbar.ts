@@ -23,4 +23,10 @@ export class Topbar {
   logout(): void {
     this.auth.logout();
   }
+
+  toggleMobileNav(): void {
+    console.log('[Topbar] menu clicked');
+    document.body.classList.toggle('mobile-nav-open');
+    document.documentElement.classList.toggle('mobile-nav-open');
+  }
 }

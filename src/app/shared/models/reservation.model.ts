@@ -1,4 +1,5 @@
 export type ReservationStatus = 'CONFIRMED' | 'CANCELLED';
+export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
 
 export interface ReservationItem {
   reservationId: string;
@@ -7,6 +8,11 @@ export interface ReservationItem {
   customerName: string;
   phone: string;
   depositAmount: number;
+  tablePrice?: number;
+  amountDue?: number;
+  paymentStatus?: PaymentStatus;
+  paymentDeadlineAt?: string | null;
+  paymentDeadlineTz?: string | null;
   paymentMethod: 'cash' | 'cashapp' | 'square';
   status: ReservationStatus;
   createdAt?: number;

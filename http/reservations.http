@@ -11,7 +11,9 @@ Content-Type: application/json
   "customerName": "John Doe",
   "phone": "555-123-1234",
   "depositAmount": 40,
-  "paymentMethod": "cash"
+  "paymentMethod": "cash",
+  "paymentDeadlineAt": "2026-02-21T00:00:00",
+  "paymentDeadlineTz": "America/Chicago"
 }
 
 ###
@@ -29,5 +31,6 @@ Content-Type: application/json
 
 {
   "eventDate": "2026-02-21",
-  "tableId": "A01"
+  "tableId": "A01",
+  "cancelReason": "Client no-show"
 }
