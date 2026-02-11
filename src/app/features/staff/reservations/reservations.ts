@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
+import { EventsService } from '../../../core/http/events.service';
+import { EventItem } from '../../../shared/models/event.model';
 
 @Component({
   selector: 'app-reservations',
@@ -12,11 +14,15 @@ import { PaymentMethod, ReservationItem } from '../../../shared/models/reservati
 })
 export class Reservations implements OnInit {
   private reservationsApi = inject(ReservationsService);
+  private eventsApi = inject(EventsService);
 
   filterDate = new FormControl('', { nonNullable: true });
   items: ReservationItem[] = [];
   loading = false;
   error: string | null = null;
+  events: EventItem[] = [];
+  eventsLoading = false;
+  eventsError: string | null = null;
   detailItem: ReservationItem | null = null;
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
@@ -29,7 +35,85 @@ export class Reservations implements OnInit {
   });
 
   ngOnInit(): void {
-    // default: today (optional)
+    this.loadEvents();
+  }
+
+  loadEvents(): void {
+    this.eventsLoading = true;
+    this.eventsError = null;
+    this.eventsApi.listEvents().subscribe({
+      next: (items) => {
+        this.events = (items ?? []).sort((a, b) =>
+          (a.eventDate || '').localeCompare(b.eventDate || '')
+        );
+        this.eventsLoading = false;
+        this.autoSelectCurrentWeekEvent();
+      },
+      error: (err) => {
+        this.eventsError = err?.error?.message || err?.message || 'Failed to load events';
+        this.eventsLoading = false;
+      },
+    });
+  }
+
+  upcomingEvents(): EventItem[] {
+    const today = this.todayString();
+    return this.events
+      .filter((e) => (e.eventDate || '') >= today)
+      .slice(0, 6);
+  }
+
+  selectEvent(eventDate: string | undefined): void {
+    if (!eventDate) return;
+    this.filterDate.setValue(eventDate);
+    this.load();
+  }
+
+  isSelectedEvent(eventDate: string | undefined): boolean {
+    return !!eventDate && this.filterDate.value === eventDate;
+  }
+
+  isThisWeek(eventDate: string | undefined): boolean {
+    if (!eventDate) return false;
+    const date = new Date(`${eventDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return false;
+    const today = new Date();
+    const day = (today.getDay() + 6) % 7;
+    const start = new Date(today);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - day);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return date >= start && date <= end;
+  }
+
+  formatEventDate(eventDate: string | undefined): string {
+    if (!eventDate) return '—';
+    const date = new Date(`${eventDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return eventDate;
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  private autoSelectCurrentWeekEvent(): void {
+    if (this.filterDate.value) return;
+    const currentWeek = this.events.find((e) => this.isThisWeek(e.eventDate));
+    const firstUpcoming = this.upcomingEvents()[0];
+    const target = currentWeek?.eventDate || firstUpcoming?.eventDate;
+    if (target) {
+      this.filterDate.setValue(target);
+      this.load();
+    }
+  }
+
+  private todayString(): string {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   load(): void {

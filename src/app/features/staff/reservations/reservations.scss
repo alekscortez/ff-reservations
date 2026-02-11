@@ -2,3 +2,13 @@
   display: block;
   width: 100%;
 }
+
+.touch-carousel {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.touch-carousel::-webkit-scrollbar {
+  display: none;
+}
