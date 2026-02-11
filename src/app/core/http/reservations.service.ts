@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { map } from 'rxjs';
 import { ApiClient } from './api-client';
-import { ReservationItem } from '../../shared/models/reservation.model';
+import { PaymentMethod, ReservationItem } from '../../shared/models/reservation.model';
 
 export interface CreateReservationPayload {
   eventDate: string;
@@ -12,9 +12,17 @@ export interface CreateReservationPayload {
   depositAmount: number;
   amountDue?: number;
   paymentStatus?: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
-  paymentMethod: 'cash' | 'cashapp' | 'square';
+  paymentMethod?: PaymentMethod | null;
   paymentDeadlineAt?: string | null;
   paymentDeadlineTz?: string | null;
+}
+
+export interface AddPaymentPayload {
+  reservationId: string;
+  eventDate: string;
+  amount: number;
+  method: PaymentMethod;
+  note?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -39,5 +47,17 @@ export class ReservationsService {
       tableId,
       cancelReason,
     });
+  }
+
+  addPayment(payload: AddPaymentPayload) {
+    return this.api.put<{ item: ReservationItem }>(
+      `/reservations/${payload.reservationId}/payment`,
+      {
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        method: payload.method,
+        note: payload.note ?? '',
+      }
+    );
   }
 }

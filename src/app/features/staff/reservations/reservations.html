@@ -1,63 +1,185 @@
-<section class="page">
-  <header class="page-header">
-    <h1>Reservations</h1>
-    <p>View and manage reservations by date</p>
+<section class="flex w-full flex-col gap-4">
+  <header>
+    <h1 class="text-2xl font-semibold text-brand-900">Reservations</h1>
+    <p class="text-sm text-brand-600">View and manage reservations by date.</p>
   </header>
 
-  <section class="card">
-    <div class="filters">
-      <label>
+  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
+    <div class="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+      <label class="grid gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
         Event Date
-        <input type="date" [formControl]="filterDate" />
+        <input
+          type="date"
+          [formControl]="filterDate"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
       </label>
-      <button type="button" (click)="load()">Load</button>
-      <button type="button" (click)="filterDate.setValue(''); items = []">Clear</button>
+      <button
+        type="button"
+        class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white"
+        (click)="load()"
+      >
+        Load
+      </button>
+      <button
+        type="button"
+        class="h-11 rounded-lg border border-brand-200 px-4 text-sm text-brand-700"
+        (click)="filterDate.setValue(''); items = []"
+      >
+        Clear
+      </button>
     </div>
 
-    <div *ngIf="loading" class="muted">Loading…</div>
-    <div *ngIf="!loading && items.length === 0" class="muted">No reservations.</div>
-    <p class="error" *ngIf="error">{{ error }}</p>
+    <div *ngIf="loading" class="mt-4 text-sm text-brand-500">Loading...</div>
+    <div *ngIf="!loading && items.length === 0" class="mt-4 text-sm text-brand-500">No reservations.</div>
+    <p class="mt-4 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
 
-    <table *ngIf="items.length > 0">
-      <thead>
-        <tr>
-          <th>Table</th>
-          <th>Customer</th>
-          <th>Phone</th>
-          <th>Deposit</th>
-          <th>Method</th>
-          <th>Payment</th>
-          <th>Deadline</th>
-          <th>Status</th>
-          <th>Created By</th>
-          <th>Cancel Reason</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let r of items">
-          <td>{{ r.tableId }}</td>
-          <td>{{ r.customerName }}</td>
-          <td>{{ r.phone }}</td>
-          <td>{{ r.depositAmount }}</td>
-          <td>{{ r.paymentMethod }}</td>
-          <td>{{ r.paymentStatus || '—' }}</td>
-          <td>{{ r.paymentDeadlineAt || '—' }}</td>
-          <td>{{ r.status }}</td>
-          <td>{{ r.createdBy || '—' }}</td>
-          <td class="muted">{{ r.cancelReason || '—' }}</td>
-          <td>
-            <button
-              type="button"
-              class="ghost"
-              (click)="cancel(r)"
-              [disabled]="r.status !== 'CONFIRMED'"
-            >
-              Cancel
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="mt-4 hidden overflow-x-auto lg:block" *ngIf="items.length > 0">
+      <table class="w-full border-collapse text-left text-sm text-brand-900">
+        <thead class="border-b border-brand-100 text-xs uppercase tracking-[0.16em] text-brand-500">
+          <tr>
+            <th class="py-3 pr-3">Table</th>
+            <th class="py-3 pr-3">Customer</th>
+            <th class="py-3 pr-3">Status</th>
+            <th class="py-3 pr-3">Payment</th>
+            <th class="py-3 pr-3">Amount Due</th>
+            <th class="py-3 pr-3">Deadline</th>
+            <th class="py-3 pr-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of items" class="border-b border-brand-100 last:border-0">
+            <td class="py-3 pr-3 font-semibold">{{ r.tableId }}</td>
+            <td class="py-3 pr-3">{{ r.customerName }}</td>
+            <td class="py-3 pr-3">{{ r.status }}</td>
+            <td class="py-3 pr-3">{{ r.paymentStatus || '—' }}</td>
+            <td class="py-3 pr-3">${{ r.amountDue ?? 0 }}</td>
+            <td class="py-3 pr-3">{{ r.paymentDeadlineAt || '—' }}</td>
+            <td class="py-3 pr-3">
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800"
+                  (click)="openDetails(r)"
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  (click)="openPayment(r)"
+                  [disabled]="r.status !== 'CONFIRMED' || r.paymentStatus === 'PAID' || r.paymentStatus === 'COURTESY'"
+                >
+                  Take Payment
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  (click)="cancel(r)"
+                  [disabled]="r.status !== 'CONFIRMED'"
+                >
+                  Cancel
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-4 grid gap-3 lg:hidden" *ngIf="items.length > 0">
+      <article class="rounded-xl border border-brand-100 bg-white p-4 shadow-sm" *ngFor="let r of items">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-lg font-semibold text-brand-900">{{ r.tableId }}</div>
+          <div class="text-xs font-semibold uppercase tracking-[0.15em] text-brand-500">{{ r.status }}</div>
+        </div>
+        <div class="mt-2 text-sm text-brand-800">{{ r.customerName }} · {{ r.phone }}</div>
+        <div class="mt-3 grid gap-1 text-sm text-brand-700">
+          <div class="flex justify-between"><span class="text-brand-500">Payment</span><span>{{ r.paymentStatus || '—' }}</span></div>
+          <div class="flex justify-between"><span class="text-brand-500">Amount Due</span><span>${{ r.amountDue ?? 0 }}</span></div>
+          <div class="flex justify-between"><span class="text-brand-500">Deadline</span><span>{{ r.paymentDeadlineAt || '—' }}</span></div>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800"
+            (click)="openDetails(r)"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            class="h-10 rounded-lg bg-brand-900 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            (click)="openPayment(r)"
+            [disabled]="r.status !== 'CONFIRMED' || r.paymentStatus === 'PAID' || r.paymentStatus === 'COURTESY'"
+          >
+            Take Payment
+          </button>
+          <button
+            type="button"
+            class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+            (click)="cancel(r)"
+            [disabled]="r.status !== 'CONFIRMED'"
+          >
+            Cancel
+          </button>
+        </div>
+      </article>
+    </div>
   </section>
 </section>
+
+<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showDetailsModal && detailItem">
+  <div class="absolute inset-0 bg-black/40" (click)="closeDetails()"></div>
+  <section class="relative w-[92vw] max-w-2xl rounded-2xl bg-white p-4 md:p-6">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-lg font-semibold text-brand-900">Reservation Details</h3>
+      <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="closeDetails()">Close</button>
+    </div>
+    <dl class="mt-4 grid gap-2 text-sm text-brand-800 md:grid-cols-2">
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Table</dt><dd>{{ detailItem.tableId }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Customer</dt><dd>{{ detailItem.customerName }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Phone</dt><dd>{{ detailItem.phone }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Status</dt><dd>{{ detailItem.status }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Deposit</dt><dd>${{ detailItem.depositAmount }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Amount Due</dt><dd>${{ detailItem.amountDue ?? 0 }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Payment Status</dt><dd>{{ detailItem.paymentStatus || '—' }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Method</dt><dd>{{ detailItem.paymentMethod || '—' }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Deadline</dt><dd>{{ detailItem.paymentDeadlineAt || '—' }}</dd></div>
+      <div><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Created By</dt><dd>{{ detailItem.createdBy || '—' }}</dd></div>
+      <div class="md:col-span-2"><dt class="text-xs uppercase tracking-[0.12em] text-brand-500">Cancel Reason</dt><dd>{{ detailItem.cancelReason || '—' }}</dd></div>
+    </dl>
+  </section>
+</div>
+
+<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showPaymentModal && paymentItem">
+  <div class="absolute inset-0 bg-black/40" (click)="closePayment()"></div>
+  <section class="relative w-[92vw] max-w-md rounded-2xl bg-white p-4 md:p-6">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-lg font-semibold text-brand-900">Take Payment</h3>
+      <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="closePayment()">Close</button>
+    </div>
+    <p class="mt-2 text-sm text-brand-600">Table {{ paymentItem.tableId }} · {{ paymentItem.customerName }}</p>
+    <form class="mt-4 grid gap-3" [formGroup]="paymentForm" (ngSubmit)="submitPayment()">
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Amount
+        <input type="number" min="0.01" step="0.01" formControlName="amount" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Method
+        <select formControlName="method" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900">
+          <option value="cash">Cash</option>
+          <option value="cashapp">CashApp</option>
+          <option value="square">Square</option>
+        </select>
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Note
+        <input type="text" formControlName="note" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+      </label>
+      <button type="submit" class="h-11 rounded-lg bg-brand-900 text-sm font-semibold text-white disabled:opacity-50" [disabled]="loading || paymentForm.invalid">
+        Submit Payment
+      </button>
+    </form>
+  </section>
+</div>

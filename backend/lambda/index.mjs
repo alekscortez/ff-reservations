@@ -288,7 +288,8 @@ async function createFrequentReservationsForEvent(eventRecord, user) {
                     paymentStatus,
                     paymentDeadlineAt,
                     paymentDeadlineTz: paymentStatus === "PAID" || paymentStatus === "COURTESY" ? null : paymentDeadlineTz,
-                    paymentMethod: "cash",
+                    paymentMethod: null,
+                    payments: [],
                     status: "CONFIRMED",
                     createdAt: now,
                     createdBy: user,
@@ -1214,7 +1215,7 @@ async function createReservation(payload, user, isAdmin) {
   const holdId = String(payload?.holdId ?? "").trim();
   const customerName = String(payload?.customerName ?? "").trim();
   const phone = String(payload?.phone ?? "").trim();
-  const paymentMethod = String(payload?.paymentMethod ?? "").trim();
+  const paymentMethodInput = String(payload?.paymentMethod ?? "").trim();
   const depositAmount = Number(payload?.depositAmount ?? 0);
   const amountDueInput = payload?.amountDue !== undefined ? Number(payload?.amountDue) : null;
   const paymentStatusInput = payload?.paymentStatus
@@ -1230,9 +1231,6 @@ async function createReservation(payload, user, isAdmin) {
   if (!holdId) throw httpError(400, "holdId is required");
   if (!customerName) throw httpError(400, "customerName is required");
   if (!phone) throw httpError(400, "phone is required");
-  if (!["cash", "cashapp", "square"].includes(paymentMethod)) {
-    throw httpError(400, "paymentMethod must be cash | cashapp | square");
-  }
   if (!Number.isFinite(depositAmount) || depositAmount < 0) {
     throw httpError(400, "depositAmount must be >= 0");
   }
@@ -1279,8 +1277,30 @@ async function createReservation(payload, user, isAdmin) {
     effectiveDeadlineAt = "";
   }
 
+  const needsMethod = paymentStatus === "PAID" || paymentStatus === "PARTIAL";
+  if (needsMethod && !["cash", "cashapp", "square"].includes(paymentMethodInput)) {
+    throw httpError(400, "paymentMethod is required for PAID or PARTIAL reservations");
+  }
+  const effectivePaymentMethod =
+    paymentStatus === "PENDING" || paymentStatus === "COURTESY"
+      ? null
+      : paymentMethodInput;
+
   const now = nowEpoch();
   const reservationId = randomUUID();
+  const payments =
+    effectiveDeposit > 0 && effectivePaymentMethod
+      ? [
+          {
+            paymentId: randomUUID(),
+            amount: effectiveDeposit,
+            method: effectivePaymentMethod,
+            note: "Initial payment",
+            createdAt: now,
+            createdBy: user,
+          },
+        ]
+      : [];
 
   const holdKey = { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` };
 
@@ -1326,7 +1346,8 @@ async function createReservation(payload, user, isAdmin) {
                 paymentStatus === "PAID" || paymentStatus === "COURTESY"
                   ? null
                   : paymentDeadlineTz,
-              paymentMethod,
+              paymentMethod: effectivePaymentMethod,
+              payments,
               status: "CONFIRMED",
               createdAt: now,
               createdBy: user,
@@ -1339,6 +1360,94 @@ async function createReservation(payload, user, isAdmin) {
   );
 
   return { reservationId };
+}
+
+async function addReservationPayment(reservationId, payload, user) {
+  requiredEnv("RES_TABLE", RES_TABLE);
+  const eventDate = String(payload?.eventDate ?? "").trim();
+  const amount = Number(payload?.amount ?? 0);
+  const method = String(payload?.method ?? "").trim();
+  const note = String(payload?.note ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+    throw httpError(400, "eventDate must be YYYY-MM-DD");
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw httpError(400, "amount must be > 0");
+  }
+  if (!["cash", "cashapp", "square"].includes(method)) {
+    throw httpError(400, "method must be cash | cashapp | square");
+  }
+
+  const key = {
+    PK: `EVENTDATE#${eventDate}`,
+    SK: `RES#${reservationId}`,
+  };
+  const current = await ddb.send(
+    new GetCommand({
+      TableName: RES_TABLE,
+      Key: key,
+    })
+  );
+  const item = current.Item;
+  if (!item) throw httpError(404, "Reservation not found");
+  if (item.status !== "CONFIRMED") {
+    throw httpError(400, "Only confirmed reservations can receive payments");
+  }
+  if (String(item.paymentStatus ?? "").toUpperCase() === "COURTESY") {
+    throw httpError(400, "Cannot add payments to courtesy reservations");
+  }
+
+  const now = nowEpoch();
+  const amountDue = Number(item.amountDue ?? 0);
+  const currentPaid = Number(item.depositAmount ?? 0);
+  const nextPaid = currentPaid + amount;
+  const nextStatus = nextPaid >= amountDue ? "PAID" : "PARTIAL";
+  const nextDeadline = nextStatus === "PAID" ? null : (item.paymentDeadlineAt ?? null);
+  const nextDeadlineTz = nextStatus === "PAID" ? null : (item.paymentDeadlineTz ?? "America/Chicago");
+  const payment = {
+    paymentId: randomUUID(),
+    amount,
+    method,
+    note: note || null,
+    createdAt: now,
+    createdBy: user,
+  };
+
+  const res = await ddb.send(
+    new UpdateCommand({
+      TableName: RES_TABLE,
+      Key: key,
+      ConditionExpression: "#status = :confirmed",
+      UpdateExpression:
+        "SET #depositAmount = :paid, #paymentStatus = :paymentStatus, #paymentMethod = :paymentMethod, #paymentDeadlineAt = :deadline, #paymentDeadlineTz = :deadlineTz, #updatedAt = :now, #updatedBy = :by, #payments = list_append(if_not_exists(#payments, :empty), :newPayment)",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#depositAmount": "depositAmount",
+        "#paymentStatus": "paymentStatus",
+        "#paymentMethod": "paymentMethod",
+        "#paymentDeadlineAt": "paymentDeadlineAt",
+        "#paymentDeadlineTz": "paymentDeadlineTz",
+        "#updatedAt": "updatedAt",
+        "#updatedBy": "updatedBy",
+        "#payments": "payments",
+      },
+      ExpressionAttributeValues: {
+        ":confirmed": "CONFIRMED",
+        ":paid": nextPaid,
+        ":paymentStatus": nextStatus,
+        ":paymentMethod": method,
+        ":deadline": nextDeadline,
+        ":deadlineTz": nextDeadlineTz,
+        ":now": now,
+        ":by": user,
+        ":empty": [],
+        ":newPayment": [payment],
+      },
+      ReturnValues: "ALL_NEW",
+    })
+  );
+
+  return res.Attributes;
 }
 
 // ---------- router ----------
@@ -1548,6 +1657,16 @@ export const handler = async (event) => {
       if (!eventDate) return json(400, { message: "eventDate is required" }, cors);
       const items = await listReservations(eventDate);
       return json(200, { items }, cors);
+    }
+
+    const paymentMatch = path.match(/^\/reservations\/([^/]+)\/payment$/);
+    if (paymentMatch && method === "PUT") {
+      const reservationId = paymentMatch[1];
+      const body = getBody(event);
+      if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+      const user = await getUserLabel(event);
+      const item = await addReservationPayment(reservationId, body, user);
+      return json(200, { item }, cors);
     }
 
     const cancelMatch = path.match(/^\/reservations\/([^/]+)\/cancel$/);

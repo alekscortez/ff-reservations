@@ -1,25 +1,47 @@
-<div class="sidebar-backdrop" (click)="closeMobileNav()"></div>
-<nav class="sidebar">
-  <div class="sidebar-head">
-    <span>Menu</span>
-    <button type="button" class="ghost" (click)="closeMobileNav()">Close</button>
+<div class="sidebar-backdrop hidden fixed inset-0 z-30 bg-black/40" (click)="closeMobileNav()"></div>
+<nav class="sidebar fixed inset-y-0 left-0 z-40 flex w-60 -translate-x-full flex-col gap-1 border-r border-brand-100 bg-brand-50 px-3 py-4 shadow-[4px_0_20px_rgba(0,0,0,0.12)] transition-transform duration-200 md:static md:h-full md:min-h-[calc(100dvh-64px)] md:w-auto md:translate-x-0 md:shadow-none">
+  <div class="sidebar-head mb-2 hidden items-center justify-between gap-2 md:hidden">
+    <span class="text-sm font-semibold text-brand-800">Menu</span>
+    <button type="button" class="rounded-lg border border-brand-200 bg-white px-2.5 py-1.5 text-xs text-brand-800" (click)="closeMobileNav()">Close</button>
   </div>
   <ng-container *ngIf="(isStaff$ | async) || (isAdmin$ | async)">
-    <div class="section">Staff</div>
-    <a routerLink="/staff/dashboard" routerLinkActive="active" (click)="closeMobileNav()">Dashboard</a>
-    <a routerLink="/staff/events" routerLinkActive="active" (click)="closeMobileNav()">Events</a>
-    <a routerLink="/staff/reservations" routerLinkActive="active" (click)="closeMobileNav()">Reservations</a>
-    <a routerLink="/staff/reservations/new" routerLinkActive="active" (click)="closeMobileNav()">New Reservation</a>
-    <a routerLink="/staff/check-in" routerLinkActive="active" (click)="closeMobileNav()">Check In</a>
+    <div class="mt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-500">Staff</div>
+    <a routerLink="/staff/dashboard" routerLinkActive="active"
+       class="mt-1 rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Dashboard</a>
+    <a routerLink="/staff/events" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Events</a>
+    <a routerLink="/staff/reservations" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Reservations</a>
+    <a routerLink="/staff/reservations/new" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">New Reservation</a>
+    <a routerLink="/staff/check-in" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Check In</a>
   </ng-container>
 
   <ng-container *ngIf="(isAdmin$ | async)">
-    <div class="section">Admin</div>
-    <a routerLink="/admin/dashboard" routerLinkActive="active" (click)="closeMobileNav()">Dashboard</a>
-    <a routerLink="/admin/events" routerLinkActive="active" (click)="closeMobileNav()">Events</a>
-    <a routerLink="/admin/frequent-clients" routerLinkActive="active" (click)="closeMobileNav()">Frequent Clients</a>
-    <a routerLink="/admin/clients" routerLinkActive="active" (click)="closeMobileNav()">Clients CRM</a>
-    <a routerLink="/admin/users" routerLinkActive="active" (click)="closeMobileNav()">Users</a>
-    <a routerLink="/admin/financials" routerLinkActive="active" (click)="closeMobileNav()">Financials</a>
+    <div class="mt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-500">Admin</div>
+    <a routerLink="/admin/dashboard" routerLinkActive="active"
+       class="mt-1 rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Dashboard</a>
+    <a routerLink="/admin/events" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Events</a>
+    <a routerLink="/admin/frequent-clients" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Frequent Clients</a>
+    <a routerLink="/admin/clients" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Clients CRM</a>
+    <a routerLink="/admin/users" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Users</a>
+    <a routerLink="/admin/financials" routerLinkActive="active"
+       class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+       (click)="closeMobileNav()">Financials</a>
   </ng-container>
 </nav>
