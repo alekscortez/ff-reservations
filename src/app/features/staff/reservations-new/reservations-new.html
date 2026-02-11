@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6" *ngIf="eventDate">
+  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 pb-24 md:p-6 md:pb-6" *ngIf="eventDate">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="grid gap-1">
         <span *ngIf="loading" class="text-sm text-brand-500">Loading tables…</span>
@@ -191,6 +191,16 @@
       </button>
     </div>
   </section>
+
+  <div class="mt-6 hidden justify-center lg:flex" *ngIf="eventDate">
+    <button
+      type="button"
+      class="rounded-full border border-brand-200 px-4 py-2 text-sm text-brand-700"
+      (click)="clearEventSelection()"
+    >
+      Change Event
+    </button>
+  </div>
 
   <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
     <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
@@ -340,3 +350,13 @@
     </div>
   </div>
 </section>
+
+<div class="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden" *ngIf="eventDate">
+  <button
+    type="button"
+    class="h-12 w-full rounded-full bg-brand-900 text-sm font-semibold text-white"
+    (click)="clearEventSelection()"
+  >
+    Change Event
+  </button>
+</div>

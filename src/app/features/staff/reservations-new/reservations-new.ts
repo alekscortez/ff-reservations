@@ -182,6 +182,19 @@ export class ReservationsNew implements OnInit {
     this.loadTables(date);
   }
 
+  clearEventSelection(): void {
+    this.eventDate = null;
+    this.event = null;
+    this.tables = [];
+    this.selectedTable = null;
+    this.holdId = null;
+    this.showPastModal = false;
+    this.showReservationModal = false;
+    this.filterSection.setValue('ALL', { emitEvent: false });
+    this.filterStatus.setValue('ALL', { emitEvent: false });
+    this.onlyAvailable = false;
+  }
+
   upcomingEvents(): EventItem[] {
     const today = this.todayString();
     return this.events
