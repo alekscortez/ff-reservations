@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -9,7 +9,7 @@ import { TableForEvent } from '../../../shared/models/table.model';
 import { EventItem } from '../../../shared/models/event.model';
 import { ClientsService } from '../../../core/http/clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
-import { debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { debounceTime, distinctUntilChanged, interval, of, Subscription, switchMap } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 
 @Component({
@@ -18,7 +18,7 @@ import { EventsService } from '../../../core/http/events.service';
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })
-export class ReservationsNew implements OnInit {
+export class ReservationsNew implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private eventsApi = inject(EventsService);
   private tablesApi = inject(TablesService);
@@ -39,6 +39,10 @@ export class ReservationsNew implements OnInit {
   selectedTable: TableForEvent | null = null;
   selectedTableId: string | null = null;
   holdId: string | null = null;
+  holdExpiresAt: number | null = null;
+  holdCountdown = 0;
+  private holdTimer: ReturnType<typeof setInterval> | null = null;
+  private pollSub: Subscription | null = null;
   showReservationModal = false;
   sections: string[] = [];
   allowCustomDeposit = false;
@@ -76,7 +80,10 @@ export class ReservationsNew implements OnInit {
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((params) => {
       this.eventDate = params.get('date');
-      if (this.eventDate) this.loadTables(this.eventDate);
+      if (this.eventDate) {
+        this.loadTables(this.eventDate);
+        this.startPolling();
+      }
     });
     this.loadEvents();
 
@@ -134,9 +141,17 @@ export class ReservationsNew implements OnInit {
       });
   }
 
-  loadTables(date: string): void {
-    this.loading = true;
-    this.error = null;
+  ngOnDestroy(): void {
+    this.stopPolling();
+    this.clearHoldTimer();
+  }
+
+  loadTables(date: string, opts: { silent?: boolean } = {}): void {
+    const silent = opts.silent === true;
+    if (!silent) {
+      this.loading = true;
+      this.error = null;
+    }
     this.tablesApi.getForEvent(date).subscribe({
       next: (res) => {
         this.event = res.event;
@@ -150,13 +165,31 @@ export class ReservationsNew implements OnInit {
         } else {
           this.selectedTable = null;
         }
-        this.loading = false;
+        if (!silent) this.loading = false;
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load tables';
-        this.loading = false;
+        if (!silent) {
+          this.error = err?.error?.message || err?.message || 'Failed to load tables';
+          this.loading = false;
+        }
       },
     });
+  }
+
+  private startPolling(): void {
+    if (this.pollSub) return;
+    this.pollSub = interval(15000).subscribe(() => {
+      if (!this.eventDate) return;
+      if (this.showReservationModal) return;
+      this.loadTables(this.eventDate, { silent: true });
+    });
+  }
+
+  private stopPolling(): void {
+    if (this.pollSub) {
+      this.pollSub.unsubscribe();
+      this.pollSub = null;
+    }
   }
 
   loadEvents(): void {
@@ -193,6 +226,7 @@ export class ReservationsNew implements OnInit {
     this.filterSection.setValue('ALL', { emitEvent: false });
     this.filterStatus.setValue('ALL', { emitEvent: false });
     this.onlyAvailable = false;
+    this.stopPolling();
   }
 
   upcomingEvents(): EventItem[] {
@@ -249,13 +283,12 @@ export class ReservationsNew implements OnInit {
 
   selectTable(t: TableForEvent): void {
     if (t.status !== 'AVAILABLE') return;
-    if (this.selectedTableId === t.id) {
-      this.openReservationModal();
-      return;
-    }
     this.selectedTable = t;
     this.selectedTableId = t.id;
     this.holdId = null;
+    this.holdExpiresAt = null;
+    this.holdCountdown = 0;
+    this.clearHoldTimer();
     this.allowCustomDeposit = false;
     const price = t.price ?? 0;
     this.form.controls.amountDue.setValue(price);
@@ -265,7 +298,12 @@ export class ReservationsNew implements OnInit {
     if (this.eventDate) this.paymentDeadlineDate.setValue(this.eventDate);
   }
 
-  createHold(): void {
+  startHoldFlow(): void {
+    if (!this.eventDate || !this.selectedTable) return;
+    this.createHold(true);
+  }
+
+  createHold(openModal = false): void {
     if (!this.eventDate || !this.selectedTable) return;
     this.loading = true;
     this.error = null;
@@ -279,8 +317,11 @@ export class ReservationsNew implements OnInit {
       .subscribe({
         next: (item) => {
           this.holdId = item.holdId;
+          this.holdExpiresAt = item.expiresAt ?? null;
+          this.startHoldTimer();
           this.loading = false;
           this.loadTables(this.eventDate!);
+          if (openModal) this.openReservationModal();
         },
         error: (err) => {
           this.error = err?.error?.message || err?.message || 'Failed to hold table';
@@ -296,6 +337,9 @@ export class ReservationsNew implements OnInit {
     this.holdsApi.releaseHold(this.eventDate, this.selectedTable.id).subscribe({
       next: () => {
         this.holdId = null;
+        this.holdExpiresAt = null;
+        this.holdCountdown = 0;
+        this.clearHoldTimer();
         this.loadTables(this.eventDate!);
         this.loading = false;
       },
@@ -348,6 +392,9 @@ export class ReservationsNew implements OnInit {
       .subscribe({
         next: () => {
           this.holdId = null;
+          this.holdExpiresAt = null;
+          this.holdCountdown = 0;
+          this.clearHoldTimer();
           this.selectedTable = null;
           this.selectedTableId = null;
           this.allowCustomDeposit = false;
@@ -379,6 +426,34 @@ export class ReservationsNew implements OnInit {
 
   closeReservationModal(): void {
     this.showReservationModal = false;
+  }
+
+  private startHoldTimer(): void {
+    this.clearHoldTimer();
+    if (!this.holdExpiresAt) return;
+    const update = () => {
+      const now = Math.floor(Date.now() / 1000);
+      this.holdCountdown = Math.max(0, this.holdExpiresAt! - now);
+      if (this.holdCountdown <= 0) {
+        this.clearHoldTimer();
+      }
+    };
+    update();
+    this.holdTimer = setInterval(update, 1000);
+  }
+
+  private clearHoldTimer(): void {
+    if (this.holdTimer) {
+      clearInterval(this.holdTimer);
+      this.holdTimer = null;
+    }
+  }
+
+  get holdCountdownLabel(): string {
+    const total = this.holdCountdown || 0;
+    const min = Math.floor(total / 60);
+    const sec = String(total % 60).padStart(2, '0');
+    return `${min}:${sec}`;
   }
 
   selectClient(client: CrmClient): void {

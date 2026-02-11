@@ -181,13 +181,48 @@
         (click)="selectTable(t)"
         [disabled]="t.status !== 'AVAILABLE'"
       >
-        <div class="grid grid-cols-[1fr_auto] items-start gap-1">
-          <span class="text-lg font-semibold text-brand-900">{{ t.id }}</span>
-          <span class="text-base font-semibold text-brand-900">${{ t.price }}</span>
+        <div
+          class="grid grid-cols-[1fr_auto] items-start gap-1"
+          [ngClass]="{
+            'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD',
+            'text-brand-600': t.status === 'RESERVED',
+            'text-brand-400': t.status === 'DISABLED'
+          }"
+        >
+          <span class="text-lg font-semibold">{{ t.id }}</span>
+          <span class="text-base font-semibold">${{ t.price }}</span>
         </div>
-        <div class="mt-2 text-[11px] uppercase tracking-[0.2em] text-brand-500">
+        <div
+          class="mt-2 text-[11px] uppercase tracking-[0.2em]"
+          [ngClass]="{
+            'text-brand-500': t.status === 'AVAILABLE',
+            'text-accent-700': t.status === 'HOLD',
+            'text-danger-700': t.status === 'RESERVED',
+            'text-brand-400': t.status === 'DISABLED'
+          }"
+        >
           {{ t.status === 'AVAILABLE' ? 'Available' : t.status }}
         </div>
+      </button>
+    </div>
+
+    <div class="mt-4 hidden flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-100 bg-brand-50/60 px-3 py-3 lg:flex">
+      <div class="text-sm text-brand-700">
+        <span class="font-semibold text-brand-900">
+          {{ selectedTable ? ('Table ' + selectedTable.id) : 'Select a table' }}
+        </span>
+        <span *ngIf="selectedTable" class="ml-2 text-brand-600">
+          ${{ selectedTable.price }}
+        </span>
+      </div>
+      <button
+        type="button"
+        class="h-11 rounded-full px-5 text-sm font-semibold text-white disabled:opacity-60"
+        (click)="startHoldFlow()"
+        [disabled]="loading || !selectedTable"
+        [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900'"
+      >
+        Hold &amp; Reserve
       </button>
     </div>
   </section>
@@ -204,7 +239,7 @@
 
   <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
     <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
-    <div class="relative h-full w-full max-w-3xl overflow-auto bg-white p-4 md:h-auto md:rounded-2xl md:p-6">
+    <div class="relative h-full w-full max-w-3xl overflow-auto bg-white p-4 pb-28 md:h-auto md:rounded-2xl md:p-6">
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -316,27 +351,11 @@
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
-            class="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white"
-            (click)="createHold()"
-            [disabled]="loading"
-          >
-            Hold Table (5 min)
-          </button>
-          <button
-            type="button"
             class="rounded-lg border border-brand-200 px-4 py-2 text-sm"
             (click)="releaseHold()"
             [disabled]="loading || selectedTable.status !== 'HOLD'"
           >
             Release Hold
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white"
-            (click)="confirmReservation()"
-            [disabled]="loading || !holdId || form.invalid"
-          >
-            Confirm Reservation
           </button>
         </div>
 
@@ -344,19 +363,55 @@
           You must create a hold before confirming.
         </p>
         <p class="text-xs text-brand-500" *ngIf="holdId">
-          Hold active. Confirm within 5 minutes or the table will auto-release.
+          Hold active · time left {{ holdCountdownLabel }}
         </p>
       </div>
     </div>
   </div>
 </section>
 
-<div class="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden" *ngIf="eventDate">
+<div class="fixed bottom-0 left-0 right-0 z-50 bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]" *ngIf="showReservationModal && selectedTable">
   <button
     type="button"
-    class="h-12 w-full rounded-full bg-brand-900 text-sm font-semibold text-white"
-    (click)="clearEventSelection()"
+    class="h-12 w-full rounded-full bg-brand-900 text-sm font-semibold text-white disabled:opacity-60"
+    (click)="confirmReservation()"
+    [disabled]="loading || !holdId || form.invalid"
   >
-    Change Event
+    Confirm Reservation
   </button>
+</div>
+
+<div class="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden">
+  <ng-container *ngIf="showReservationModal && selectedTable; else mobileHoldBar">
+    <button
+      type="button"
+      class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
+      (click)="confirmReservation()"
+      [disabled]="loading || !holdId || form.invalid"
+      [ngClass]="'bg-brand-900 text-white'"
+    >
+      Confirm Reservation
+    </button>
+  </ng-container>
+  <ng-template #mobileHoldBar>
+    <div class="grid gap-2">
+      <button
+        type="button"
+        class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
+        (click)="selectedTable ? startHoldFlow() : clearEventSelection()"
+        [disabled]="loading || (!selectedTable && !eventDate)"
+        [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900 text-white'"
+      >
+        {{ selectedTable ? ('Hold & Reserve · Table ' + selectedTable.id) : 'Change Event' }}
+      </button>
+      <button
+        type="button"
+        class="text-center text-xs font-semibold text-brand-700 underline"
+        (click)="clearEventSelection()"
+        *ngIf="selectedTable"
+      >
+        Change Event
+      </button>
+    </div>
+  </ng-template>
 </div>
