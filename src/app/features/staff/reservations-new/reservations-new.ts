@@ -42,6 +42,8 @@ export class ReservationsNew implements OnInit, OnDestroy {
   holdExpiresAt: number | null = null;
   holdCountdown = 0;
   private holdTimer: ReturnType<typeof setInterval> | null = null;
+  holdCreatedByMe = false;
+  showReleaseConfirm = false;
   private pollSub: Subscription | null = null;
   showReservationModal = false;
   sections: string[] = [];
@@ -301,6 +303,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
 
   startHoldFlow(): void {
     if (!this.eventDate || !this.selectedTable) return;
+    this.holdCreatedByMe = true;
     this.createHold(true);
   }
 
@@ -341,6 +344,9 @@ export class ReservationsNew implements OnInit, OnDestroy {
         this.holdExpiresAt = null;
         this.holdCountdown = 0;
         this.clearHoldTimer();
+        this.holdCreatedByMe = false;
+        this.showReleaseConfirm = false;
+        this.showReservationModal = false;
         this.loadTables(this.eventDate!);
         this.loading = false;
       },
@@ -396,6 +402,8 @@ export class ReservationsNew implements OnInit, OnDestroy {
           this.holdExpiresAt = null;
           this.holdCountdown = 0;
           this.clearHoldTimer();
+          this.holdCreatedByMe = false;
+          this.showReleaseConfirm = false;
           this.selectedTable = null;
           this.selectedTableId = null;
           this.allowCustomDeposit = false;
@@ -426,7 +434,15 @@ export class ReservationsNew implements OnInit, OnDestroy {
   }
 
   closeReservationModal(): void {
+    if (this.holdId && this.holdCreatedByMe) {
+      this.showReleaseConfirm = true;
+      return;
+    }
     this.showReservationModal = false;
+  }
+
+  cancelReleasePrompt(): void {
+    this.showReleaseConfirm = false;
   }
 
   private startHoldTimer(): void {

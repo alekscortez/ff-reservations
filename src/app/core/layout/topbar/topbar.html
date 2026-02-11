@@ -1,21 +1,34 @@
-<header class="topbar">
-  <button class="menu-btn" type="button" (click)="toggleMobileNav()" aria-label="Open menu">
-    <span class="hamburger" aria-hidden="true"></span>
+<header class="sticky top-0 z-10 flex w-full items-center justify-between gap-3 border-b border-brand-100 bg-white px-4 py-3 md:px-5">
+  <button
+    class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-brand-200 text-brand-900 md:hidden"
+    type="button"
+    (click)="toggleMobileNav()"
+    aria-label="Open menu"
+  >
+    <span class="flex flex-col gap-1" aria-hidden="true">
+      <span class="h-0.5 w-5 rounded-full bg-brand-900"></span>
+      <span class="h-0.5 w-5 rounded-full bg-brand-900"></span>
+      <span class="h-0.5 w-5 rounded-full bg-brand-900"></span>
+    </span>
   </button>
-  <a class="brand" routerLink="/home">
-    <img class="brand-logo" src="/assets/ff-logo.svg" alt="Famoso Fuego" />
-    <span>Reservation System</span>
+  <a class="inline-flex items-center gap-2 font-semibold text-brand-900" routerLink="/home">
+    <img class="h-7 w-7 object-contain" src="/assets/ff-logo.svg" alt="Famoso Fuego" />
+    <span class="hidden text-sm tracking-wide md:inline">Reservation System</span>
   </a>
-  <div class="right">
+  <div class="flex items-center gap-3">
     <ng-container *ngIf="isAuthenticated$ | async; else loggedOut">
-      <span class="user">
-        <span class="name">{{ (name$ | async) || 'User' }}</span>
-        <span class="role">{{ (role$ | async) || 'User' }}</span>
+      <span class="grid rounded-xl border border-brand-100 bg-brand-50 px-3 py-1 text-right leading-tight">
+        <span class="text-sm font-semibold text-brand-900">{{ (name$ | async) || 'User' }}</span>
+        <span class="text-xs text-brand-600">{{ (role$ | async) || 'User' }}</span>
       </span>
-      <button class="ghost" type="button" (click)="logout()">Log out</button>
+      <button class="rounded-lg border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-800" type="button" (click)="logout()">
+        Log out
+      </button>
     </ng-container>
     <ng-template #loggedOut>
-      <button class="primary" type="button" (click)="login()">Log in</button>
+      <button class="rounded-lg bg-brand-900 px-3 py-2 text-xs font-semibold text-white" type="button" (click)="login()">
+        Log in
+      </button>
     </ng-template>
   </div>
 </header>
