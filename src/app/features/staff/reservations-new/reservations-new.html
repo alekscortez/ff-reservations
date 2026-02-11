@@ -1,111 +1,135 @@
-<section class="page">
-  <header class="page-header">
-    <h1>New Reservation</h1>
-    <p *ngIf="event">Event: {{ event.eventName }} ({{ event.eventDate }})</p>
+<section class="flex w-full flex-col gap-4">
+  <header>
+    <h1 class="text-2xl font-semibold text-brand-900">New Reservation</h1>
+    <p class="text-sm text-brand-600" *ngIf="event">
+      Event: {{ event.eventName }} ({{ event.eventDate }})
+    </p>
   </header>
 
-  <section class="card event-picker" *ngIf="!eventDate">
-    <div class="picker-head">
+  <section
+    class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6"
+    *ngIf="!eventDate"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h2>Select Event</h2>
-        <p>Choose the correct date before taking reservations.</p>
+        <h2 class="text-lg font-semibold text-brand-900">Select Event</h2>
+        <p class="text-sm text-brand-600">Choose the correct date before taking reservations.</p>
       </div>
-      <button type="button" class="ghost" (click)="loadEvents()" [disabled]="eventsLoading">
-        Refresh
-      </button>
-    </div>
-
-    <div *ngIf="eventsLoading" class="muted">Loading events…</div>
-    <div *ngIf="eventsError" class="error">{{ eventsError }}</div>
-
-    <div class="event-grid" *ngIf="!eventsLoading && upcomingEvents().length > 0">
       <button
         type="button"
-        class="event-card"
-        *ngFor="let e of upcomingEvents()"
-        [class.week]="isThisWeek(e.eventDate)"
-        (click)="selectEvent(e.eventDate!)"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-200 text-brand-700"
+        (click)="loadEvents()"
+        [disabled]="eventsLoading"
+        aria-label="Refresh events"
+        title="Refresh events"
       >
-        <div class="event-date">
-          <span class="day">{{ formatEventDate(e.eventDate) }}</span>
-          <span class="full">{{ e.eventDate }}</span>
-        </div>
-        <div class="event-name">{{ e.eventName }}</div>
-        <div class="event-status">{{ e.status || 'ACTIVE' }}</div>
+        ↻
       </button>
     </div>
 
-    <div class="event-actions">
-      <button type="button" class="ghost" (click)="showPastModal = true">
+    <div *ngIf="eventsLoading" class="mt-3 text-sm text-brand-500">Loading events…</div>
+    <div *ngIf="eventsError" class="mt-3 text-sm text-danger-700">{{ eventsError }}</div>
+
+    <div
+      class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      *ngIf="!eventsLoading && upcomingEvents().length > 0"
+    >
+      <button
+        type="button"
+        class="rounded-2xl border border-brand-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-900"
+        *ngFor="let e of upcomingEvents()"
+        [ngClass]="{ 'ring-2 ring-brand-900': isThisWeek(e.eventDate) }"
+        (click)="selectEvent(e.eventDate!)"
+      >
+        <div class="grid gap-1">
+          <span class="text-xl font-semibold text-brand-900">{{ formatEventDate(e.eventDate) }}</span>
+          <span class="text-xs text-brand-500">{{ e.eventDate }}</span>
+        </div>
+        <div class="mt-2 text-sm font-semibold text-brand-900">{{ e.eventName }}</div>
+        <div class="mt-1 text-[11px] uppercase tracking-[0.2em] text-brand-500">
+          {{ e.status || 'ACTIVE' }}
+        </div>
+      </button>
+    </div>
+
+    <div class="mt-4 flex justify-end">
+      <button
+        type="button"
+        class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700"
+        (click)="showPastModal = true"
+      >
         Search past events
       </button>
     </div>
   </section>
 
-  <div class="modal" *ngIf="showPastModal">
-    <div class="modal-backdrop" (click)="showPastModal = false"></div>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3>Past Events</h3>
-        <button type="button" class="ghost" (click)="showPastModal = false">Close</button>
+  <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showPastModal">
+    <div class="absolute inset-0 bg-black/50" (click)="showPastModal = false"></div>
+    <div class="relative w-[92vw] max-w-2xl rounded-2xl bg-white p-4 md:p-6">
+      <div class="flex items-center justify-between gap-4">
+        <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
+        <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="showPastModal = false">
+          Close
+        </button>
       </div>
-      <div class="modal-filters">
-        <label>
+      <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <label class="grid gap-1 text-xs text-brand-600">
           Date
-          <input type="date" [formControl]="pastFilterDate" />
+          <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterDate" />
         </label>
-        <label>
+        <label class="grid gap-1 text-xs text-brand-600">
           Name
-          <input type="text" [formControl]="pastFilterName" placeholder="Saturday Night" />
+          <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterName" placeholder="Saturday Night" />
         </label>
-        <button
-          type="button"
-          class="ghost"
-          (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')"
-        >
+        <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
           Clear
         </button>
       </div>
-      <div class="modal-list">
+      <div class="mt-4 grid gap-2">
         <button
           type="button"
-          class="event-row"
+          class="grid grid-cols-[120px_1fr_auto] items-center gap-3 rounded-xl border border-brand-100 px-3 py-3 text-left text-sm"
           *ngFor="let e of pastEvents()"
           (click)="selectEvent(e.eventDate!)"
         >
-          <span class="date">{{ e.eventDate }}</span>
-          <span class="name">{{ e.eventName }}</span>
-          <span class="status">{{ e.status || 'ACTIVE' }}</span>
+          <span class="font-semibold text-brand-900">{{ e.eventDate }}</span>
+          <span class="text-brand-700">{{ e.eventName }}</span>
+          <span class="text-[11px] uppercase tracking-[0.2em] text-brand-500">{{ e.status || 'ACTIVE' }}</span>
         </button>
-        <div class="muted" *ngIf="pastEvents().length === 0">No past events found.</div>
+        <div class="text-sm text-brand-500" *ngIf="pastEvents().length === 0">No past events found.</div>
       </div>
     </div>
   </div>
 
-  <section class="card" *ngIf="eventDate">
-    <div class="status">
-      <div class="left">
-        <span *ngIf="loading">Loading tables…</span>
-        <span class="error" *ngIf="error">{{ error }}</span>
-        <span class="muted" *ngIf="!loading && !error">
+  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6" *ngIf="eventDate">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="grid gap-1">
+        <span *ngIf="loading" class="text-sm text-brand-500">Loading tables…</span>
+        <span class="text-sm text-danger-700" *ngIf="error">{{ error }}</span>
+        <span class="text-sm text-brand-500" *ngIf="!loading && !error">
           Total {{ tableCounts().total }} · Available {{ tableCounts().available }} · Hold
           {{ tableCounts().hold }} · Reserved {{ tableCounts().reserved }} · Disabled
           {{ tableCounts().disabled }}
         </span>
       </div>
-      <button type="button" class="ghost" (click)="loadTables(eventDate!)" [disabled]="loading">
+      <button
+        type="button"
+        class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+        (click)="loadTables(eventDate!)"
+        [disabled]="loading"
+      >
         Refresh
       </button>
     </div>
 
-    <div class="filters">
-      <label>
+    <div class="mt-4 grid gap-3 md:grid-cols-4">
+      <label class="grid gap-1 text-xs text-brand-600">
         Search Table
-        <input type="text" [formControl]="filterQuery" placeholder="A01, B38..." />
+        <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="filterQuery" placeholder="A01, B38..." />
       </label>
-      <label>
+      <label class="grid gap-1 text-xs text-brand-600">
         Status
-        <select [formControl]="filterStatus">
+        <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="filterStatus">
           <option value="ALL">All</option>
           <option value="AVAILABLE">Available</option>
           <option value="HOLD">Hold</option>
@@ -113,82 +137,92 @@
           <option value="DISABLED">Disabled</option>
         </select>
       </label>
-      <label class="only-available">
-        <input type="checkbox" [checked]="onlyAvailable" (change)="toggleOnlyAvailable($event)" />
+      <label class="flex items-center gap-2 text-sm text-brand-700">
+        <input type="checkbox" class="h-4 w-4" [checked]="onlyAvailable" (change)="toggleOnlyAvailable($event)" />
         Only Available
       </label>
-      <label>
+      <div class="grid gap-1 text-xs text-brand-600">
         Section
-        <select [formControl]="filterSection">
-          <option value="ALL">All</option>
-          <option *ngFor="let s of sections" [value]="s">Section {{ s }}</option>
-        </select>
-      </label>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+            [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+            (click)="filterSection.setValue('ALL')"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+            *ngFor="let s of sections"
+            [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+            (click)="filterSection.setValue(s)"
+          >
+            Section {{ s }}
+          </button>
+        </div>
+      </div>
     </div>
 
-    <div class="legend">
-      <span class="chip available">AVAILABLE</span>
-      <span class="chip hold">HOLD</span>
-      <span class="chip reserved">RESERVED</span>
-      <span class="chip disabled">DISABLED</span>
-    </div>
+    <!-- Status + section badges removed per request -->
 
-    <div class="section-legend" *ngIf="sections.length > 0">
-      <span class="chip section" *ngFor="let s of sections" [class]="'chip section s-' + s.toLowerCase()">
-        Section {{ s }}
-      </span>
-    </div>
-
-    <div class="grid">
+    <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
       <button
-        class="table"
+        class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm transition hover:-translate-y-0.5"
+        [ngClass]="{
+          'border-brand-900': selectedTable?.id === t.id,
+          'border-accent-400 bg-accent-50': t.status === 'HOLD',
+          'border-danger-400 bg-danger-50': t.status === 'RESERVED',
+          'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
+        }"
         *ngFor="let t of filteredTables()"
-        [class.selected]="selectedTable?.id === t.id"
-        [class.hold]="t.status === 'HOLD'"
-        [class.reserved]="t.status === 'RESERVED'"
-        [class.disabled]="t.status === 'DISABLED'"
         type="button"
         (click)="selectTable(t)"
         [disabled]="t.status !== 'AVAILABLE'"
       >
-        <div class="id">{{ t.id }}</div>
-        <div class="price">${{ t.price }}</div>
-        <div class="status-chip">{{ t.status === 'AVAILABLE' ? 'Available' : t.status }}</div>
+        <div class="grid grid-cols-[1fr_auto] items-start gap-1">
+          <span class="text-lg font-semibold text-brand-900">{{ t.id }}</span>
+          <span class="text-base font-semibold text-brand-900">${{ t.price }}</span>
+        </div>
+        <div class="mt-2 text-[11px] uppercase tracking-[0.2em] text-brand-500">
+          {{ t.status === 'AVAILABLE' ? 'Available' : t.status }}
+        </div>
       </button>
     </div>
   </section>
 
-  <div class="modal" *ngIf="showReservationModal && selectedTable">
-    <div class="modal-backdrop" (click)="closeReservationModal()"></div>
-    <div class="modal-card reservation-modal">
-      <div class="modal-inner">
-        <div class="modal-head">
+  <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
+    <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
+    <div class="relative h-full w-full max-w-3xl overflow-auto bg-white p-4 md:h-auto md:rounded-2xl md:p-6">
+      <div class="grid gap-4">
+        <div class="flex items-center justify-between gap-4">
           <div>
-            <h3>Reservation Details</h3>
-            <p class="muted">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
+            <h3 class="text-lg font-semibold text-brand-900">Reservation Details</h3>
+            <p class="text-sm text-brand-600">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
           </div>
-          <button type="button" class="ghost" (click)="closeReservationModal()">Close</button>
+          <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="closeReservationModal()">Close</button>
         </div>
-        <form [formGroup]="form" class="form">
-          <label>
+        <form [formGroup]="form" class="grid gap-4 md:grid-cols-2">
+          <label class="grid gap-1 text-xs text-brand-600">
             Customer Name
-            <input type="text" formControlName="customerName" />
+            <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="customerName" />
           </label>
-          <label>
+          <label class="grid gap-1 text-xs text-brand-600">
             Phone
-            <input type="text" formControlName="phone" />
+            <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="phone" />
           </label>
-          <div class="row">
-            <label>
+          <div class="grid gap-4 md:col-span-2 md:grid-cols-2">
+            <label class="grid gap-1 text-xs text-brand-600">
               Payment Status
-              <select formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+              <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="paymentStatus" (change)="onPaymentStatusChange()">
                 <option value="PAID">PAID</option>
                 <option value="PARTIAL">PARTIAL</option>
                 <option value="PENDING">PENDING</option>
                 <option value="COURTESY">COURTESY</option>
               </select>
             </label>
-            <label>
+            <label class="grid gap-1 text-xs text-brand-600">
               Total Amount Due
               <input
                 type="number"
@@ -196,69 +230,72 @@
                 formControlName="amountDue"
                 [readonly]="!allowCustomDeposit"
                 [class.readonly]="!allowCustomDeposit"
+                class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
               />
             </label>
           </div>
           <div
-            class="autocomplete"
+            class="md:col-span-2 rounded-xl border border-brand-100 bg-white p-2"
             *ngIf="clientLoading || clientMatches.length > 0 || noClientMatch"
           >
-            <div class="match info" *ngIf="clientLoading">Searching…</div>
-            <div class="match info" *ngIf="noClientMatch">
+            <div class="text-xs text-brand-500" *ngIf="clientLoading">Searching…</div>
+            <div class="text-xs text-brand-500" *ngIf="noClientMatch">
               No match found. This will create a new client.
             </div>
             <button
-              class="match"
+              class="mt-2 flex w-full items-center justify-between rounded-lg border border-brand-100 px-3 py-2 text-left text-sm"
               type="button"
               *ngFor="let c of clientMatches"
-              [class.exact]="isExactMatch(c)"
+              [ngClass]="{ 'border-brand-900': isExactMatch(c) }"
               (click)="selectClient(c)"
             >
               <span class="match-name">{{ c.name }}</span>
               <span class="match-phone">{{ c.phone }}</span>
             </button>
           </div>
-          <label>
+          <label class="grid gap-1 text-xs text-brand-600 md:col-span-2">
             Deposit Amount
-            <div class="deposit-row">
+            <div class="grid grid-cols-[1fr_auto] gap-2">
               <input
                 type="number"
                 min="0"
                 formControlName="depositAmount"
                 [readonly]="!allowCustomDeposit"
                 [class.readonly]="!allowCustomDeposit"
+                class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
               />
-              <button type="button" class="ghost" (click)="toggleCustomDeposit()">
+              <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="toggleCustomDeposit()">
                 {{ allowCustomDeposit ? 'Lock to Table Price' : 'Modify' }}
               </button>
             </div>
-            <span class="hint">
+            <span class="text-xs text-brand-500">
               Default is full table price.
             </span>
           </label>
-          <div class="deadline">
-            <label class="deadline-toggle">
+          <div class="grid gap-2 md:col-span-2">
+            <label class="flex items-center gap-2 text-sm text-brand-700">
               <input
                 type="checkbox"
+                class="h-4 w-4"
                 [checked]="paymentDeadlineEnabled"
                 (change)="paymentDeadlineEnabled = !paymentDeadlineEnabled"
               />
               Set payment deadline (required if not fully paid)
             </label>
-            <div class="deadline-fields" *ngIf="paymentDeadlineEnabled">
-              <label>
+            <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled">
+              <label class="grid gap-1 text-xs text-brand-600">
                 Deadline Date
-                <input type="date" [formControl]="paymentDeadlineDate" />
+                <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineDate" />
               </label>
-              <label>
+              <label class="grid gap-1 text-xs text-brand-600">
                 Deadline Time (America/Chicago)
-                <input type="time" [formControl]="paymentDeadlineTime" />
+                <input type="time" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineTime" />
               </label>
             </div>
           </div>
-          <label>
+          <label class="grid gap-1 text-xs text-brand-600 md:col-span-2">
             Payment Method
-            <select formControlName="paymentMethod">
+            <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="paymentMethod">
               <option value="cash">Cash</option>
               <option value="cashapp">CashApp</option>
               <option value="square">Square</option>
@@ -266,13 +303,18 @@
           </label>
         </form>
 
-        <div class="actions">
-          <button type="button" (click)="createHold()" [disabled]="loading">
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white"
+            (click)="createHold()"
+            [disabled]="loading"
+          >
             Hold Table (5 min)
           </button>
           <button
             type="button"
-            class="ghost"
+            class="rounded-lg border border-brand-200 px-4 py-2 text-sm"
             (click)="releaseHold()"
             [disabled]="loading || selectedTable.status !== 'HOLD'"
           >
@@ -280,7 +322,7 @@
           </button>
           <button
             type="button"
-            class="primary"
+            class="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white"
             (click)="confirmReservation()"
             [disabled]="loading || !holdId || form.invalid"
           >
@@ -288,10 +330,10 @@
           </button>
         </div>
 
-        <p class="hint" *ngIf="!holdId">
+        <p class="text-xs text-brand-500" *ngIf="!holdId">
           You must create a hold before confirming.
         </p>
-        <p class="hint" *ngIf="holdId">
+        <p class="text-xs text-brand-500" *ngIf="holdId">
           Hold active. Confirm within 5 minutes or the table will auto-release.
         </p>
       </div>

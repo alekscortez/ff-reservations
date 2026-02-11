@@ -1,8 +1,10 @@
 .shell {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
   background: #fff;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .shell-body {
@@ -10,21 +12,32 @@
   grid-template-columns: 220px 1fr;
   min-height: 0;
   flex: 1;
-  align-items: start;
-  align-content: start;
-  justify-items: start;
+  align-items: stretch;
+  justify-items: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .shell-content {
   padding: 16px;
   background: #fff;
-  align-self: start;
+  align-self: stretch;
   width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.shell-content > * {
+  width: 100%;
+  align-self: stretch;
 }
 
 @media (max-width: 900px) {
   .shell-body {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .shell-content {
