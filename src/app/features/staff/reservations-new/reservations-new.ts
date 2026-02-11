@@ -178,7 +178,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
 
   private startPolling(): void {
     if (this.pollSub) return;
-    this.pollSub = interval(15000).subscribe(() => {
+    this.pollSub = interval(10000).subscribe(() => {
       if (!this.eventDate) return;
       if (this.showReservationModal) return;
       this.loadTables(this.eventDate, { silent: true });
@@ -213,6 +213,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     this.eventDate = date;
     this.showPastModal = false;
     this.loadTables(date);
+    this.startPolling();
   }
 
   clearEventSelection(): void {
