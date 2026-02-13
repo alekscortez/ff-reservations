@@ -288,6 +288,68 @@
       </article>
 
       <article class="rounded-xl border border-brand-100 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Check-In Pass</p>
+          <button
+            type="button"
+            class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            [disabled]="checkInPassLoadingId === detailItem.reservationId || !canManageCheckInPass(detailItem)"
+            (click)="reissueCheckInPass(detailItem)"
+          >
+            {{ checkInPassLoadingId === detailItem.reservationId ? 'Reissuing…' : 'Reissue Pass' }}
+          </button>
+        </div>
+
+        <p class="mt-2 text-xs text-brand-500" *ngIf="!canManageCheckInPass(detailItem)">
+          Pass is available only for confirmed and fully paid reservations.
+        </p>
+
+        <p class="mt-2 text-xs text-danger-700" *ngIf="checkInPassError">{{ checkInPassError }}</p>
+        <p class="mt-2 text-xs text-success-700" *ngIf="checkInPassNotice">{{ checkInPassNotice }}</p>
+
+        <div class="mt-2 grid gap-2" *ngIf="getCheckInPass(detailItem) as pass">
+          <p class="text-xs text-brand-600">Pass {{ pass.passId }} · Updated {{ pass.createdAtMs | date:'shortTime' }}</p>
+          <input
+            type="text"
+            class="h-10 rounded-lg border border-brand-200 px-3 text-xs text-brand-900"
+            [value]="pass.url"
+            readonly
+          />
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800"
+              (click)="copyCheckInPassLink(detailItem)"
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800"
+              (click)="openSmsShareCheckInPass(detailItem)"
+            >
+              SMS
+            </button>
+            <button
+              type="button"
+              class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800"
+              (click)="openWhatsAppShareCheckInPass(detailItem)"
+            >
+              WhatsApp
+            </button>
+            <button
+              type="button"
+              class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800"
+              (click)="shareCheckInPassLink(detailItem)"
+            >
+              Share
+            </button>
+          </div>
+          <p class="text-xs text-brand-500">{{ checkInPassShareMessage(detailItem) }}</p>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 p-3">
         <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Audit</p>
         <dl class="mt-2 grid gap-2 text-sm text-brand-800">
           <div class="flex items-center justify-between gap-3">

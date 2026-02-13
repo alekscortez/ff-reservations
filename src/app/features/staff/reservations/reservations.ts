@@ -5,6 +5,7 @@ import {
   CreateSquarePaymentLinkResponse,
   ReservationsService,
 } from '../../../core/http/reservations.service';
+import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
 import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
 import { EventsService } from '../../../core/http/events.service';
 import { EventItem } from '../../../shared/models/event.model';
@@ -17,6 +18,14 @@ interface GeneratedPaymentLink {
   audit?: CreateSquarePaymentLinkResponse['square']['audit'];
 }
 
+interface GeneratedCheckInPass {
+  passId: string;
+  url: string;
+  token: string;
+  qrPayload: string;
+  createdAtMs: number;
+}
+
 @Component({
   selector: 'app-reservations',
   imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
@@ -26,6 +35,7 @@ interface GeneratedPaymentLink {
 export class Reservations implements OnInit {
   private reservationsApi = inject(ReservationsService);
   private eventsApi = inject(EventsService);
+  private checkInApi = inject(CheckInService);
 
   filterDate = new FormControl('', { nonNullable: true });
   items: ReservationItem[] = [];
@@ -42,6 +52,10 @@ export class Reservations implements OnInit {
   paymentLinkError: string | null = null;
   paymentLinkNotice: string | null = null;
   paymentLinksByReservationId: Record<string, GeneratedPaymentLink> = {};
+  checkInPassLoadingId: string | null = null;
+  checkInPassError: string | null = null;
+  checkInPassNotice: string | null = null;
+  checkInPassByReservationId: Record<string, GeneratedCheckInPass> = {};
 
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
@@ -182,6 +196,9 @@ export class Reservations implements OnInit {
   openDetails(item: ReservationItem): void {
     this.detailItem = item;
     this.showDetailsModal = true;
+    this.checkInPassError = null;
+    this.checkInPassNotice = null;
+    this.loadCheckInPass(item);
   }
 
   closeDetails(): void {
@@ -189,6 +206,123 @@ export class Reservations implements OnInit {
     this.detailItem = null;
     this.paymentLinkError = null;
     this.paymentLinkNotice = null;
+    this.checkInPassError = null;
+    this.checkInPassNotice = null;
+  }
+
+  canManageCheckInPass(item: ReservationItem): boolean {
+    return item.status === 'CONFIRMED' && item.paymentStatus === 'PAID';
+  }
+
+  getCheckInPass(item: ReservationItem | null | undefined): GeneratedCheckInPass | null {
+    if (!item?.reservationId) return null;
+    return this.checkInPassByReservationId[item.reservationId] ?? null;
+  }
+
+  loadCheckInPass(item: ReservationItem): void {
+    if (!this.canManageCheckInPass(item)) return;
+    if (this.checkInPassLoadingId) return;
+    this.checkInPassLoadingId = item.reservationId;
+    this.checkInPassError = null;
+    this.checkInPassNotice = null;
+
+    this.checkInApi.getReservationPass(item.reservationId, item.eventDate).subscribe({
+      next: (res) => {
+        this.checkInPassLoadingId = null;
+        const pass = this.mapCheckInPass(res?.pass);
+        if (!pass) {
+          this.checkInPassNotice = 'No active pass found. Use reissue to create a new one.';
+          return;
+        }
+        this.checkInPassByReservationId[item.reservationId] = pass;
+      },
+      error: (err) => {
+        this.checkInPassError =
+          err?.error?.message || err?.message || 'Failed to load check-in pass';
+        this.checkInPassLoadingId = null;
+      },
+    });
+  }
+
+  reissueCheckInPass(item: ReservationItem): void {
+    if (!this.canManageCheckInPass(item)) return;
+    if (this.checkInPassLoadingId) return;
+    this.checkInPassLoadingId = item.reservationId;
+    this.checkInPassError = null;
+    this.checkInPassNotice = null;
+
+    this.checkInApi.issueReservationPass(item.reservationId, item.eventDate, true).subscribe({
+      next: (res) => {
+        this.checkInPassLoadingId = null;
+        const pass = this.mapCheckInPass(res?.pass);
+        if (!pass) {
+          this.checkInPassError = 'Pass reissued but no link was returned.';
+          return;
+        }
+        this.checkInPassByReservationId[item.reservationId] = pass;
+        this.checkInPassNotice = 'Check-in pass reissued.';
+      },
+      error: (err) => {
+        this.checkInPassError =
+          err?.error?.message || err?.message || 'Failed to reissue check-in pass';
+        this.checkInPassLoadingId = null;
+      },
+    });
+  }
+
+  copyCheckInPassLink(item: ReservationItem): void {
+    const pass = this.getCheckInPass(item);
+    if (!pass) return;
+    this.checkInPassError = null;
+    this.writeClipboard(pass.url).then((ok) => {
+      this.checkInPassNotice = ok
+        ? 'Check-in pass link copied.'
+        : 'Copy failed. Please copy manually.';
+    });
+  }
+
+  openSmsShareCheckInPass(item: ReservationItem): void {
+    const pass = this.getCheckInPass(item);
+    if (!pass) return;
+    const body = this.buildCheckInPassShareMessage(item, pass.url);
+    const recipient = this.toSmsRecipient(item.phone);
+    const target = recipient ? `sms:${recipient}?&body=${encodeURIComponent(body)}` : `sms:?&body=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  openWhatsAppShareCheckInPass(item: ReservationItem): void {
+    const pass = this.getCheckInPass(item);
+    if (!pass) return;
+    const body = this.buildCheckInPassShareMessage(item, pass.url);
+    const recipient = this.toWhatsAppRecipient(item.phone);
+    const target = recipient
+      ? `https://wa.me/${recipient}?text=${encodeURIComponent(body)}`
+      : `https://wa.me/?text=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  shareCheckInPassLink(item: ReservationItem): void {
+    const pass = this.getCheckInPass(item);
+    if (!pass) return;
+    const body = this.buildCheckInPassShareMessage(item, pass.url);
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator
+        .share({
+          text: body,
+          url: pass.url,
+        })
+        .catch(() => {
+          this.copyCheckInPassLink(item);
+        });
+      return;
+    }
+    this.copyCheckInPassLink(item);
+  }
+
+  checkInPassShareMessage(item: ReservationItem): string {
+    const pass = this.getCheckInPass(item);
+    if (!pass) return '';
+    return this.buildCheckInPassShareMessage(item, pass.url);
   }
 
   openPayment(item: ReservationItem): void {
@@ -335,6 +469,25 @@ export class Reservations implements OnInit {
     return `Hi ${item.customerName}, here is your table payment link for ${item.eventDate} table ${item.tableId}: ${url}`;
   }
 
+  private buildCheckInPassShareMessage(item: ReservationItem, url: string): string {
+    return `Hi ${item.customerName}, here is your FF check-in pass for ${item.eventDate} table ${item.tableId}: ${url}`;
+  }
+
+  private mapCheckInPass(pass: CheckInPass | null | undefined): GeneratedCheckInPass | null {
+    const passId = String(pass?.passId ?? '').trim();
+    const url = String(pass?.url ?? '').trim();
+    const token = String(pass?.token ?? '').trim();
+    const qrPayload = String(pass?.qrPayload ?? '').trim();
+    if (!passId || !url || !token || !qrPayload) return null;
+    return {
+      passId,
+      url,
+      token,
+      qrPayload,
+      createdAtMs: Date.now(),
+    };
+  }
+
   private toSmsRecipient(phone: string | undefined): string {
     const raw = String(phone ?? '').trim();
     if (!raw) return '';
@@ -350,10 +503,29 @@ export class Reservations implements OnInit {
   private async writeClipboard(text: string): Promise<boolean> {
     const value = String(text ?? '').trim();
     if (!value) return false;
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        // Fall through to legacy copy.
+      }
+    }
     try {
-      await navigator.clipboard.writeText(value);
-      return true;
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return copied;
     } catch {
       return false;
     }
