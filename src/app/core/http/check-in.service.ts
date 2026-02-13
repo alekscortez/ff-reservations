@@ -26,6 +26,7 @@ export interface CheckInPassIssueResponse {
   issued: boolean;
   reused: boolean;
   pass: CheckInPass | null;
+  latestPass?: CheckInPass | null;
 }
 
 export interface CheckInVerifyResult {

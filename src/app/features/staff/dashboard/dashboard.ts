@@ -30,7 +30,7 @@ interface UrgentPaymentItem {
 }
 
 interface ActivityItem {
-  type: 'RESERVED' | 'PAID' | 'CANCELLED';
+  type: 'RESERVED' | 'PAID' | 'CHECKED_IN' | 'CANCELLED';
   label: string;
   atEpoch: number;
   reservationId: string;
@@ -51,6 +51,17 @@ interface GeneratedCheckInPass {
   token: string;
   qrPayload: string;
   createdAtMs: number;
+}
+
+interface CheckInPassState {
+  passId: string;
+  status: string;
+  issuedAt: number | null;
+  usedAt: number | null;
+  usedBy: string | null;
+  revokedAt: number | null;
+  revokedBy: string | null;
+  expiresAt: number | null;
 }
 
 @Component({
@@ -95,6 +106,7 @@ export class Dashboard implements OnInit, OnDestroy {
   checkInPassNotice: string | null = null;
   checkInPassLoadingId: string | null = null;
   checkInPassByReservationId: Record<string, GeneratedCheckInPass> = {};
+  checkInPassStateByReservationId: Record<string, CheckInPassState> = {};
   detailItem: ReservationItem | null = null;
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
@@ -296,6 +308,20 @@ export class Dashboard implements OnInit, OnDestroy {
           };
         }
 
+        const checkedInEpoch = Number(reservation.checkedInAt ?? 0);
+        if (checkedInEpoch > 0) {
+          const paidLabel =
+            reservation.paymentStatus === 'PAID' ? 'Paid in full' : 'Payment recorded';
+          return {
+            type: 'CHECKED_IN' as const,
+            label: paidLabel,
+            atEpoch: checkedInEpoch,
+            reservationId: reservation.reservationId,
+            tableId: reservation.tableId,
+            customerName: reservation.customerName,
+          };
+        }
+
         const lastPaymentEpoch =
           reservation.payments && reservation.payments.length > 0
             ? Math.max(...reservation.payments.map((p) => Number(p.createdAt ?? 0)))
@@ -442,9 +468,20 @@ export class Dashboard implements OnInit, OnDestroy {
     return item.status === 'CONFIRMED' && item.paymentStatus === 'PAID';
   }
 
+  canReissueCheckInPass(item: ReservationItem): boolean {
+    if (!this.canManageCheckInPass(item)) return false;
+    const state = this.getCheckInPassState(item);
+    return state?.status !== 'USED';
+  }
+
   getCheckInPass(item: ReservationItem | null | undefined): GeneratedCheckInPass | null {
     if (!item?.reservationId) return null;
     return this.checkInPassByReservationId[item.reservationId] ?? null;
+  }
+
+  getCheckInPassState(item: ReservationItem | null | undefined): CheckInPassState | null {
+    if (!item?.reservationId) return null;
+    return this.checkInPassStateByReservationId[item.reservationId] ?? null;
   }
 
   loadCheckInPass(item: ReservationItem): void {
@@ -456,9 +493,22 @@ export class Dashboard implements OnInit, OnDestroy {
     this.checkInApi.getReservationPass(item.reservationId, item.eventDate).subscribe({
       next: (res) => {
         this.checkInPassLoadingId = null;
+        const latestState = this.mapCheckInPassState(res?.latestPass ?? res?.pass);
+        if (latestState) {
+          this.checkInPassStateByReservationId[item.reservationId] = latestState;
+        }
         const pass = this.mapCheckInPass(res?.pass);
         if (!pass) {
-          this.checkInPassNotice = 'No active pass found. Use reissue to create a new one.';
+          const latestStatus = String(latestState?.status ?? '').toUpperCase();
+          if (latestStatus === 'USED') {
+            this.checkInPassNotice = 'Client is already checked in.';
+          } else if (latestStatus === 'REVOKED') {
+            this.checkInPassNotice = 'Latest pass was revoked. Reissue to send a new pass.';
+          } else if (latestStatus === 'EXPIRED') {
+            this.checkInPassNotice = 'Latest pass expired. Reissue to send a new pass.';
+          } else {
+            this.checkInPassNotice = 'No active pass found. Use reissue to create a new one.';
+          }
           return;
         }
         this.checkInPassByReservationId[item.reservationId] = pass;
@@ -472,7 +522,7 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   reissueCheckInPass(item: ReservationItem): void {
-    if (!this.canManageCheckInPass(item)) return;
+    if (!this.canReissueCheckInPass(item)) return;
     if (this.checkInPassLoadingId) return;
     this.checkInPassLoadingId = item.reservationId;
     this.checkInPassError = null;
@@ -480,6 +530,10 @@ export class Dashboard implements OnInit, OnDestroy {
     this.checkInApi.issueReservationPass(item.reservationId, item.eventDate, true).subscribe({
       next: (res) => {
         this.checkInPassLoadingId = null;
+        const latestState = this.mapCheckInPassState(res?.latestPass ?? res?.pass);
+        if (latestState) {
+          this.checkInPassStateByReservationId[item.reservationId] = latestState;
+        }
         const pass = this.mapCheckInPass(res?.pass);
         if (!pass) {
           this.checkInPassError = 'Pass reissued but no link was returned.';
@@ -549,6 +603,29 @@ export class Dashboard implements OnInit, OnDestroy {
     const pass = this.getCheckInPass(item);
     if (!pass) return '';
     return this.buildCheckInPassShareMessage(item, pass.url);
+  }
+
+  checkInStateLabel(status: string | null | undefined): string {
+    const normalized = String(status ?? '').toUpperCase();
+    if (normalized === 'USED') return 'Checked In';
+    if (normalized === 'ISSUED') return 'Issued';
+    if (normalized === 'REVOKED') return 'Revoked';
+    if (normalized === 'EXPIRED') return 'Expired';
+    return 'Unknown';
+  }
+
+  checkInStateBadgeClass(status: string | null | undefined): string {
+    const normalized = String(status ?? '').toUpperCase();
+    if (normalized === 'USED') return 'border-success-300 bg-success-100 text-success-800';
+    if (normalized === 'ISSUED') return 'border-brand-300 bg-brand-100 text-brand-800';
+    if (normalized === 'REVOKED') return 'border-danger-300 bg-danger-100 text-danger-800';
+    if (normalized === 'EXPIRED') return 'border-warning-300 bg-warning-100 text-warning-800';
+    return 'border-brand-200 bg-brand-50 text-brand-700';
+  }
+
+  epochSecondsToMs(value: number | null | undefined): number | null {
+    const epoch = Number(value ?? 0);
+    return Number.isFinite(epoch) && epoch > 0 ? epoch * 1000 : null;
   }
 
   getPaymentLink(item: ReservationItem | null | undefined): GeneratedPaymentLink | null {
@@ -695,8 +772,16 @@ export class Dashboard implements OnInit, OnDestroy {
 
   activityBadgeClass(activity: ActivityItem): string {
     if (activity.type === 'CANCELLED') return 'bg-danger-100 text-danger-700';
+    if (activity.type === 'CHECKED_IN') return 'bg-success-100 text-success-700';
     if (activity.type === 'PAID') return 'bg-success-100 text-success-700';
     return 'bg-brand-100 text-brand-700';
+  }
+
+  activityCardClass(activity: ActivityItem): string {
+    if (activity.type === 'CHECKED_IN') {
+      return 'border-success-200 bg-success-50 hover:border-success-300 hover:bg-success-100/60';
+    }
+    return 'border-brand-100 hover:border-brand-300 hover:bg-brand-50/60';
   }
 
   private isNextDay(deadlineAt: string, eventDate: string): boolean {
@@ -744,6 +829,21 @@ export class Dashboard implements OnInit, OnDestroy {
       token,
       qrPayload,
       createdAtMs: Date.now(),
+    };
+  }
+
+  private mapCheckInPassState(pass: CheckInPass | null | undefined): CheckInPassState | null {
+    const passId = String(pass?.passId ?? '').trim();
+    if (!passId) return null;
+    return {
+      passId,
+      status: String(pass?.status ?? '').trim().toUpperCase() || 'UNKNOWN',
+      issuedAt: Number(pass?.issuedAt ?? 0) || null,
+      usedAt: Number(pass?.usedAt ?? 0) || null,
+      usedBy: String(pass?.usedBy ?? '').trim() || null,
+      revokedAt: Number(pass?.revokedAt ?? 0) || null,
+      revokedBy: String(pass?.revokedBy ?? '').trim() || null,
+      expiresAt: Number(pass?.expiresAt ?? 0) || null,
     };
   }
 

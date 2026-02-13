@@ -26,6 +26,17 @@ interface GeneratedCheckInPass {
   createdAtMs: number;
 }
 
+interface CheckInPassState {
+  passId: string;
+  status: string;
+  issuedAt: number | null;
+  usedAt: number | null;
+  usedBy: string | null;
+  revokedAt: number | null;
+  revokedBy: string | null;
+  expiresAt: number | null;
+}
+
 @Component({
   selector: 'app-reservations',
   imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
@@ -56,6 +67,7 @@ export class Reservations implements OnInit {
   checkInPassError: string | null = null;
   checkInPassNotice: string | null = null;
   checkInPassByReservationId: Record<string, GeneratedCheckInPass> = {};
+  checkInPassStateByReservationId: Record<string, CheckInPassState> = {};
 
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
@@ -214,9 +226,20 @@ export class Reservations implements OnInit {
     return item.status === 'CONFIRMED' && item.paymentStatus === 'PAID';
   }
 
+  canReissueCheckInPass(item: ReservationItem): boolean {
+    if (!this.canManageCheckInPass(item)) return false;
+    const state = this.getCheckInPassState(item);
+    return state?.status !== 'USED';
+  }
+
   getCheckInPass(item: ReservationItem | null | undefined): GeneratedCheckInPass | null {
     if (!item?.reservationId) return null;
     return this.checkInPassByReservationId[item.reservationId] ?? null;
+  }
+
+  getCheckInPassState(item: ReservationItem | null | undefined): CheckInPassState | null {
+    if (!item?.reservationId) return null;
+    return this.checkInPassStateByReservationId[item.reservationId] ?? null;
   }
 
   loadCheckInPass(item: ReservationItem): void {
@@ -229,9 +252,22 @@ export class Reservations implements OnInit {
     this.checkInApi.getReservationPass(item.reservationId, item.eventDate).subscribe({
       next: (res) => {
         this.checkInPassLoadingId = null;
+        const latestState = this.mapCheckInPassState(res?.latestPass ?? res?.pass);
+        if (latestState) {
+          this.checkInPassStateByReservationId[item.reservationId] = latestState;
+        }
         const pass = this.mapCheckInPass(res?.pass);
         if (!pass) {
-          this.checkInPassNotice = 'No active pass found. Use reissue to create a new one.';
+          const latestStatus = String(latestState?.status ?? '').toUpperCase();
+          if (latestStatus === 'USED') {
+            this.checkInPassNotice = 'Client is already checked in.';
+          } else if (latestStatus === 'REVOKED') {
+            this.checkInPassNotice = 'Latest pass was revoked. Reissue to send a new pass.';
+          } else if (latestStatus === 'EXPIRED') {
+            this.checkInPassNotice = 'Latest pass expired. Reissue to send a new pass.';
+          } else {
+            this.checkInPassNotice = 'No active pass found. Use reissue to create a new one.';
+          }
           return;
         }
         this.checkInPassByReservationId[item.reservationId] = pass;
@@ -245,7 +281,7 @@ export class Reservations implements OnInit {
   }
 
   reissueCheckInPass(item: ReservationItem): void {
-    if (!this.canManageCheckInPass(item)) return;
+    if (!this.canReissueCheckInPass(item)) return;
     if (this.checkInPassLoadingId) return;
     this.checkInPassLoadingId = item.reservationId;
     this.checkInPassError = null;
@@ -254,6 +290,10 @@ export class Reservations implements OnInit {
     this.checkInApi.issueReservationPass(item.reservationId, item.eventDate, true).subscribe({
       next: (res) => {
         this.checkInPassLoadingId = null;
+        const latestState = this.mapCheckInPassState(res?.latestPass ?? res?.pass);
+        if (latestState) {
+          this.checkInPassStateByReservationId[item.reservationId] = latestState;
+        }
         const pass = this.mapCheckInPass(res?.pass);
         if (!pass) {
           this.checkInPassError = 'Pass reissued but no link was returned.';
@@ -323,6 +363,29 @@ export class Reservations implements OnInit {
     const pass = this.getCheckInPass(item);
     if (!pass) return '';
     return this.buildCheckInPassShareMessage(item, pass.url);
+  }
+
+  checkInStateLabel(status: string | null | undefined): string {
+    const normalized = String(status ?? '').toUpperCase();
+    if (normalized === 'USED') return 'Checked In';
+    if (normalized === 'ISSUED') return 'Issued';
+    if (normalized === 'REVOKED') return 'Revoked';
+    if (normalized === 'EXPIRED') return 'Expired';
+    return 'Unknown';
+  }
+
+  checkInStateBadgeClass(status: string | null | undefined): string {
+    const normalized = String(status ?? '').toUpperCase();
+    if (normalized === 'USED') return 'border-success-300 bg-success-100 text-success-800';
+    if (normalized === 'ISSUED') return 'border-brand-300 bg-brand-100 text-brand-800';
+    if (normalized === 'REVOKED') return 'border-danger-300 bg-danger-100 text-danger-800';
+    if (normalized === 'EXPIRED') return 'border-warning-300 bg-warning-100 text-warning-800';
+    return 'border-brand-200 bg-brand-50 text-brand-700';
+  }
+
+  epochSecondsToMs(value: number | null | undefined): number | null {
+    const epoch = Number(value ?? 0);
+    return Number.isFinite(epoch) && epoch > 0 ? epoch * 1000 : null;
   }
 
   openPayment(item: ReservationItem): void {
@@ -485,6 +548,21 @@ export class Reservations implements OnInit {
       token,
       qrPayload,
       createdAtMs: Date.now(),
+    };
+  }
+
+  private mapCheckInPassState(pass: CheckInPass | null | undefined): CheckInPassState | null {
+    const passId = String(pass?.passId ?? '').trim();
+    if (!passId) return null;
+    return {
+      passId,
+      status: String(pass?.status ?? '').trim().toUpperCase() || 'UNKNOWN',
+      issuedAt: Number(pass?.issuedAt ?? 0) || null,
+      usedAt: Number(pass?.usedAt ?? 0) || null,
+      usedBy: String(pass?.usedBy ?? '').trim() || null,
+      revokedAt: Number(pass?.revokedAt ?? 0) || null,
+      revokedBy: String(pass?.revokedBy ?? '').trim() || null,
+      expiresAt: Number(pass?.expiresAt ?? 0) || null,
     };
   }
 

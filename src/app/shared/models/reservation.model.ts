@@ -45,6 +45,9 @@ export interface ReservationItem {
   createdBy?: string;
   updatedAt?: number;
   updatedBy?: string;
+  checkedInAt?: number;
+  checkedInBy?: string;
+  checkedInDevice?: string | null;
   cancelReason?: string;
   cancelledAt?: number;
   cancelledBy?: string;

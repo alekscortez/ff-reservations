@@ -218,6 +218,7 @@ const checkInPassesService = createCheckInPassesService({
   ddb,
   tableNames: {
     CHECKIN_PASSES_TABLE,
+    RES_TABLE,
   },
   env: {
     CHECKIN_PASS_BASE_URL,
@@ -388,6 +389,8 @@ export const handler = async (event) => {
       issueCheckInPassForReservation: checkInPassesService.issuePassForReservation,
       getActiveCheckInPassForReservation:
         checkInPassesService.getActivePassForReservation,
+      getLatestCheckInPassForReservation:
+        checkInPassesService.getLatestPassForReservation,
       verifyAndConsumeCheckInPass: checkInPassesService.verifyAndConsumePass,
     });
     if (checkInRouteResponse) return checkInRouteResponse;
