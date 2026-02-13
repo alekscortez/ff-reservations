@@ -1,11 +1,622 @@
-import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { forkJoin, Subscription } from 'rxjs';
+import { EventsService } from '../../../core/http/events.service';
+import {
+  CreateSquarePaymentLinkResponse,
+  ReservationsService,
+} from '../../../core/http/reservations.service';
+import { TablesService } from '../../../core/http/tables.service';
+import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+import { EventItem } from '../../../shared/models/event.model';
+import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
+import { TableForEvent } from '../../../shared/models/table.model';
+
+interface TableKpis {
+  total: number;
+  available: number;
+  hold: number;
+  reserved: number;
+  disabled: number;
+}
+
+interface UrgentPaymentItem {
+  reservation: ReservationItem;
+  deadlineMs: number;
+  urgency: 'OVERDUE' | 'DUE_SOON';
+}
+
+interface ActivityItem {
+  type: 'RESERVED' | 'PAID' | 'CANCELLED';
+  label: string;
+  atEpoch: number;
+  reservationId: string;
+  tableId: string;
+  customerName: string;
+}
+
+interface GeneratedPaymentLink {
+  url: string;
+  amount: number;
+  createdAtMs: number;
+  audit?: CreateSquarePaymentLinkResponse['square']['audit'];
+}
 
 @Component({
   selector: 'app-dashboard',
-  imports: [],
+  imports: [CommonModule, RouterLink, ReactiveFormsModule, PhoneDisplayPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
-export class Dashboard {
+export class Dashboard implements OnInit, OnDestroy {
+  private eventsApi = inject(EventsService);
+  private tablesApi = inject(TablesService);
+  private reservationsApi = inject(ReservationsService);
 
+  contextLabel: 'TODAY EVENT' | 'NEXT EVENT' = 'TODAY EVENT';
+  contextEvent: EventItem | null = null;
+  nextUpcomingEvent: EventItem | null = null;
+
+  tables: TableForEvent[] = [];
+  reservations: ReservationItem[] = [];
+  urgentPayments: UrgentPaymentItem[] = [];
+  recentActivity: ActivityItem[] = [];
+
+  kpis: TableKpis = {
+    total: 0,
+    available: 0,
+    hold: 0,
+    reserved: 0,
+    disabled: 0,
+  };
+
+  loadingContext = false;
+  loadingSnapshot = false;
+  paymentLoading = false;
+  error: string | null = null;
+  paymentError: string | null = null;
+  paymentLinkError: string | null = null;
+  paymentLinkNotice: string | null = null;
+  paymentLinkLoadingId: string | null = null;
+  paymentLinksByReservationId: Record<string, GeneratedPaymentLink> = {};
+  detailItem: ReservationItem | null = null;
+  showDetailsModal = false;
+  paymentItem: ReservationItem | null = null;
+  showPaymentModal = false;
+
+  paymentForm = new FormGroup({
+    amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
+    method: new FormControl<PaymentMethod>('cash', { nonNullable: true }),
+    note: new FormControl('', { nonNullable: true }),
+  });
+
+  private snapshotSub: Subscription | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  ngOnInit(): void {
+    this.refreshDashboard();
+  }
+
+  ngOnDestroy(): void {
+    this.snapshotSub?.unsubscribe();
+    this.snapshotSub = null;
+    this.stopPolling();
+  }
+
+  refreshDashboard(): void {
+    const today = this.todayString();
+    this.loadingContext = true;
+    this.error = null;
+
+    this.eventsApi.getEventByDate(today).subscribe({
+      next: (event) => {
+        this.contextLabel = 'TODAY EVENT';
+        this.contextEvent = event;
+        this.nextUpcomingEvent = null;
+        this.loadingContext = false;
+        this.loadSnapshotFor(event.eventDate, false);
+        this.startPolling(event.eventDate);
+      },
+      error: (err) => {
+        if (Number(err?.status) === 404) {
+          this.loadFallbackEvent(today);
+          return;
+        }
+        this.error = err?.error?.message || err?.message || 'Failed to load dashboard';
+        this.loadingContext = false;
+        this.contextEvent = null;
+        this.nextUpcomingEvent = null;
+        this.clearSnapshot();
+        this.stopPolling();
+      },
+    });
+  }
+
+  private loadFallbackEvent(today: string): void {
+    this.eventsApi.listEvents().subscribe({
+      next: (events) => {
+        const next = [...(events ?? [])]
+          .filter((e) => (e.eventDate || '') >= today)
+          .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''))[0] ?? null;
+
+        this.contextLabel = 'NEXT EVENT';
+        this.contextEvent = next;
+        this.nextUpcomingEvent = next;
+        this.loadingContext = false;
+
+        if (next?.eventDate) {
+          this.loadSnapshotFor(next.eventDate, false);
+          this.startPolling(next.eventDate);
+        } else {
+          this.clearSnapshot();
+          this.stopPolling();
+        }
+      },
+      error: (err) => {
+        this.error = err?.error?.message || err?.message || 'Failed to load dashboard';
+        this.loadingContext = false;
+        this.contextEvent = null;
+        this.nextUpcomingEvent = null;
+        this.clearSnapshot();
+        this.stopPolling();
+      },
+    });
+  }
+
+  private loadSnapshotFor(eventDate: string, silent: boolean): void {
+    if (!silent) {
+      this.loadingSnapshot = true;
+      this.error = null;
+    }
+
+    this.snapshotSub?.unsubscribe();
+    this.snapshotSub = forkJoin({
+      tableData: this.tablesApi.getForEvent(eventDate),
+      reservations: this.reservationsApi.list(eventDate),
+    }).subscribe({
+      next: ({ tableData, reservations }) => {
+        this.contextEvent = tableData.event ?? this.contextEvent;
+        this.tables = tableData.tables ?? [];
+        this.reservations = reservations ?? [];
+        this.kpis = this.computeKpis(this.tables);
+        this.urgentPayments = this.computeUrgentPayments(this.reservations);
+        this.recentActivity = this.computeRecentActivity(this.reservations);
+        this.loadingSnapshot = false;
+      },
+      error: (err) => {
+        if (!silent) {
+          this.error = err?.error?.message || err?.message || 'Failed to load live dashboard data';
+          this.loadingSnapshot = false;
+        }
+      },
+    });
+  }
+
+  private startPolling(eventDate: string): void {
+    this.stopPolling();
+    this.pollTimer = setInterval(() => {
+      this.loadSnapshotFor(eventDate, true);
+    }, 15000);
+  }
+
+  private stopPolling(): void {
+    if (!this.pollTimer) return;
+    clearInterval(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  private clearSnapshot(): void {
+    this.tables = [];
+    this.reservations = [];
+    this.urgentPayments = [];
+    this.recentActivity = [];
+    this.kpis = {
+      total: 0,
+      available: 0,
+      hold: 0,
+      reserved: 0,
+      disabled: 0,
+    };
+    this.loadingSnapshot = false;
+  }
+
+  private computeKpis(tables: TableForEvent[]): TableKpis {
+    const kpis: TableKpis = {
+      total: tables.length,
+      available: 0,
+      hold: 0,
+      reserved: 0,
+      disabled: 0,
+    };
+
+    for (const table of tables) {
+      if (table.status === 'AVAILABLE') kpis.available += 1;
+      if (table.status === 'HOLD') kpis.hold += 1;
+      if (table.status === 'RESERVED') kpis.reserved += 1;
+      if (table.status === 'DISABLED') kpis.disabled += 1;
+    }
+
+    return kpis;
+  }
+
+  private computeUrgentPayments(items: ReservationItem[]): UrgentPaymentItem[] {
+    const now = Date.now();
+    const dueSoonWindowMs = 6 * 60 * 60 * 1000;
+
+    return items
+      .filter(
+        (r) =>
+          r.status === 'CONFIRMED' &&
+          (r.paymentStatus === 'PENDING' || r.paymentStatus === 'PARTIAL')
+      )
+      .map((reservation) => {
+        const deadlineMs = this.toDeadlineMs(reservation.paymentDeadlineAt);
+        if (deadlineMs === null) return null;
+        const delta = deadlineMs - now;
+        if (delta < 0) {
+          return { reservation, deadlineMs, urgency: 'OVERDUE' as const };
+        }
+        if (delta <= dueSoonWindowMs) {
+          return { reservation, deadlineMs, urgency: 'DUE_SOON' as const };
+        }
+        return null;
+      })
+      .filter((x): x is UrgentPaymentItem => x !== null)
+      .sort((a, b) => a.deadlineMs - b.deadlineMs)
+      .slice(0, 8);
+  }
+
+  private computeRecentActivity(items: ReservationItem[]): ActivityItem[] {
+    return items
+      .map((reservation) => {
+        if (reservation.status === 'CANCELLED') {
+          return {
+            type: 'CANCELLED' as const,
+            label: 'Reservation cancelled',
+            atEpoch: Number(reservation.cancelledAt ?? reservation.updatedAt ?? reservation.createdAt ?? 0),
+            reservationId: reservation.reservationId,
+            tableId: reservation.tableId,
+            customerName: reservation.customerName,
+          };
+        }
+
+        const lastPaymentEpoch =
+          reservation.payments && reservation.payments.length > 0
+            ? Math.max(...reservation.payments.map((p) => Number(p.createdAt ?? 0)))
+            : 0;
+
+        if (lastPaymentEpoch > 0) {
+          return {
+            type: 'PAID' as const,
+            label: reservation.paymentStatus === 'PAID' ? 'Paid in full' : 'Payment recorded',
+            atEpoch: lastPaymentEpoch,
+            reservationId: reservation.reservationId,
+            tableId: reservation.tableId,
+            customerName: reservation.customerName,
+          };
+        }
+
+        return {
+          type: 'RESERVED' as const,
+          label: 'Reservation created',
+          atEpoch: Number(reservation.createdAt ?? 0),
+          reservationId: reservation.reservationId,
+          tableId: reservation.tableId,
+          customerName: reservation.customerName,
+        };
+      })
+      .filter((x) => x.atEpoch > 0)
+      .sort((a, b) => b.atEpoch - a.atEpoch)
+      .slice(0, 8);
+  }
+
+  private toDeadlineMs(deadlineAt?: string | null): number | null {
+    if (!deadlineAt) return null;
+    const ms = Date.parse(String(deadlineAt));
+    if (Number.isNaN(ms)) return null;
+    return ms;
+  }
+
+  formatEventDate(eventDate: string | undefined): string {
+    if (!eventDate) return '—';
+    const date = new Date(`${eventDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return eventDate;
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  formatDeadlineShort(deadlineAt?: string | null, eventDate?: string): string {
+    if (!deadlineAt) return '—';
+    const match = String(deadlineAt)
+      .trim()
+      .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/);
+    if (!match) return String(deadlineAt);
+
+    const [, yyyy, mm, dd, hh, min] = match;
+    const hour24 = Number(hh);
+    const isPm = hour24 >= 12;
+    const hour12 = hour24 % 12 || 12;
+    const amPm = isPm ? 'PM' : 'AM';
+    const timeLabel = `${hour12}:${min} ${amPm}`;
+
+    if (eventDate && this.isNextDay(deadlineAt, eventDate)) {
+      return `${timeLabel} (+1 DAY)`;
+    }
+
+    return `${mm}/${dd}/${yyyy} ${timeLabel}`;
+  }
+
+  formatEpoch(epoch: number): string {
+    if (!epoch) return '—';
+    return new Date(epoch * 1000).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  urgencyClass(item: UrgentPaymentItem): string {
+    return item.urgency === 'OVERDUE'
+      ? 'bg-danger-50 text-danger-700 border-danger-100'
+      : 'bg-accent-50 text-accent-700 border-accent-200';
+  }
+
+  canTakePayment(item: ReservationItem): boolean {
+    return (
+      item.status === 'CONFIRMED' &&
+      item.paymentStatus !== 'PAID' &&
+      item.paymentStatus !== 'COURTESY'
+    );
+  }
+
+  openActivityDetails(activity: ActivityItem): void {
+    const item = this.reservations.find((reservation) => reservation.reservationId === activity.reservationId);
+    if (!item) return;
+    this.detailItem = item;
+    this.showDetailsModal = true;
+  }
+
+  closeDetails(): void {
+    this.showDetailsModal = false;
+    this.detailItem = null;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+  }
+
+  openUrgentPayment(item: UrgentPaymentItem): void {
+    if (!this.canTakePayment(item.reservation)) return;
+    this.paymentError = null;
+    this.paymentItem = item.reservation;
+    this.showPaymentModal = true;
+    const due = Number(item.reservation.amountDue ?? 0);
+    const paid = Number(item.reservation.depositAmount ?? 0);
+    const balance = Math.max(0, due - paid);
+    this.paymentForm.setValue({
+      amount: balance > 0 ? balance : 0,
+      method: 'cash',
+      note: '',
+    });
+  }
+
+  closeUrgentPayment(): void {
+    this.showPaymentModal = false;
+    this.paymentItem = null;
+    this.paymentError = null;
+    this.paymentForm.reset({
+      amount: 0,
+      method: 'cash',
+      note: '',
+    });
+  }
+
+  canGeneratePaymentLink(item: ReservationItem): boolean {
+    return this.canTakePayment(item);
+  }
+
+  getPaymentLink(item: ReservationItem | null | undefined): GeneratedPaymentLink | null {
+    if (!item?.reservationId) return null;
+    return this.paymentLinksByReservationId[item.reservationId] ?? null;
+  }
+
+  generatePaymentLink(item: ReservationItem): void {
+    if (!this.canGeneratePaymentLink(item)) return;
+    if (this.paymentLinkLoadingId) return;
+
+    const remaining = this.remainingAmount(item);
+    if (remaining <= 0) return;
+
+    this.paymentLinkLoadingId = item.reservationId;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+
+    this.reservationsApi
+      .createSquarePaymentLink({
+        reservationId: item.reservationId,
+        eventDate: item.eventDate,
+        amount: remaining,
+        note: `Payment link for table ${item.tableId}`,
+      })
+      .subscribe({
+        next: (res) => {
+          const url = String(res?.square?.url ?? '').trim();
+          if (!url) {
+            this.paymentLinkError = 'Payment link generation succeeded but no URL was returned.';
+            this.paymentLinkLoadingId = null;
+            return;
+          }
+          this.paymentLinksByReservationId[item.reservationId] = {
+            url,
+            amount: Number(res?.reservation?.linkAmount ?? remaining),
+            createdAtMs: Date.now(),
+            audit: res?.square?.audit,
+          };
+          this.paymentLinkNotice = 'Payment link ready to share.';
+          this.paymentLinkLoadingId = null;
+        },
+        error: (err) => {
+          this.paymentLinkError =
+            err?.error?.message || err?.message || 'Failed to generate payment link';
+          this.paymentLinkLoadingId = null;
+        },
+      });
+  }
+
+  copyPaymentLink(item: ReservationItem): void {
+    const link = this.getPaymentLink(item);
+    if (!link) return;
+    this.paymentLinkError = null;
+    this.writeClipboard(link.url).then((ok) => {
+      this.paymentLinkNotice = ok
+        ? 'Payment link copied.'
+        : 'Copy failed. Please copy manually from the link box.';
+    });
+  }
+
+  openSmsShare(item: ReservationItem): void {
+    const link = this.getPaymentLink(item);
+    if (!link) return;
+    const body = this.buildShareMessage(item, link.url);
+    const recipient = this.toSmsRecipient(item.phone);
+    const target = recipient ? `sms:${recipient}?&body=${encodeURIComponent(body)}` : `sms:?&body=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  openWhatsAppShare(item: ReservationItem): void {
+    const link = this.getPaymentLink(item);
+    if (!link) return;
+    const body = this.buildShareMessage(item, link.url);
+    const recipient = this.toWhatsAppRecipient(item.phone);
+    const target = recipient
+      ? `https://wa.me/${recipient}?text=${encodeURIComponent(body)}`
+      : `https://wa.me/?text=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  sharePaymentLink(item: ReservationItem): void {
+    const link = this.getPaymentLink(item);
+    if (!link) return;
+    const body = this.buildShareMessage(item, link.url);
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator
+        .share({
+          text: body,
+          url: link.url,
+        })
+        .catch(() => {
+          this.copyPaymentLink(item);
+        });
+      return;
+    }
+    this.copyPaymentLink(item);
+  }
+
+  paymentLinkShareMessage(item: ReservationItem): string {
+    const link = this.getPaymentLink(item);
+    if (!link) return '';
+    return this.buildShareMessage(item, link.url);
+  }
+
+  submitUrgentPayment(): void {
+    if (!this.paymentItem) return;
+    if (this.paymentForm.invalid) return;
+
+    this.paymentLoading = true;
+    this.paymentError = null;
+
+    const amount = Number(this.paymentForm.controls.amount.value);
+    const method = this.paymentForm.controls.method.value;
+    const note = this.paymentForm.controls.note.value;
+    const targetReservationId = this.paymentItem.reservationId;
+    const targetEventDate = this.paymentItem.eventDate;
+
+    this.reservationsApi
+      .addPayment({
+        reservationId: targetReservationId,
+        eventDate: targetEventDate,
+        amount,
+        method,
+        note,
+      })
+      .subscribe({
+        next: (res) => {
+          const updated = res.item;
+          this.reservations = this.reservations.map((reservation) =>
+            reservation.reservationId === updated.reservationId ? updated : reservation
+          );
+          this.urgentPayments = this.computeUrgentPayments(this.reservations);
+          this.recentActivity = this.computeRecentActivity(this.reservations);
+          this.paymentLoading = false;
+          this.closeUrgentPayment();
+        },
+        error: (err) => {
+          this.paymentError = err?.error?.message || err?.message || 'Failed to record payment';
+          this.paymentLoading = false;
+        },
+      });
+  }
+
+  activityBadgeClass(activity: ActivityItem): string {
+    if (activity.type === 'CANCELLED') return 'bg-danger-100 text-danger-700';
+    if (activity.type === 'PAID') return 'bg-success-100 text-success-700';
+    return 'bg-brand-100 text-brand-700';
+  }
+
+  private isNextDay(deadlineAt: string, eventDate: string): boolean {
+    const d = deadlineAt.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    const e = eventDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!d || !e) return false;
+
+    const deadlineUtc = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]));
+    const eventUtc = Date.UTC(Number(e[1]), Number(e[2]) - 1, Number(e[3]));
+    const dayMs = 24 * 60 * 60 * 1000;
+    return deadlineUtc - eventUtc === dayMs;
+  }
+
+  private todayString(): string {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private remainingAmount(item: ReservationItem): number {
+    const due = Number(item.amountDue ?? 0);
+    const paid = Number(item.depositAmount ?? 0);
+    return Math.max(0, Number((due - paid).toFixed(2)));
+  }
+
+  private buildShareMessage(item: ReservationItem, url: string): string {
+    return `Hi ${item.customerName}, here is your table payment link for ${item.eventDate} table ${item.tableId}: ${url}`;
+  }
+
+  private toSmsRecipient(phone: string | undefined): string {
+    const raw = String(phone ?? '').trim();
+    if (!raw) return '';
+    return raw.replace(/[^\d+]/g, '');
+  }
+
+  private toWhatsAppRecipient(phone: string | undefined): string {
+    const raw = String(phone ?? '').trim();
+    if (!raw) return '';
+    return raw.replace(/\D/g, '');
+  }
+
+  private async writeClipboard(text: string): Promise<boolean> {
+    const value = String(text ?? '').trim();
+    if (!value) return false;
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

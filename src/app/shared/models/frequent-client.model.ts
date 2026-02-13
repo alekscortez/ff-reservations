@@ -14,6 +14,7 @@ export interface FrequentClient {
   clientId: string;
   name: string;
   phone: string;
+  phoneCountry?: 'US' | 'MX';
   defaultTableId?: string;
   defaultTableIds?: string[];
   tableSettings?: FrequentClientTableSetting[];

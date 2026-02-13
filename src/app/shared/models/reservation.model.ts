@@ -1,12 +1,27 @@
 export type ReservationStatus = 'CONFIRMED' | 'CANCELLED';
 export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
 export type PaymentMethod = 'cash' | 'cashapp' | 'square';
+export type PaymentSource = 'manual' | 'square-direct' | 'square-webhook';
 
 export interface ReservationPayment {
   paymentId: string;
   amount: number;
   method: PaymentMethod;
+  source?: PaymentSource;
   note?: string;
+  provider?: {
+    provider?: 'square' | string | null;
+    providerPaymentId?: string | null;
+    providerStatus?: string | null;
+    receiptUrl?: string | null;
+    orderId?: string | null;
+    sourceType?: string | null;
+    idempotencyKey?: string | null;
+    amountMoney?: {
+      amount?: number;
+      currency?: string | null;
+    } | null;
+  } | null;
   createdAt: number;
   createdBy?: string;
 }

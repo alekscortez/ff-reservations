@@ -1,28 +1,29 @@
-### Clients CRM (Admin)
+### CRM Clients API (Admin)
+
 ### List all clients
 GET {{baseUrl}}/clients
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Search by phone (prefix)
-GET {{baseUrl}}/clients/search?phone=555
+### Search by phone prefix
+GET {{baseUrl}}/clients/search?phone=1956
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Update client (by phone)
-PUT {{baseUrl}}/clients/5551231234
+### Update client (by normalized phone key)
+PUT {{baseUrl}}/clients/19561231234
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "name": "Updated Name",
-  "phone": "5551231234"
+  "phone": "+19561231234"
 }
 
 ###
 
-### Delete client (by phone)
-DELETE {{baseUrl}}/clients/5551231234
+### Delete client
+DELETE {{baseUrl}}/clients/19561231234
 Authorization: Bearer {{accessToken}}

@@ -24,6 +24,7 @@ export class Events implements OnInit {
   error: string | null = null;
   conflictDate: string | null = null;
   editingId: string | null = null;
+  showCreateModal = false;
   templateSections: SectionKey[] = [];
   templateTablesBySection: Record<string, TableInfo[]> = {};
 
@@ -143,6 +144,7 @@ export class Events implements OnInit {
         this.form.reset({ eventName: '', eventDate: '', minDeposit: 0 });
         this.createDisabled.clear();
         this.createDisabledClients.clear();
+        this.showCreateModal = false;
         this.loading = false;
       },
       error: (err) => {
@@ -175,6 +177,16 @@ export class Events implements OnInit {
 
   cancelEdit(): void {
     this.editingId = null;
+  }
+
+  openCreateModal(): void {
+    this.showCreateModal = true;
+    this.error = null;
+    this.conflictDate = null;
+  }
+
+  closeCreateModal(): void {
+    this.showCreateModal = false;
   }
 
   saveEdit(): void {

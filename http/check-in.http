@@ -1,0 +1,12 @@
+### Check-in API
+### Note: current Lambda may return 404 until backend route is implemented.
+
+### Attempt check-in
+POST {{baseUrl}}/check-in
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-03-21",
+  "reservationId": "REPLACE_RESERVATION_ID"
+}

@@ -7,23 +7,25 @@
   </header>
 
   <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <label class="flex w-full flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500 md:w-72">
+    <div class="flex items-end gap-2">
+      <label class="flex min-w-0 flex-1 flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
         Search
         <input
           type="text"
           [formControl]="filterQuery"
           placeholder="Name or phone"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+          class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
         />
       </label>
       <button
         type="button"
-        class="inline-flex h-11 items-center justify-center rounded-lg border border-brand-200 px-4 text-sm text-brand-700"
+        class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-700"
         (click)="load()"
         [disabled]="loading"
+        aria-label="Refresh clients"
+        title="Refresh clients"
       >
-        Refresh
+        ↻
       </button>
     </div>
 
@@ -51,7 +53,7 @@
           <ng-container *ngFor="let c of filteredItems()">
             <tr *ngIf="editingPhone !== c.phone" class="border-b border-brand-100 last:border-0">
               <td class="py-3 pr-3 font-semibold">{{ c.name }}</td>
-              <td class="py-3 pr-3">{{ c.phone }}</td>
+              <td class="py-3 pr-3">{{ c.phone | phoneDisplay }}</td>
               <td class="py-3 pr-3">${{ formatMoney(c.totalSpend) }}</td>
               <td class="py-3 pr-3">{{ c.totalReservations || 0 }}</td>
               <td class="py-3 pr-3">{{ c.lastEventDate || '—' }}</td>
@@ -59,10 +61,10 @@
               <td class="py-3 pr-3">{{ c.updatedBy || '—' }}</td>
               <td class="py-3 pr-3">
                 <div class="flex flex-wrap gap-2">
-                  <button type="button" class="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white" (click)="startEdit(c)">
+                  <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(c)">
                     Edit
                   </button>
-                  <button type="button" class="rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700" (click)="deleteClient(c)">
+                  <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteClient(c)">
                     Delete
                   </button>
                 </div>
@@ -74,17 +76,33 @@
                 <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
                   <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
                     Name
-                    <input type="text" formControlName="name" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+                    <input type="text" formControlName="name" class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm" />
                   </label>
                   <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
                     Phone
-                    <input type="text" formControlName="phone" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+                    <div class="grid grid-cols-[1fr_96px] gap-2">
+                      <input
+                        type="tel"
+                        formControlName="phone"
+                        class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
+                        inputmode="tel"
+                        placeholder="+1..."
+                      />
+                      <select
+                        class="h-10 rounded-lg border border-brand-200 px-2 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
+                        [value]="editPhoneCountry"
+                        (change)="editPhoneCountry = $any($event.target).value"
+                      >
+                        <option value="US">US</option>
+                        <option value="MX">MX</option>
+                      </select>
+                    </div>
                   </label>
                   <div class="flex flex-wrap gap-2">
-                    <button type="submit" class="rounded-lg bg-brand-900 px-4 py-2 text-sm font-semibold text-white" [disabled]="loading">
+                    <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white" [disabled]="loading">
                       Save
                     </button>
-                    <button type="button" class="rounded-lg border border-brand-200 px-4 py-2 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">
+                    <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">
                       Cancel
                     </button>
                   </div>
@@ -101,7 +119,7 @@
         <div class="flex items-start justify-between gap-4">
           <div>
             <div class="text-lg font-semibold text-brand-900">{{ c.name }}</div>
-            <div class="text-sm text-brand-500">{{ c.phone }}</div>
+            <div class="text-sm text-brand-500">{{ c.phone | phoneDisplay }}</div>
           </div>
           <div class="text-right text-xs text-brand-500">
             <div>Total ${{ formatMoney(c.totalSpend) }}</div>
@@ -123,10 +141,10 @@
           </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white" (click)="startEdit(c)">
+          <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(c)">
             Edit
           </button>
-          <button type="button" class="rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700" (click)="deleteClient(c)">
+          <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteClient(c)">
             Delete
           </button>
         </div>

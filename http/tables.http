@@ -1,9 +1,12 @@
-### Get table template (default pricing + list)
+### Tables API
+
+### Template (base map + section defaults)
 GET {{baseUrl}}/tables/template
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Get tables for event (effective pricing + disabled flags)
-GET {{baseUrl}}/tables/for-event/2026-02-21
+### Effective tables for event date
+# Includes merged status: AVAILABLE | HOLD | RESERVED | DISABLED
+GET {{baseUrl}}/tables/for-event/2026-02-14
 Authorization: Bearer {{accessToken}}

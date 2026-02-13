@@ -21,3 +21,12 @@ app-root,
 .page {
   width: 100%;
 }
+
+/* Prevent iOS Safari zoom-on-focus for form controls. */
+@media (hover: none) and (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

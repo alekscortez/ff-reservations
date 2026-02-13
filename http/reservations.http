@@ -1,36 +1,87 @@
-### Reservations endpoints (TODO: implement backend)
-### Create reservation
+### Reservations API (Staff/Admin)
+
+### Create reservation from hold
+# Preconditions:
+# 1) Create hold first in holds.http
+# 2) Replace holdId with returned item.holdId
 POST {{baseUrl}}/reservations
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "eventDate": "2026-02-21",
-  "tableId": "A01",
-  "holdId": "HOLD_ID",
+  "eventDate": "2026-02-14",
+  "tableId": "A09",
+  "holdId": "cc9d17ff-b1a0-4f58-b49d-413e1ce8be55",
   "customerName": "John Doe",
-  "phone": "555-123-1234",
-  "depositAmount": 40,
-  "paymentMethod": "cash",
-  "paymentDeadlineAt": "2026-02-21T00:00:00",
+  "phone": "+19561231234",
+  "depositAmount": 0,
+  "paymentStatus": "PENDING",
+  "paymentDeadlineAt": "2026-03-22T00:00:00",
   "paymentDeadlineTz": "America/Chicago"
 }
 
 ###
 
-### Get reservations by date
-GET {{baseUrl}}/reservations?eventDate=2026-02-21
+### List reservations by event date
+GET {{baseUrl}}/reservations?eventDate=2026-02-14
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Cancel reservation
-PUT {{baseUrl}}/reservations/RES_ID/cancel
+### Add payment to reservation
+# Replace reservationId with returned item.reservationId from create call
+@reservationId = e47ab7b2-90be-4a30-a33f-68f35c6ee476
+PUT {{baseUrl}}/reservations/{{reservationId}}/payment
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "eventDate": "2026-02-21",
-  "tableId": "A01",
+  "eventDate": "2026-02-14",
+  "amount": 250,
+  "method": "cash",
+  "note": "Paid at door"
+}
+
+###
+
+### Add Square payment to reservation (Phase 1)
+### sourceId must come from Square Web Payments SDK tokenization on frontend.
+POST {{baseUrl}}/reservations/{{reservationId}}/payment/square
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-14",
+  "amount": 250,
+  "sourceId": "cnon:card-nonce-ok",
+  "note": "Square terminalless charge",
+  "idempotencyKey": "c57cd611-e4f5-4f7c-b216-b5a5b131cdb5"
+}
+
+###
+
+### Create Square payment link (invoice-style flow)
+### amount is optional; if omitted, backend uses full remaining balance.
+POST {{baseUrl}}/reservations/{{reservationId}}/payment-link/square
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-14",
+  "amount": 250,
+  "note": "Table hold payment link",
+  "idempotencyKey": "c57cd611-e4f5-4f7c-b216-b5a5b131cdb5"
+}
+
+###
+
+### Cancel reservation
+PUT {{baseUrl}}/reservations/{{reservationId}}/cancel
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-03-21",
+  "tableId": "A15",
   "cancelReason": "Client no-show"
 }

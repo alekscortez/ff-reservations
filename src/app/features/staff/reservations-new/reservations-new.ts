@@ -11,14 +11,30 @@ import { ClientsService } from '../../../core/http/clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
 import { debounceTime, distinctUntilChanged, interval, of, Subscription, switchMap } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
+import {
+  inferPhoneCountryFromE164,
+  normalizePhoneCountry,
+  normalizePhoneToE164,
+} from '../../../shared/phone';
+import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+
+interface CreatedReservationContext {
+  reservationId: string;
+  eventDate: string;
+  tableId: string;
+  customerName: string;
+  phone: string;
+  amount: number;
+}
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })
 export class ReservationsNew implements OnInit, OnDestroy {
+  private readonly filterStorageKey = 'ff_new_res_filters_v1';
   private route = inject(ActivatedRoute);
   private eventsApi = inject(EventsService);
   private tablesApi = inject(TablesService);
@@ -71,15 +87,22 @@ export class ReservationsNew implements OnInit, OnDestroy {
     nonNullable: true,
   });
   filterSection = new FormControl<string>('ALL', { nonNullable: true });
+  showFiltersPanel = false;
+  phoneCountry: 'US' | 'MX' = 'US';
   pastFilterDate = new FormControl('', { nonNullable: true });
   pastFilterName = new FormControl('', { nonNullable: true });
-  onlyAvailable = false;
   clientMatches: CrmClient[] = [];
   clientLoading = false;
   noClientMatch = false;
   exactMatchPhone: string | null = null;
+  creatingPaymentLink = false;
+  paymentLinkError: string | null = null;
+  paymentLinkNotice: string | null = null;
+  paymentLinkUrl: string | null = null;
+  createdReservation: CreatedReservationContext | null = null;
 
   ngOnInit(): void {
+    this.restoreSavedFilters();
     this.route.queryParamMap.subscribe((params) => {
       this.eventDate = params.get('date');
       if (this.eventDate) {
@@ -91,6 +114,8 @@ export class ReservationsNew implements OnInit, OnDestroy {
 
     this.form.controls.amountDue.valueChanges.subscribe((value) => {
       const status = this.form.controls.paymentStatus.value;
+      const method = this.form.controls.paymentMethod.value;
+      if (method !== 'cash') return;
       if (status === 'PAID') {
         this.form.controls.depositAmount.setValue(value, { emitEvent: false });
       }
@@ -98,6 +123,10 @@ export class ReservationsNew implements OnInit, OnDestroy {
         this.form.controls.amountDue.setValue(0, { emitEvent: false });
         this.form.controls.depositAmount.setValue(0, { emitEvent: false });
       }
+    });
+
+    this.form.controls.paymentMethod.valueChanges.subscribe(() => {
+      this.onPaymentMethodChange();
     });
 
     this.form.controls.phone.valueChanges
@@ -121,7 +150,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
           const matches = items ?? [];
           const entered = this.normalizePhone(this.form.controls.phone.value);
           const exact = matches.find(
-            (m) => this.normalizePhone(m.phone) === entered && entered.length >= 10
+            (m) => this.phonesMatch(m.phone, entered) && entered.length >= 10
           );
           this.exactMatchPhone = exact ? this.normalizePhone(exact.phone) : null;
           this.clientMatches = matches;
@@ -130,6 +159,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
           if (exact) {
             this.form.controls.customerName.setValue(exact.name || '');
             this.form.controls.phone.setValue(exact.phone || entered);
+            this.phoneCountry = inferPhoneCountryFromE164(exact.phone) ?? this.phoneCountry;
             this.clientMatches = [];
             this.noClientMatch = false;
           }
@@ -161,6 +191,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
         this.sections = Array.from(new Set(res.tables.map((t) => t.section))).sort();
         if (this.filterSection.value !== 'ALL' && !this.sections.includes(this.filterSection.value)) {
           this.filterSection.setValue('ALL');
+          this.saveFilters();
         }
         if (this.selectedTableId) {
           this.selectedTable = this.tables.find((t) => t.id === this.selectedTableId) ?? null;
@@ -226,9 +257,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     this.holdId = null;
     this.showPastModal = false;
     this.showReservationModal = false;
-    this.filterSection.setValue('ALL', { emitEvent: false });
-    this.filterStatus.setValue('ALL', { emitEvent: false });
-    this.onlyAvailable = false;
+    this.showFiltersPanel = false;
     this.stopPolling();
   }
 
@@ -288,6 +317,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     if (t.status !== 'AVAILABLE') return;
     this.selectedTable = t;
     this.selectedTableId = t.id;
+    this.resetCreatedReservationState();
     this.holdId = null;
     this.holdExpiresAt = null;
     this.holdCountdown = 0;
@@ -295,10 +325,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     this.allowCustomDeposit = false;
     const price = t.price ?? 0;
     this.form.controls.amountDue.setValue(price);
-    this.form.controls.depositAmount.setValue(price);
-    this.form.controls.paymentStatus.setValue('PAID');
-    this.paymentDeadlineEnabled = false;
-    if (this.eventDate) this.paymentDeadlineDate.setValue(this.eventDate);
+    this.applyPaymentDefaultsForCurrentMethod();
   }
 
   startHoldFlow(): void {
@@ -309,6 +336,10 @@ export class ReservationsNew implements OnInit, OnDestroy {
 
   createHold(openModal = false): void {
     if (!this.eventDate || !this.selectedTable) return;
+    const phone = normalizePhoneToE164(
+      this.form.controls.phone.value,
+      normalizePhoneCountry(this.phoneCountry)
+    );
     this.loading = true;
     this.error = null;
     this.holdsApi
@@ -316,7 +347,8 @@ export class ReservationsNew implements OnInit, OnDestroy {
         eventDate: this.eventDate,
         tableId: this.selectedTable.id,
         customerName: this.form.controls.customerName.value,
-        phone: this.form.controls.phone.value,
+        phone: phone || undefined,
+        phoneCountry: this.phoneCountry,
       })
       .subscribe({
         next: (item) => {
@@ -358,13 +390,38 @@ export class ReservationsNew implements OnInit, OnDestroy {
   }
 
   confirmReservation(): void {
-    if (!this.eventDate || !this.selectedTable || !this.holdId) return;
-    if (this.form.invalid) return;
+    if (this.createdReservation) {
+      this.finishReservationFlow();
+      return;
+    }
+    if (!this.eventDate || !this.selectedTable) {
+      this.error = 'Select an event and table first.';
+      return;
+    }
+    if (!this.holdId) {
+      this.error = 'Hold expired or missing. Please hold the table again.';
+      return;
+    }
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.error = this.formErrorMessage();
+      return;
+    }
     this.loading = true;
     this.error = null;
     const depositAmount = this.form.controls.depositAmount.value;
     const amountDue = this.form.controls.amountDue.value;
     const paymentStatus = this.form.controls.paymentStatus.value;
+    const paymentMethod = this.form.controls.paymentMethod.value;
+    const phone = normalizePhoneToE164(
+      this.form.controls.phone.value,
+      normalizePhoneCountry(this.phoneCountry)
+    );
+    if (!phone) {
+      this.error = 'Phone must be a valid US or MX number.';
+      this.loading = false;
+      return;
+    }
     const needsDeadline = paymentStatus === 'PENDING' || paymentStatus === 'PARTIAL';
     if (needsDeadline && !this.paymentDeadlineEnabled) {
       this.error = 'Payment deadline is required for unpaid or partial reservations.';
@@ -381,6 +438,11 @@ export class ReservationsNew implements OnInit, OnDestroy {
         return;
       }
       paymentDeadlineAt = `${date}T${time}:00`;
+      if (!this.isFutureDeadline(paymentDeadlineAt, this.paymentDeadlineTz)) {
+        this.error = 'Payment deadline must be in the future.';
+        this.loading = false;
+        return;
+      }
     }
     this.reservationsApi
       .create({
@@ -388,37 +450,41 @@ export class ReservationsNew implements OnInit, OnDestroy {
         tableId: this.selectedTable.id,
         holdId: this.holdId,
         customerName: this.form.controls.customerName.value,
-        phone: this.form.controls.phone.value,
+        phone,
+        phoneCountry: this.phoneCountry,
         depositAmount,
         amountDue,
         paymentStatus,
-        paymentMethod: this.form.controls.paymentMethod.value,
+        paymentMethod,
         paymentDeadlineAt,
         paymentDeadlineTz: needsDeadline ? this.paymentDeadlineTz : null,
       })
       .subscribe({
-        next: () => {
+        next: (created) => {
           this.holdId = null;
           this.holdExpiresAt = null;
           this.holdCountdown = 0;
           this.clearHoldTimer();
           this.holdCreatedByMe = false;
           this.showReleaseConfirm = false;
-          this.selectedTable = null;
-          this.selectedTableId = null;
-          this.allowCustomDeposit = false;
-          this.paymentDeadlineEnabled = false;
-          this.showReservationModal = false;
-          this.form.reset({
-            customerName: '',
-            phone: '',
-            depositAmount: 0,
-            amountDue: 0,
-            paymentStatus: 'PAID',
-            paymentMethod: 'cash',
-          });
           this.loadTables(this.eventDate!);
+
+          if (paymentMethod === 'square') {
+            this.createdReservation = {
+              reservationId: created.reservationId,
+              eventDate: this.eventDate!,
+              tableId: this.selectedTable!.id,
+              customerName: this.form.controls.customerName.value,
+              phone,
+              amount: amountDue,
+            };
+            this.loading = false;
+            this.generateSquarePaymentLink();
+            return;
+          }
+
           this.loading = false;
+          this.finishReservationFlow();
         },
         error: (err) => {
           this.error =
@@ -430,10 +496,15 @@ export class ReservationsNew implements OnInit, OnDestroy {
 
   openReservationModal(): void {
     if (!this.selectedTable) return;
+    this.resetCreatedReservationState();
     this.showReservationModal = true;
   }
 
   closeReservationModal(): void {
+    if (this.createdReservation) {
+      this.finishReservationFlow();
+      return;
+    }
     if (this.holdId && this.holdCreatedByMe) {
       this.showReleaseConfirm = true;
       return;
@@ -477,6 +548,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     if (!client) return;
     this.form.controls.phone.setValue(client.phone || '');
     this.form.controls.customerName.setValue(client.name || '');
+    this.phoneCountry = inferPhoneCountryFromE164(client.phone) ?? this.phoneCountry;
     this.clientMatches = [];
     this.noClientMatch = false;
     this.exactMatchPhone = this.normalizePhone(client.phone);
@@ -492,6 +564,15 @@ export class ReservationsNew implements OnInit, OnDestroy {
   }
 
   onPaymentStatusChange(): void {
+    if (this.form.controls.paymentMethod.value !== 'cash') {
+      this.form.controls.paymentStatus.setValue('PENDING');
+      this.form.controls.depositAmount.setValue(0);
+      this.allowCustomDeposit = false;
+      this.paymentDeadlineEnabled = true;
+      this.setDefaultPaymentDeadline();
+      return;
+    }
+
     const status = this.form.controls.paymentStatus.value;
     const amountDue = this.form.controls.amountDue.value;
     if (status === 'COURTESY') {
@@ -511,13 +592,13 @@ export class ReservationsNew implements OnInit, OnDestroy {
       this.form.controls.depositAmount.setValue(0);
       this.allowCustomDeposit = false;
       this.paymentDeadlineEnabled = true;
-      if (this.eventDate) this.paymentDeadlineDate.setValue(this.eventDate);
+      this.setDefaultPaymentDeadline();
       return;
     }
     // PARTIAL: leave deposit editable
     this.allowCustomDeposit = true;
     this.paymentDeadlineEnabled = true;
-    if (this.eventDate) this.paymentDeadlineDate.setValue(this.eventDate);
+    this.setDefaultPaymentDeadline();
   }
 
   isExactMatch(client: CrmClient): boolean {
@@ -530,9 +611,232 @@ export class ReservationsNew implements OnInit, OnDestroy {
     return String(value ?? '').replace(/\D/g, '');
   }
 
+  private phonesMatch(storedPhone: string | null | undefined, enteredDigits: string): boolean {
+    const stored = this.normalizePhone(storedPhone);
+    if (!stored || !enteredDigits) return false;
+    if (stored === enteredDigits) return true;
+    if (enteredDigits.length === 10) {
+      if (stored === `1${enteredDigits}`) return true;
+      if (stored === `52${enteredDigits}`) return true;
+      if (stored === `521${enteredDigits}`) return true;
+    }
+    return false;
+  }
+
+  private setDefaultPaymentDeadline(): void {
+    if (!this.eventDate) return;
+    this.paymentDeadlineDate.setValue(this.nextDate(this.eventDate));
+    this.paymentDeadlineTime.setValue('00:00');
+  }
+
+  private nextDate(date: string): string {
+    const parts = date.split('-').map((part) => Number(part));
+    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+      return date;
+    }
+    const [year, month, day] = parts;
+    const d = new Date(Date.UTC(year, month - 1, day));
+    d.setUTCDate(d.getUTCDate() + 1);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private normalizeDeadlineLocalIso(value: string): string | null {
+    const raw = String(value ?? '').trim();
+    const match = raw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const [, ymd, hh, mm, ss] = match;
+    return `${ymd}T${hh}:${mm}:${ss ?? '00'}`;
+  }
+
+  private nowInTimeZoneLocalIso(tz: string): string | null {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date());
+      const get = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((p) => p.type === type)?.value ?? '';
+      const yyyy = get('year');
+      const mm = get('month');
+      const dd = get('day');
+      const hh = get('hour');
+      const min = get('minute');
+      const sec = get('second');
+      if (!yyyy || !mm || !dd || !hh || !min || !sec) return null;
+      return `${yyyy}-${mm}-${dd}T${hh}:${min}:${sec}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private isFutureDeadline(deadlineAt: string, tz: string): boolean {
+    const normalizedDeadline = this.normalizeDeadlineLocalIso(deadlineAt);
+    if (!normalizedDeadline) return false;
+    const nowIso = this.nowInTimeZoneLocalIso(tz || 'America/Chicago');
+    if (!nowIso) return false;
+    return normalizedDeadline > nowIso;
+  }
+
+  private formErrorMessage(): string {
+    const customerName = this.form.controls.customerName;
+    if (customerName.invalid) return 'Customer name is required.';
+
+    const phone = this.form.controls.phone;
+    if (phone.invalid) return 'Phone is required.';
+
+    const amountDue = this.form.controls.amountDue;
+    if (amountDue.invalid) return 'Total amount due must be 0 or greater.';
+
+    const deposit = this.form.controls.depositAmount;
+    if (deposit.invalid) return 'Deposit amount must be 0 or greater.';
+
+    const method = this.form.controls.paymentMethod;
+    if (method.invalid) return 'Payment method is required.';
+
+    return 'Please review the reservation details.';
+  }
+
+  onPaymentMethodChange(): void {
+    this.applyPaymentDefaultsForCurrentMethod();
+  }
+
+  paymentMethodButtons(): Array<{ value: 'cash' | 'cashapp' | 'square'; label: string }> {
+    return [
+      { value: 'cash', label: 'Cash' },
+      { value: 'cashapp', label: 'Cash App' },
+      { value: 'square', label: 'Square' },
+    ];
+  }
+
+  isPaymentMethod(value: 'cash' | 'cashapp' | 'square'): boolean {
+    return this.form.controls.paymentMethod.value === value;
+  }
+
+  setPaymentMethod(value: 'cash' | 'cashapp' | 'square'): void {
+    this.form.controls.paymentMethod.setValue(value);
+  }
+
+  isCashMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'cash';
+  }
+
+  isSquareMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'square';
+  }
+
+  isCashAppMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'cashapp';
+  }
+
+  generateSquarePaymentLink(): void {
+    if (!this.createdReservation) return;
+    if (!this.isSquareMethod()) return;
+    if (this.creatingPaymentLink) return;
+
+    this.creatingPaymentLink = true;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+
+    this.reservationsApi
+      .createSquarePaymentLink({
+        reservationId: this.createdReservation.reservationId,
+        eventDate: this.createdReservation.eventDate,
+        amount: this.createdReservation.amount,
+        note: `Payment link for table ${this.createdReservation.tableId}`,
+      })
+      .subscribe({
+        next: (res) => {
+          const url = String(res?.square?.url ?? '').trim();
+          if (!url) {
+            this.paymentLinkError = 'Payment link generation succeeded but no URL was returned.';
+            this.creatingPaymentLink = false;
+            return;
+          }
+          this.paymentLinkUrl = url;
+          this.paymentLinkNotice = 'Payment link generated. Share it with the customer.';
+          this.creatingPaymentLink = false;
+        },
+        error: (err) => {
+          this.paymentLinkError =
+            err?.error?.message || err?.message || 'Failed to generate payment link';
+          this.creatingPaymentLink = false;
+        },
+      });
+  }
+
+  copyGeneratedPaymentLink(): void {
+    const url = String(this.paymentLinkUrl ?? '').trim();
+    if (!url) return;
+    this.writeClipboard(url).then((ok) => {
+      this.paymentLinkNotice = ok
+        ? 'Payment link copied.'
+        : 'Copy failed. Please copy manually.';
+    });
+  }
+
+  openSmsShareGenerated(): void {
+    if (!this.createdReservation || !this.paymentLinkUrl) return;
+    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    const recipient = this.toSmsRecipient(this.createdReservation.phone);
+    const target = recipient ? `sms:${recipient}?&body=${encodeURIComponent(body)}` : `sms:?&body=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  openWhatsAppShareGenerated(): void {
+    if (!this.createdReservation || !this.paymentLinkUrl) return;
+    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    const recipient = this.toWhatsAppRecipient(this.createdReservation.phone);
+    const target = recipient
+      ? `https://wa.me/${recipient}?text=${encodeURIComponent(body)}`
+      : `https://wa.me/?text=${encodeURIComponent(body)}`;
+    window.open(target, '_blank');
+  }
+
+  shareGeneratedPaymentLink(): void {
+    if (!this.createdReservation || !this.paymentLinkUrl) return;
+    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator
+        .share({
+          text: body,
+          url: this.paymentLinkUrl,
+        })
+        .catch(() => {
+          this.copyGeneratedPaymentLink();
+        });
+      return;
+    }
+    this.copyGeneratedPaymentLink();
+  }
+
+  generatedLinkShareMessage(): string {
+    if (!this.createdReservation || !this.paymentLinkUrl) return '';
+    return this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+  }
+
+  reservationActionLabel(): string {
+    if (this.createdReservation) return 'Done';
+    if (this.isSquareMethod()) return 'Confirm & Generate Link';
+    return 'Confirm Reservation';
+  }
+
+  reservationActionDisabled(): boolean {
+    if (this.createdReservation) return this.loading || this.creatingPaymentLink;
+    return this.loading;
+  }
+
   filteredTables(): TableForEvent[] {
     const query = this.filterQuery.value.trim().toLowerCase();
-    const status = this.onlyAvailable ? 'AVAILABLE' : this.filterStatus.value;
+    const status = this.filterStatus.value;
     const section = this.filterSection.value;
     return this.tables.filter((t) => {
       const matchQuery = query ? t.id.toLowerCase().includes(query) : true;
@@ -542,12 +846,167 @@ export class ReservationsNew implements OnInit, OnDestroy {
     });
   }
 
-  toggleOnlyAvailable(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.onlyAvailable = checked;
-    if (checked && this.filterStatus.value !== 'AVAILABLE') {
-      this.filterStatus.setValue('AVAILABLE');
+  setFilterStatus(status: 'ALL' | 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED'): void {
+    this.filterStatus.setValue(status);
+    this.showFiltersPanel = false;
+    this.saveFilters();
+  }
+
+  setFilterSection(section: string): void {
+    this.filterSection.setValue(section);
+    this.showFiltersPanel = false;
+    this.saveFilters();
+  }
+
+  toggleFiltersPanel(): void {
+    this.showFiltersPanel = !this.showFiltersPanel;
+  }
+
+  clearFilters(): void {
+    this.filterStatus.setValue('ALL');
+    this.filterSection.setValue('ALL');
+    this.showFiltersPanel = false;
+    this.saveFilters();
+  }
+
+  hasActiveFilters(): boolean {
+    return this.filterStatus.value !== 'ALL' || this.filterSection.value !== 'ALL';
+  }
+
+  statusFilterLabel(): string {
+    const status = this.filterStatus.value;
+    if (status === 'ALL') return 'All';
+    if (status === 'AVAILABLE') return 'Available';
+    if (status === 'HOLD') return 'Hold';
+    if (status === 'RESERVED') return 'Reserved';
+    return 'Disabled';
+  }
+
+  sectionFilterLabel(): string {
+    return this.filterSection.value === 'ALL' ? 'All' : `Section ${this.filterSection.value}`;
+  }
+
+  filtersButtonLabel(): string {
+    const count = this.activeFiltersCount();
+    return count > 0 ? `Filters (${count})` : 'Filters';
+  }
+
+  activeFiltersCount(): number {
+    let count = 0;
+    if (this.filterStatus.value !== 'ALL') count += 1;
+    if (this.filterSection.value !== 'ALL') count += 1;
+    return count;
+  }
+
+  private saveFilters(): void {
+    try {
+      localStorage.setItem(
+        this.filterStorageKey,
+        JSON.stringify({
+          status: this.filterStatus.value,
+          section: this.filterSection.value,
+        })
+      );
+    } catch {
+      // Ignore local storage failures in restricted environments.
     }
+  }
+
+  private restoreSavedFilters(): void {
+    try {
+      const raw = localStorage.getItem(this.filterStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { status?: string; section?: string };
+      const validStatuses = ['ALL', 'AVAILABLE', 'HOLD', 'RESERVED', 'DISABLED'];
+      if (parsed.status && validStatuses.includes(parsed.status)) {
+        this.filterStatus.setValue(parsed.status as 'ALL' | 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED');
+      }
+      if (parsed.section) {
+        this.filterSection.setValue(parsed.section);
+      }
+    } catch {
+      // Ignore malformed saved filters.
+    }
+  }
+
+  private applyPaymentDefaultsForCurrentMethod(): void {
+    const method = this.form.controls.paymentMethod.value;
+    const amountDue = this.form.controls.amountDue.value;
+
+    if (method === 'cash') {
+      if (this.form.controls.paymentStatus.value === 'PENDING' || this.form.controls.paymentStatus.value === 'PARTIAL') {
+        this.paymentDeadlineEnabled = true;
+        this.setDefaultPaymentDeadline();
+      } else {
+        this.paymentDeadlineEnabled = false;
+      }
+      this.onPaymentStatusChange();
+      return;
+    }
+
+    this.form.controls.paymentStatus.setValue('PENDING', { emitEvent: false });
+    this.form.controls.depositAmount.setValue(0, { emitEvent: false });
+    this.allowCustomDeposit = false;
+    this.paymentDeadlineEnabled = true;
+    this.setDefaultPaymentDeadline();
+
+    if (!Number.isFinite(amountDue) || amountDue < 0) {
+      this.form.controls.amountDue.setValue(this.selectedTable?.price ?? 0, { emitEvent: false });
+    }
+  }
+
+  private buildShareMessage(ctx: CreatedReservationContext, url: string): string {
+    return `Hi ${ctx.customerName}, here is your table payment link for ${ctx.eventDate} table ${ctx.tableId}: ${url}`;
+  }
+
+  private toSmsRecipient(phone: string | undefined): string {
+    const raw = String(phone ?? '').trim();
+    if (!raw) return '';
+    return raw.replace(/[^\d+]/g, '');
+  }
+
+  private toWhatsAppRecipient(phone: string | undefined): string {
+    const raw = String(phone ?? '').trim();
+    if (!raw) return '';
+    return raw.replace(/\D/g, '');
+  }
+
+  private async writeClipboard(text: string): Promise<boolean> {
+    const value = String(text ?? '').trim();
+    if (!value) return false;
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private resetCreatedReservationState(): void {
+    this.createdReservation = null;
+    this.paymentLinkUrl = null;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+    this.creatingPaymentLink = false;
+  }
+
+  finishReservationFlow(): void {
+    this.resetCreatedReservationState();
+    this.selectedTable = null;
+    this.selectedTableId = null;
+    this.allowCustomDeposit = false;
+    this.paymentDeadlineEnabled = false;
+    this.showReservationModal = false;
+    this.form.reset({
+      customerName: '',
+      phone: '',
+      depositAmount: 0,
+      amountDue: 0,
+      paymentStatus: 'PAID',
+      paymentMethod: 'cash',
+    });
+    this.phoneCountry = 'US';
   }
 
   tableCounts(): { total: number; available: number; hold: number; reserved: number; disabled: number } {

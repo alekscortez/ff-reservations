@@ -1,193 +1,287 @@
-<section class="page">
-  <header class="page-header">
-    <h1>Events</h1>
-    <p>Manage event dates and deposits</p>
+<section class="flex w-full flex-col gap-4">
+  <header>
+    <h1 class="text-2xl font-semibold text-brand-900">Events</h1>
+    <p class="text-sm text-brand-600">Manage event dates and deposits</p>
   </header>
 
-  <section class="card">
-    <h2>Create Event</h2>
-    <form [formGroup]="form" (ngSubmit)="createEvent()">
-      <div class="row">
-        <label>
-          Event Name
-          <input type="text" formControlName="eventName" placeholder="Saturday Night" />
+  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
+    <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <label class="grid gap-1 text-xs text-brand-600">
+          Filter by Date
+          <input type="date" [formControl]="filterDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
         </label>
-        <label>
-          Event Date
-          <input type="date" formControlName="eventDate" />
+        <label class="grid gap-1 text-xs text-brand-600">
+          Filter by Name
+          <input type="text" [formControl]="filterName" placeholder="Saturday Night" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
         </label>
-        <label>
-          Min Deposit
-          <input type="number" formControlName="minDeposit" min="0" />
-        </label>
-      </div>
-      <div class="actions">
-        <button type="submit" [disabled]="form.invalid || loading">Create</button>
-        <button type="button" (click)="loadEvents()" [disabled]="loading">Refresh</button>
-      </div>
-    </form>
-    <p class="error" *ngIf="error">{{ error }}</p>
-    <p class="error" *ngIf="conflictDate">
-      An event already exists for {{ conflictDate }}.
-    </p>
-
-    <div class="subhead">Section Pricing</div>
-    <div class="section-grid">
-      <label *ngFor="let s of templateSections">
-        Section {{ s }}
-        <input type="number" min="0" [formControl]="getSectionControl(createSectionPricing, s)" />
-      </label>
-    </div>
-
-    <div class="subhead">Disable Tables (per event)</div>
-    <p class="hint">Selected = table disabled for this event.</p>
-    <div class="tables-grid" *ngFor="let s of templateSections">
-      <div class="section-label">Section {{ s }}</div>
-      <div class="tables-row">
         <button
           type="button"
-          class="table-chip"
-          *ngFor="let t of templateTablesBySection[s]"
-          [class.disabled]="isCreateDisabled(t.id)"
-          (click)="toggleCreateDisabled(t.id)"
+          class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700"
+          (click)="filterDate.setValue(''); filterName.setValue('')"
+          [disabled]="loading"
         >
-          {{ t.id }}
+          Clear
+        </button>
+      </div>
+
+      <div class="flex items-center justify-start lg:justify-end">
+        <button
+          type="button"
+          class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white"
+          (click)="openCreateModal()"
+        >
+          + Create Event
         </button>
       </div>
     </div>
 
-    <div class="subhead">Frequent Clients Not Coming (tables become available)</div>
-    <p class="hint">Selected = client NOT coming. Their table becomes available.</p>
-    <div class="clients-grid">
-      <button
-        type="button"
-        class="table-chip optout"
-        *ngFor="let c of frequentClients"
-        [class.disabled]="isCreateDisabledClient(c.clientId)"
-        (click)="toggleCreateDisabledClient(c.clientId)"
-      >
-        {{ c.name }} · {{ formatClientTables(c) }}
-      </button>
-    </div>
-  </section>
+    <div *ngIf="loading" class="mt-3 text-sm text-brand-500">Loading…</div>
+    <div *ngIf="!loading && filteredItems().length === 0" class="mt-3 text-sm text-brand-500">No events found.</div>
+    <p class="mt-3 text-sm text-danger-700" *ngIf="error && !showCreateModal">{{ error }}</p>
 
-  <section class="card">
-    <h2>All Events</h2>
-    <div class="filters">
-      <label>
-        Filter by Date
-        <input type="date" [formControl]="filterDate" />
-      </label>
-      <label>
-        Filter by Name
-        <input type="text" [formControl]="filterName" placeholder="Saturday Night" />
-      </label>
-      <button
-        type="button"
-        (click)="filterDate.setValue(''); filterName.setValue('')"
-        [disabled]="loading"
-      >
-        Clear
-      </button>
-    </div>
-    <div *ngIf="loading" class="muted">Loading…</div>
-    <div *ngIf="!loading && filteredItems().length === 0" class="muted">No events found.</div>
+    <section class="mt-4 rounded-2xl border border-brand-100 bg-brand-50/40 p-4 md:p-5" *ngIf="editingId">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h3 class="text-base font-semibold text-brand-900">Edit Event</h3>
+        <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">Close</button>
+      </div>
 
-    <table *ngIf="filteredItems().length > 0">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Name</th>
-          <th>Status</th>
-          <th>Min Deposit</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <ng-container *ngFor="let e of filteredItems()">
-          <tr *ngIf="editingId !== e.eventId">
-            <td>{{ e.eventDate }}</td>
-            <td>{{ e.eventName }}</td>
-            <td>{{ e.status }}</td>
-            <td>{{ e.minDeposit }}</td>
-            <td class="actions">
-              <button type="button" (click)="startEdit(e)">Edit</button>
-              <button type="button" class="danger" (click)="deleteEvent(e)">Delete</button>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Status</p>
+          <p class="text-sm font-semibold text-brand-900">{{ editForm.controls.status.value }}</p>
+        </article>
+        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Disabled Tables</p>
+          <p class="text-sm font-semibold text-brand-900">{{ editDisabled.size }}</p>
+        </article>
+        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Clients Not Coming</p>
+          <p class="text-sm font-semibold text-brand-900">{{ editDisabledClients.size }}</p>
+        </article>
+      </div>
+
+      <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="mt-4 grid gap-4">
+        <details class="rounded-xl border border-brand-100 bg-white p-3" open>
+          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Basics</summary>
+          <div class="mt-3 grid gap-3 md:grid-cols-3">
+            <label class="grid gap-1 text-xs text-brand-600">
+              Event Name
+              <input type="text" formControlName="eventName" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            </label>
+            <label class="grid gap-1 text-xs text-brand-600">
+              Event Date
+              <input type="date" formControlName="eventDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            </label>
+            <label class="grid gap-1 text-xs text-brand-600">
+              Status
+              <select formControlName="status" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm">
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+              </select>
+            </label>
+          </div>
+        </details>
+
+        <details class="rounded-xl border border-brand-100 bg-white p-3">
+          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Section Pricing</summary>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label class="grid gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
+              Section {{ s }}
+              <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            </label>
+          </div>
+        </details>
+
+        <details class="rounded-xl border border-brand-100 bg-white p-3">
+          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Disable Tables</summary>
+          <p class="mt-2 text-xs text-brand-500">Selected = table disabled for this event.</p>
+          <div class="mt-3 grid gap-3" *ngFor="let s of templateSections">
+            <div class="text-xs text-brand-500">Section {{ s }}</div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-full border border-brand-300 bg-white px-3 py-1 text-xs font-medium text-brand-900"
+                *ngFor="let t of templateTablesBySection[s]"
+                [ngStyle]="{
+                  'background-color': isEditDisabled(t.id) ? '#020617' : '#ffffff',
+                  color: isEditDisabled(t.id) ? '#ffffff' : '#0f172a',
+                  'border-color': isEditDisabled(t.id) ? '#020617' : '#cbd5e1'
+                }"
+                (click)="toggleEditDisabled(t.id)"
+              >
+                {{ t.id }}
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <details class="rounded-xl border border-brand-100 bg-white p-3">
+          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Frequent Clients Not Coming</summary>
+          <p class="mt-2 text-xs text-brand-500">Selected = client NOT coming. Their table becomes available.</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-amber-400 bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900"
+              *ngFor="let c of frequentClients"
+              [ngStyle]="{
+                'background-color': isEditDisabledClient(c.clientId) ? '#92400e' : '#fef3c7',
+                color: isEditDisabledClient(c.clientId) ? '#ffffff' : '#78350f',
+                'border-color': isEditDisabledClient(c.clientId) ? '#78350f' : '#f59e0b'
+              }"
+              (click)="toggleEditDisabledClient(c.clientId)"
+            >
+              {{ c.name }} · {{ formatClientTables(c) }}
+            </button>
+          </div>
+        </details>
+
+        <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
+
+        <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-5 md:px-5">
+          <div class="flex flex-wrap gap-2">
+            <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50" [disabled]="editForm.invalid || loading">Save</button>
+            <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <div class="mt-4 hidden overflow-x-auto lg:block" *ngIf="filteredItems().length > 0">
+      <table class="w-full border-collapse text-left text-sm text-brand-900">
+        <thead class="border-b border-brand-100 text-xs uppercase tracking-[0.16em] text-brand-500">
+          <tr>
+            <th class="py-3 pr-3">Date</th>
+            <th class="py-3 pr-3">Name</th>
+            <th class="py-3 pr-3">Status</th>
+            <th class="py-3 pr-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-b border-brand-100" *ngFor="let e of filteredItems()">
+            <td class="py-3 pr-3">{{ e.eventDate }}</td>
+            <td class="py-3 pr-3">{{ e.eventName }}</td>
+            <td class="py-3 pr-3">{{ e.status }}</td>
+            <td class="py-3 pr-3">
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(e)">Edit</button>
+                <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteEvent(e)">Delete</button>
+              </div>
             </td>
           </tr>
+        </tbody>
+      </table>
+    </div>
 
-          <tr *ngIf="editingId === e.eventId">
-            <td colspan="5">
-              <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="edit-form">
-                <div class="row">
-                  <label>
-                    Event Name
-                    <input type="text" formControlName="eventName" />
-                  </label>
-                  <label>
-                    Event Date
-                    <input type="date" formControlName="eventDate" />
-                  </label>
-                  <label>
-                    Min Deposit
-                    <input type="number" formControlName="minDeposit" min="0" />
-                  </label>
-                  <label>
-                    Status
-                    <select formControlName="status">
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="INACTIVE">INACTIVE</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="actions">
-                  <button type="submit" [disabled]="editForm.invalid || loading">Save</button>
-                  <button type="button" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
-                </div>
-              </form>
-
-              <div class="subhead">Section Pricing</div>
-              <div class="section-grid">
-                <label *ngFor="let s of templateSections">
-                  Section {{ s }}
-                  <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" />
-                </label>
-              </div>
-
-              <div class="subhead">Disable Tables (per event)</div>
-              <p class="hint">Selected = table disabled for this event.</p>
-              <div class="tables-grid" *ngFor="let s of templateSections">
-                <div class="section-label">Section {{ s }}</div>
-                <div class="tables-row">
-                  <button
-                    type="button"
-                    class="table-chip"
-                    *ngFor="let t of templateTablesBySection[s]"
-                    [class.disabled]="isEditDisabled(t.id)"
-                    (click)="toggleEditDisabled(t.id)"
-                  >
-                    {{ t.id }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="subhead">Frequent Clients Not Coming (tables become available)</div>
-              <p class="hint">Selected = client NOT coming. Their table becomes available.</p>
-              <div class="clients-grid">
-                <button
-                  type="button"
-                  class="table-chip optout"
-                  *ngFor="let c of frequentClients"
-                  [class.disabled]="isEditDisabledClient(c.clientId)"
-                  (click)="toggleEditDisabledClient(c.clientId)"
-                >
-                  {{ c.name }} · {{ formatClientTables(c) }}
-                </button>
-              </div>
-            </td>
-          </tr>
-        </ng-container>
-      </tbody>
-    </table>
+    <div class="mt-4 grid gap-3 lg:hidden" *ngIf="filteredItems().length > 0">
+      <article class="rounded-xl border border-brand-100 bg-white p-4 shadow-sm" *ngFor="let e of filteredItems()">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-lg font-semibold text-brand-900">{{ e.eventDate }}</div>
+          <div class="text-xs font-semibold uppercase tracking-[0.15em] text-brand-500">{{ e.status }}</div>
+        </div>
+        <div class="mt-2 text-sm text-brand-800">{{ e.eventName }}</div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(e)">Edit</button>
+          <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteEvent(e)">Delete</button>
+        </div>
+      </article>
+    </div>
   </section>
 </section>
+
+<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showCreateModal">
+  <div class="absolute inset-0 bg-black/40" (click)="closeCreateModal()"></div>
+  <section class="relative h-[92dvh] w-[94vw] max-w-3xl overflow-auto rounded-2xl bg-white p-4 md:h-auto md:p-6">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-lg font-semibold text-brand-900">Create Event</h3>
+      <button
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+        (click)="closeCreateModal()"
+        [disabled]="loading"
+        aria-label="Close create event modal"
+      >
+        ✕
+      </button>
+    </div>
+
+    <form class="mt-4 grid gap-4" [formGroup]="form" (ngSubmit)="createEvent()">
+      <details class="rounded-xl border border-brand-100 bg-white p-3" open>
+        <summary class="cursor-pointer text-sm font-semibold text-brand-900">Basics</summary>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="grid gap-1 text-xs text-brand-600">
+            Event Name
+            <input type="text" formControlName="eventName" placeholder="Saturday Night" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          </label>
+          <label class="grid gap-1 text-xs text-brand-600">
+            Event Date
+            <input type="date" formControlName="eventDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          </label>
+        </div>
+      </details>
+
+      <details class="rounded-xl border border-brand-100 bg-white p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-brand-900">Section Pricing</summary>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label class="grid gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
+            Section {{ s }}
+            <input type="number" min="0" [formControl]="getSectionControl(createSectionPricing, s)" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          </label>
+        </div>
+      </details>
+
+      <details class="rounded-xl border border-brand-100 bg-white p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-brand-900">Disable Tables</summary>
+        <p class="mt-2 text-xs text-brand-500">Selected = table disabled for this event.</p>
+        <div class="mt-3 grid gap-3" *ngFor="let s of templateSections">
+          <div class="text-xs text-brand-500">Section {{ s }}</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-brand-300 bg-white px-3 py-1 text-xs font-medium text-brand-900"
+              *ngFor="let t of templateTablesBySection[s]"
+              [ngStyle]="{
+                'background-color': isCreateDisabled(t.id) ? '#020617' : '#ffffff',
+                color: isCreateDisabled(t.id) ? '#ffffff' : '#0f172a',
+                'border-color': isCreateDisabled(t.id) ? '#020617' : '#cbd5e1'
+              }"
+              (click)="toggleCreateDisabled(t.id)"
+            >
+              {{ t.id }}
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details class="rounded-xl border border-brand-100 bg-white p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-brand-900">Frequent Clients Not Coming</summary>
+        <p class="mt-2 text-xs text-brand-500">Selected = client NOT coming. Their table becomes available.</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-full border border-amber-400 bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900"
+            *ngFor="let c of frequentClients"
+            [ngStyle]="{
+              'background-color': isCreateDisabledClient(c.clientId) ? '#92400e' : '#fef3c7',
+              color: isCreateDisabledClient(c.clientId) ? '#ffffff' : '#78350f',
+              'border-color': isCreateDisabledClient(c.clientId) ? '#78350f' : '#f59e0b'
+            }"
+            (click)="toggleCreateDisabledClient(c.clientId)"
+          >
+            {{ c.name }} · {{ formatClientTables(c) }}
+          </button>
+        </div>
+      </details>
+
+      <p class="text-sm text-danger-700" *ngIf="error && !conflictDate">{{ error }}</p>
+      <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
+
+      <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50" [disabled]="form.invalid || loading">Create</button>
+          <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="closeCreateModal()" [disabled]="loading">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </section>
+</div>

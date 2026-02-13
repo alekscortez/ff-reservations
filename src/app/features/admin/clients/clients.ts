@@ -4,10 +4,16 @@ import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { ClientsService } from '../../../core/http/clients.service';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
+import {
+  inferPhoneCountryFromE164,
+  normalizePhoneCountry,
+  normalizePhoneToE164,
+} from '../../../shared/phone';
+import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 
 @Component({
   selector: 'app-clients',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -20,6 +26,7 @@ export class Clients implements OnInit {
   error: string | null = null;
   filterQuery = new FormControl('', { nonNullable: true });
   editingPhone: string | null = null;
+  editPhoneCountry: 'US' | 'MX' = 'US';
 
   editForm = new FormGroup({
     name: new FormControl('', { nonNullable: true }),
@@ -60,6 +67,9 @@ export class Clients implements OnInit {
 
   startEdit(item: CrmClient): void {
     this.editingPhone = item.phone;
+    this.editPhoneCountry =
+      inferPhoneCountryFromE164(item.phone) ??
+      normalizePhoneCountry(item.phoneCountry ?? 'US');
     this.editForm.setValue({
       name: item.name ?? '',
       phone: item.phone ?? '',
@@ -72,11 +82,20 @@ export class Clients implements OnInit {
 
   saveEdit(): void {
     if (!this.editingPhone) return;
+    const phone = normalizePhoneToE164(
+      this.editForm.controls.phone.value.trim(),
+      normalizePhoneCountry(this.editPhoneCountry)
+    );
+    if (!phone) {
+      this.error = 'Phone must be a valid US or MX number.';
+      return;
+    }
     this.loading = true;
     this.error = null;
     const patch = {
       name: this.editForm.controls.name.value.trim(),
-      phone: this.editForm.controls.phone.value.trim(),
+      phone,
+      phoneCountry: this.editPhoneCountry,
     };
     this.clientsApi.update(this.editingPhone, patch).subscribe({
       next: (item) => {
@@ -101,6 +120,7 @@ export class Clients implements OnInit {
       .create({
         name: item.name ?? 'Unknown',
         phone: item.phone ?? '',
+        phoneCountry: item.phoneCountry,
         defaultTableIds: defaultTables
           .split(',')
           .map((v) => v.trim())

@@ -1,18 +1,22 @@
-### Get all events
+### Events API
+### Requires: {{baseUrl}} and {{accessToken}} in http-client env
+
+### List events
 GET {{baseUrl}}/events
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Create event
+### Create event (Admin)
+# Keep minDeposit in payload because backend still validates/stores it.
 POST {{baseUrl}}/events
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "eventName": "Saturday Night",
-  "eventDate": "2026-02-21",
-  "minDeposit": 20,
+  "eventDate": "2026-03-21",
+  "minDeposit": 0,
   "sectionPricing": {
     "A": 40,
     "B": 50,
@@ -26,14 +30,21 @@ Content-Type: application/json
 
 ###
 
-### Get event by date
-GET {{baseUrl}}/events/by-date/2026-02-21
+### Get active event by date
+GET {{baseUrl}}/events/by-date/2026-03-21
 Authorization: Bearer {{accessToken}}
 
 ###
 
-### Update event
-@eventId = 1770508830523-dd669096-3adf-4a8f-9942-d5ac35eebfb5
+### Get event by id
+# Copy eventId from list/create response
+@eventId = 1770859014427-0c47a5de-40f4-4189-96cb-570042451e76
+GET {{baseUrl}}/events/{{eventId}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Disable event (ACTIVE -> INACTIVE)
 PUT {{baseUrl}}/events/{{eventId}}
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -44,13 +55,26 @@ Content-Type: application/json
 
 ###
 
-### Reactivate event (will fail with 409 if another event exists for the date)
+### Re-activate event (INACTIVE -> ACTIVE)
+# Returns 409 if another ACTIVE event already holds same date lock.
 PUT {{baseUrl}}/events/{{eventId}}
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
   "status": "ACTIVE"
+}
+
+###
+
+### Update disabled tables / clients
+PUT {{baseUrl}}/events/{{eventId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "disabledTables": ["A01", "A15"],
+  "disabledClients": []
 }
 
 ###

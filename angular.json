@@ -65,6 +65,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "allowedHosts": ["fulgent-unserious-jarred.ngrok-free.dev"]
+          },
           "configurations": {
             "production": {
               "buildTarget": "ff-reservations:build:production"

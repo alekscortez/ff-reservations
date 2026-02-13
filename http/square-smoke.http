@@ -1,0 +1,40 @@
+### Square Wiring Smoke Test
+### Requires: {{baseUrl}} and {{accessToken}} in HTTP client environment
+
+### 0) API auth sanity
+GET {{baseUrl}}/events
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 1) Square reservation payment link smoke test
+### Requires:
+### - existing reservation id for a CONFIRMED reservation
+### - reservation should be created with E.164 phone (example: +19561231234)
+### Response includes square.audit.phonePrefill* fields.
+@reservationId = c11561d8-0162-47af-a0eb-f02fb89a5646
+POST {{baseUrl}}/reservations/{{reservationId}}/payment-link/square
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-14",
+  "amount": 40,
+  "note": "Square smoke payment link",
+  "idempotencyKey": "7d42da50-c323-4164-86d3-8e8042389774"
+}
+
+###
+
+### 2) Direct card charge smoke test (requires sourceId from Web Payments SDK tokenization)
+POST {{baseUrl}}/reservations/{{reservationId}}/payment/square
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-03-21",
+  "amount": 20,
+  "sourceId": "REPLACE_SOURCE_ID",
+  "note": "Square smoke payment",
+  "idempotencyKey": "REPLACE_UUID"
+}

@@ -9,10 +9,16 @@ import {
   PaymentStatus,
 } from '../../../shared/models/frequent-client.model';
 import { TableInfo } from '../../../shared/models/table.model';
+import {
+  inferPhoneCountryFromE164,
+  normalizePhoneCountry,
+  normalizePhoneToE164,
+} from '../../../shared/phone';
+import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 
 @Component({
   selector: 'app-frequent-clients',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })
@@ -39,6 +45,8 @@ export class FrequentClients implements OnInit {
   paymentStatuses: PaymentStatus[] = ['PENDING', 'PARTIAL', 'PAID', 'COURTESY'];
   defaultDeadlineTime = '00:00';
   defaultDeadlineTz = 'America/Chicago';
+  createPhoneCountry: 'US' | 'MX' = 'US';
+  editPhoneCountry: 'US' | 'MX' = 'US';
 
   form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -115,12 +123,21 @@ export class FrequentClients implements OnInit {
 
   create(): void {
     if (this.form.invalid) return;
+    const phone = normalizePhoneToE164(
+      this.form.controls.phone.value.trim(),
+      normalizePhoneCountry(this.createPhoneCountry)
+    );
+    if (!phone) {
+      this.error = 'Phone must be a valid US or MX number.';
+      return;
+    }
     this.loading = true;
     this.error = null;
     this.clientsApi
       .create({
         name: this.form.controls.name.value.trim(),
-        phone: this.form.controls.phone.value.trim(),
+        phone,
+        phoneCountry: this.createPhoneCountry,
         defaultTableIds: Array.from(this.createSelectedTables),
         tableSettings: this.serializeSettings(this.createSelectedTables, this.createTableSettings),
         notes: this.form.controls.notes.value.trim(),
@@ -129,6 +146,7 @@ export class FrequentClients implements OnInit {
         next: (item) => {
           this.items = [item, ...this.items];
           this.form.reset({ name: '', phone: '', defaultTableIds: '', notes: '' });
+          this.createPhoneCountry = 'US';
           this.createSelectedTables.clear();
           this.createTableSettings = {};
           this.showCreateForm = false;
@@ -197,6 +215,9 @@ export class FrequentClients implements OnInit {
       notes: item.notes ?? '',
       status: item.status ?? 'ACTIVE',
     });
+    this.editPhoneCountry =
+      inferPhoneCountryFromE164(item.phone) ??
+      normalizePhoneCountry(item.phoneCountry ?? 'US');
   }
 
   cancelEdit(): void {
@@ -206,6 +227,14 @@ export class FrequentClients implements OnInit {
   saveEdit(): void {
     if (!this.editingId) return;
     if (this.editForm.invalid) return;
+    const phone = normalizePhoneToE164(
+      this.editForm.controls.phone.value.trim(),
+      normalizePhoneCountry(this.editPhoneCountry)
+    );
+    if (!phone) {
+      this.error = 'Phone must be a valid US or MX number.';
+      return;
+    }
     this.loading = true;
     this.error = null;
     const settings = this.editSettings.controls.map((group) => {
@@ -222,7 +251,8 @@ export class FrequentClients implements OnInit {
     const tableIds = settings.map((s) => s.tableId);
     const patch = {
       name: this.editForm.controls.name.value.trim(),
-      phone: this.editForm.controls.phone.value.trim(),
+      phone,
+      phoneCountry: this.editPhoneCountry,
       defaultTableIds: tableIds,
       tableSettings: settings,
       notes: this.editForm.controls.notes.value.trim(),
@@ -346,13 +376,10 @@ export class FrequentClients implements OnInit {
         .map((v) => String(v).trim().toUpperCase())
         .filter(Boolean);
     }
-    if (typeof value === 'string') {
-      return value
-        .split(',')
-        .map((v) => v.trim().toUpperCase())
-        .filter(Boolean);
-    }
-    return [];
+    return value
+      .split(',')
+      .map((v) => v.trim().toUpperCase())
+      .filter(Boolean);
   }
 
   toNumber(value: unknown): number {

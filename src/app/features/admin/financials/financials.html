@@ -1,1 +1,270 @@
-<p>financials works!</p>
+<section class="flex w-full flex-col gap-4">
+  <header class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">Admin</p>
+        <h1 class="text-2xl font-semibold text-brand-900">Financials</h1>
+        <p class="text-sm text-brand-600">Collections, receivables, and event-level performance.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-200 text-brand-700"
+          (click)="refresh()"
+          [disabled]="loading"
+          title="Refresh report"
+          aria-label="Refresh report"
+        >
+          ↻
+        </button>
+        <button
+          type="button"
+          class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:opacity-50"
+          (click)="exportCsv()"
+          [disabled]="rows.length === 0 || loading"
+        >
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_180px_auto_auto] lg:items-end">
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        From Date
+        <input
+          type="date"
+          [formControl]="rangeFrom"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        To Date
+        <input
+          type="date"
+          [formControl]="rangeTo"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Event Status
+        <select
+          [formControl]="eventStatus"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        >
+          <option value="ALL">All</option>
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white"
+        (click)="applyFilters()"
+      >
+        Apply
+      </button>
+      <button
+        type="button"
+        class="h-11 rounded-lg border border-brand-200 px-4 text-sm font-semibold text-brand-700"
+        (click)="resetFilters()"
+      >
+        Reset
+      </button>
+    </div>
+
+    <div class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-700">
+      {{ filteredEvents.length }} event(s) in report range
+    </div>
+
+    <p class="mt-3 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+    <div *ngIf="warnings.length > 0" class="mt-3 rounded-lg border border-accent-200 bg-accent-50 px-3 py-2 text-sm text-accent-700">
+      <p class="font-semibold">Some events could not be loaded:</p>
+      <p *ngFor="let warning of warnings">• {{ warning }}</p>
+    </div>
+  </header>
+
+  <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <article class="rounded-xl border border-success-200 bg-success-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-success-700">Collected</p>
+      <p class="mt-2 text-2xl font-semibold text-success-700">{{ formatCurrency(overview.collected) }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-200 bg-brand-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-brand-700">Expected</p>
+      <p class="mt-2 text-2xl font-semibold text-brand-900">{{ formatCurrency(overview.expected) }}</p>
+    </article>
+    <article class="rounded-xl border border-accent-200 bg-accent-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-accent-700">Outstanding</p>
+      <p class="mt-2 text-2xl font-semibold text-accent-800">{{ formatCurrency(overview.outstanding) }}</p>
+    </article>
+    <article class="rounded-xl border border-danger-100 bg-danger-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-danger-700">Overdue</p>
+      <p class="mt-2 text-2xl font-semibold text-danger-700">{{ formatCurrency(overview.overdue) }}</p>
+    </article>
+    <article class="rounded-xl border border-accent-200 bg-accent-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-accent-700">Due Soon (24h)</p>
+      <p class="mt-2 text-2xl font-semibold text-accent-800">{{ formatCurrency(overview.dueSoon) }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-200 bg-white p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-brand-500">Courtesy Value</p>
+      <p class="mt-2 text-2xl font-semibold text-brand-800">{{ formatCurrency(overview.courtesyValue) }}</p>
+      <p class="mt-1 text-xs text-brand-500">Confirmed reservations: {{ overview.confirmed }} / {{ overview.reservations }}</p>
+    </article>
+  </section>
+
+  <section class="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+    <article class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold text-brand-900">Event Summary</h2>
+        <span class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ eventSummaries.length }} Events</span>
+      </div>
+
+      <div *ngIf="loading" class="mt-3 text-sm text-brand-500">Loading report…</div>
+      <div *ngIf="!loading && eventSummaries.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+        No events found for the selected filters.
+      </div>
+
+      <div class="mt-3 hidden overflow-x-auto lg:block" *ngIf="eventSummaries.length > 0">
+        <table class="w-full border-collapse text-left text-sm text-brand-900">
+          <thead class="border-b border-brand-100 text-xs uppercase tracking-[0.14em] text-brand-500">
+            <tr>
+              <th class="py-2 pr-2">Event</th>
+              <th class="py-2 pr-2">Status</th>
+              <th class="py-2 pr-2">Collected</th>
+              <th class="py-2 pr-2">Outstanding</th>
+              <th class="py-2 pr-2">Overdue</th>
+              <th class="py-2 pr-2">Confirmed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let summary of eventSummaries" class="border-b border-brand-100 last:border-0">
+              <td class="py-2 pr-2">
+                <p class="font-semibold">{{ summary.eventName }}</p>
+                <p class="text-xs text-brand-500">{{ formatEventDate(summary.eventDate) }}</p>
+              </td>
+              <td class="py-2 pr-2">
+                <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" [ngClass]="summary.status === 'ACTIVE' ? 'bg-success-100 text-success-700' : 'bg-brand-100 text-brand-700'">
+                  {{ summary.status }}
+                </span>
+              </td>
+              <td class="py-2 pr-2">{{ formatCurrency(summary.collected) }}</td>
+              <td class="py-2 pr-2">{{ formatCurrency(summary.outstanding) }}</td>
+              <td class="py-2 pr-2">{{ formatCurrency(summary.overdue) }}</td>
+              <td class="py-2 pr-2">{{ summary.confirmed }} / {{ summary.reservations }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-3 grid gap-2 lg:hidden" *ngIf="eventSummaries.length > 0">
+        <article class="rounded-xl border border-brand-100 p-3" *ngFor="let summary of eventSummaries">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="text-sm font-semibold text-brand-900">{{ summary.eventName }}</p>
+              <p class="text-xs text-brand-500">{{ formatEventDate(summary.eventDate) }}</p>
+            </div>
+            <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" [ngClass]="summary.status === 'ACTIVE' ? 'bg-success-100 text-success-700' : 'bg-brand-100 text-brand-700'">
+              {{ summary.status }}
+            </span>
+          </div>
+          <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div class="rounded-lg border border-brand-100 bg-brand-50 px-2 py-1">
+              <p class="text-[11px] text-brand-500">Collected</p>
+              <p class="font-semibold text-brand-900">{{ formatCurrency(summary.collected) }}</p>
+            </div>
+            <div class="rounded-lg border border-brand-100 bg-brand-50 px-2 py-1">
+              <p class="text-[11px] text-brand-500">Outstanding</p>
+              <p class="font-semibold text-brand-900">{{ formatCurrency(summary.outstanding) }}</p>
+            </div>
+          </div>
+        </article>
+      </div>
+    </article>
+
+    <article class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
+      <h2 class="text-lg font-semibold text-brand-900">Payments Breakdown</h2>
+      <div class="mt-3 grid gap-2">
+        <article class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2">
+          <p class="text-xs uppercase tracking-[0.12em] text-brand-500">Cash</p>
+          <p class="text-lg font-semibold text-brand-900">{{ formatCurrency(methodTotals.cash) }}</p>
+        </article>
+        <article class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2">
+          <p class="text-xs uppercase tracking-[0.12em] text-brand-500">CashApp</p>
+          <p class="text-lg font-semibold text-brand-900">{{ formatCurrency(methodTotals.cashapp) }}</p>
+        </article>
+        <article class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2">
+          <p class="text-xs uppercase tracking-[0.12em] text-brand-500">Square</p>
+          <p class="text-lg font-semibold text-brand-900">{{ formatCurrency(methodTotals.square) }}</p>
+        </article>
+      </div>
+      <a [routerLink]="['/staff/reservations']" class="mt-4 inline-flex text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        Open Reservations →
+      </a>
+    </article>
+  </section>
+
+  <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
+    <div class="flex items-center justify-between gap-2">
+      <h2 class="text-lg font-semibold text-brand-900">Receivables</h2>
+      <span class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ receivables.length }} Open</span>
+    </div>
+
+    <div *ngIf="loading" class="mt-3 text-sm text-brand-500">Loading report…</div>
+    <div *ngIf="!loading && receivables.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+      No receivables in this filter range.
+    </div>
+
+    <div class="mt-3 hidden overflow-x-auto lg:block" *ngIf="receivables.length > 0">
+      <table class="w-full border-collapse text-left text-sm text-brand-900">
+        <thead class="border-b border-brand-100 text-xs uppercase tracking-[0.14em] text-brand-500">
+          <tr>
+            <th class="py-2 pr-2">Event</th>
+            <th class="py-2 pr-2">Customer</th>
+            <th class="py-2 pr-2">Table</th>
+            <th class="py-2 pr-2">Status</th>
+            <th class="py-2 pr-2">Balance</th>
+            <th class="py-2 pr-2">Deadline</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of receivables" class="border-b border-brand-100 last:border-0">
+            <td class="py-2 pr-2">
+              <p class="font-semibold">{{ row.eventName }}</p>
+              <p class="text-xs text-brand-500">{{ formatEventDate(row.eventDate) }}</p>
+            </td>
+            <td class="py-2 pr-2">{{ row.customerName }}</td>
+            <td class="py-2 pr-2">{{ row.tableId }}</td>
+            <td class="py-2 pr-2">
+              <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" [ngClass]="receivableBadgeClass(row)">
+                {{ row.isOverdue ? 'OVERDUE' : row.isDueSoon ? 'DUE SOON' : (row.paymentStatus || 'OPEN') }}
+              </span>
+            </td>
+            <td class="py-2 pr-2">{{ formatCurrency(row.balance) }}</td>
+            <td class="py-2 pr-2">{{ formatDeadlineShort(row.paymentDeadlineAt, row.eventDate) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-3 grid gap-2 lg:hidden" *ngIf="receivables.length > 0">
+      <article class="rounded-xl border border-brand-100 p-3" *ngFor="let row of receivables">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <p class="text-sm font-semibold text-brand-900">{{ row.customerName }} · {{ row.tableId }}</p>
+            <p class="text-xs text-brand-500">{{ row.eventName }} · {{ formatEventDate(row.eventDate) }}</p>
+          </div>
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" [ngClass]="receivableBadgeClass(row)">
+            {{ row.isOverdue ? 'OVERDUE' : row.isDueSoon ? 'DUE SOON' : (row.paymentStatus || 'OPEN') }}
+          </span>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-sm">
+          <span class="text-brand-500">Balance</span>
+          <span class="font-semibold text-brand-900">{{ formatCurrency(row.balance) }}</span>
+        </div>
+        <div class="mt-1 flex items-center justify-between text-sm">
+          <span class="text-brand-500">Deadline</span>
+          <span class="font-medium text-brand-800">{{ formatDeadlineShort(row.paymentDeadlineAt, row.eventDate) }}</span>
+        </div>
+      </article>
+    </div>
+  </section>
+</section>

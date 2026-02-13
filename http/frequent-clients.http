@@ -1,0 +1,64 @@
+### Frequent Clients API
+
+### List frequent clients (Staff/Admin)
+GET {{baseUrl}}/frequent-clients
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Create frequent client (Admin)
+POST {{baseUrl}}/frequent-clients
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "VIP Client",
+  "phone": "+19569990000",
+  "defaultTableIds": ["A27", "A28"],
+  "tableSettings": [
+    {
+      "tableId": "A27",
+      "paymentStatus": "PENDING",
+      "amountDue": 100,
+      "amountPaid": 0,
+      "paymentDeadlineTime": "00:00",
+      "paymentDeadlineTz": "America/Chicago"
+    }
+  ],
+  "notes": "Prefers front section"
+}
+
+###
+
+### Get frequent client by id
+@frequentClientId = REPLACE_FREQUENT_CLIENT_ID
+GET {{baseUrl}}/frequent-clients/{{frequentClientId}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Update frequent client (Admin)
+PUT {{baseUrl}}/frequent-clients/{{frequentClientId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "status": "ACTIVE",
+  "defaultTableIds": ["A27"],
+  "tableSettings": [
+    {
+      "tableId": "A27",
+      "paymentStatus": "COURTESY",
+      "amountDue": 0,
+      "amountPaid": 0,
+      "paymentDeadlineTime": "00:00",
+      "paymentDeadlineTz": "America/Chicago"
+    }
+  ]
+}
+
+###
+
+### Delete frequent client (Admin)
+DELETE {{baseUrl}}/frequent-clients/{{frequentClientId}}
+Authorization: Bearer {{accessToken}}

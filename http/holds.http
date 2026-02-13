@@ -1,21 +1,25 @@
-### Holds endpoints (TODO: implement backend)
-# POST {{baseUrl}}/holds
-# Authorization: Bearer {{accessToken}}
-# Content-Type: application/json
-#
-# {
-#   "eventDate": "2026-02-21",
-#   "tableId": "A01",
-#   "customerName": "John Doe",
-#   "phone": "555-123-1234"
-# }
-#
-# ###
-#
-# DELETE {{baseUrl}}/holds/2026-02-21/A01
-# Authorization: Bearer {{accessToken}}
-#
-# ###
-#
-# GET {{baseUrl}}/holds?eventDate=2026-02-21
-# Authorization: Bearer {{accessToken}}
+### Holds API (Staff/Admin)
+
+### Create hold
+POST {{baseUrl}}/holds
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-14",
+  "tableId": "A09",
+  "customerName": "John Doe",
+  "phone": "+19561231234"
+}
+
+###
+
+### List holds for date
+GET {{baseUrl}}/holds?eventDate=2026-02-14
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Release hold
+DELETE {{baseUrl}}/holds/2026-03-21/A15
+Authorization: Bearer {{accessToken}}

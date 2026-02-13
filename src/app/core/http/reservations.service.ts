@@ -9,6 +9,7 @@ export interface CreateReservationPayload {
   holdId: string;
   customerName: string;
   phone: string;
+  phoneCountry?: 'US' | 'MX';
   depositAmount: number;
   amountDue?: number;
   paymentStatus?: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
@@ -23,6 +24,50 @@ export interface AddPaymentPayload {
   amount: number;
   method: PaymentMethod;
   note?: string;
+}
+
+export interface AddSquarePaymentPayload {
+  reservationId: string;
+  eventDate: string;
+  amount: number;
+  sourceId: string;
+  note?: string;
+  idempotencyKey?: string;
+}
+
+export interface CreateSquarePaymentLinkPayload {
+  reservationId: string;
+  eventDate: string;
+  amount?: number;
+  note?: string;
+  idempotencyKey?: string;
+}
+
+export interface CreateSquarePaymentLinkResponse {
+  reservation: {
+    reservationId: string;
+    eventDate: string;
+    tableId?: string | null;
+    paymentStatus?: string | null;
+    amountDue: number;
+    paid: number;
+    remainingAmount: number;
+    linkAmount: number;
+  };
+  square: {
+    env?: string | null;
+    idempotencyKey?: string | null;
+    paymentLinkId?: string | null;
+    version?: number | null;
+    url?: string | null;
+    orderId?: string | null;
+    audit?: {
+      phonePrefillAttempted?: boolean;
+      phonePrefillUsed?: boolean;
+      phonePrefillFallbackUsed?: boolean;
+      phonePrefillStatus?: string;
+    };
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -57,6 +102,39 @@ export class ReservationsService {
         amount: payload.amount,
         method: payload.method,
         note: payload.note ?? '',
+      }
+    );
+  }
+
+  addSquarePayment(payload: AddSquarePaymentPayload) {
+    return this.api.post<{
+      item: ReservationItem;
+      square: {
+        paymentId: string;
+        status: string;
+        receiptUrl?: string | null;
+        orderId?: string | null;
+        sourceType?: string | null;
+        idempotencyKey?: string | null;
+        env?: string | null;
+      };
+    }>(`/reservations/${payload.reservationId}/payment/square`, {
+      eventDate: payload.eventDate,
+      amount: payload.amount,
+      sourceId: payload.sourceId,
+      note: payload.note ?? '',
+      idempotencyKey: payload.idempotencyKey ?? '',
+    });
+  }
+
+  createSquarePaymentLink(payload: CreateSquarePaymentLinkPayload) {
+    return this.api.post<CreateSquarePaymentLinkResponse>(
+      `/reservations/${payload.reservationId}/payment-link/square`,
+      {
+      eventDate: payload.eventDate,
+      amount: payload.amount,
+      note: payload.note ?? '',
+      idempotencyKey: payload.idempotencyKey ?? '',
       }
     );
   }

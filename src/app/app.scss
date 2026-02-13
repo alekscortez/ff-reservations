@@ -1,5 +1,5 @@
 .app-main {
-  padding: 0;
+  padding: 56px 0 0;
   min-height: calc(100dvh - 64px);
   width: 100%;
   display: flex;
@@ -13,5 +13,11 @@
 @media (max-width: 900px) {
   .app-main {
     min-height: calc(100dvh - 56px);
+  }
+}
+
+@media (min-width: 901px) {
+  .app-main {
+    padding-top: 64px;
   }
 }

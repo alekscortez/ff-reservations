@@ -1,0 +1,107 @@
+### Post-deploy Smoke Debug (run top-to-bottom)
+
+### 0) Base route sanity
+GET {{baseUrl}}/events
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 1) Find active event for date
+@eventDate = 2026-02-14
+GET {{baseUrl}}/events/by-date/{{eventDate}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 2) Pull effective table states
+GET {{baseUrl}}/tables/for-event/{{eventDate}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 3) Create hold
+@tableId = E114
+POST {{baseUrl}}/holds
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "tableId": "{{tableId}}",
+  "customerName": "Smoke Test",
+  "phone": "+19561112222"
+}
+
+###
+
+### 4) List holds
+GET {{baseUrl}}/holds?eventDate={{eventDate}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 5) Convert hold -> reservation
+# Replace REPLACE_HOLD_ID from step 3 response
+@holdId = 4ff46f1f-edb3-47f8-a6d0-62727fcb0043
+POST {{baseUrl}}/reservations
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "tableId": "{{tableId}}",
+  "holdId": "{{holdId}}",
+  "customerName": "Smoke Test",
+  "phone": "+19561112222",
+  "depositAmount": 0,
+  "paymentStatus": "PENDING",
+  "paymentDeadlineAt": "2026-03-22T00:00:00",
+  "paymentDeadlineTz": "America/Chicago"
+}
+
+###
+
+### 6) List reservations
+GET {{baseUrl}}/reservations?eventDate={{eventDate}}
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 7) Add payment
+# Replace REPLACE_RESERVATION_ID from step 5 response
+@reservationId = e8c47de7-c50d-48ad-b64b-e5a6efc173cb
+PUT {{baseUrl}}/reservations/{{reservationId}}/payment
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "amount": 40,
+  "method": "cash",
+  "note": "Smoke test partial"
+}
+
+###
+
+### 8) Cancel reservation
+PUT {{baseUrl}}/reservations/{{reservationId}}/cancel
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "tableId": "{{tableId}}",
+  "cancelReason": "Smoke test cleanup"
+}
+
+###
+
+### 9) Frequent clients list
+GET {{baseUrl}}/frequent-clients
+Authorization: Bearer {{accessToken}}
+
+###
+
+### 10) CRM list
+GET {{baseUrl}}/clients
+Authorization: Bearer {{accessToken}}

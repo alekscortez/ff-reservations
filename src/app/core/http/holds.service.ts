@@ -18,6 +18,7 @@ export class HoldsService {
     tableId: string;
     customerName?: string;
     phone?: string;
+    phoneCountry?: 'US' | 'MX';
   }) {
     return this.api.post<{ item: any }>('/holds', payload).pipe(map((res) => res.item));
   }
