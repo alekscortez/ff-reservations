@@ -1,12 +1,38 @@
-### Check-in API
-### Note: current Lambda may return 404 until backend route is implemented.
+### Check-In API (Phase 1)
+@reservationId = e47ab7b2-90be-4a30-a33f-68f35c6ee476
+@eventDate = 2026-02-14
+### 1) Get active pass (read-only; does NOT issue a new pass)
+GET {{baseUrl}}/reservations/{{reservationId}}/check-in-pass?eventDate={{eventDate}}
+Authorization: Bearer {{accessToken}}
 
-### Attempt check-in
-POST {{baseUrl}}/check-in
+### 2) Issue first pass (or reuse current active pass if already issued)
+POST {{baseUrl}}/reservations/{{reservationId}}/check-in-pass
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "eventDate": "2026-03-21",
-  "reservationId": "REPLACE_RESERVATION_ID"
+  "eventDate": "{{eventDate}}",
+  "reissue": false
+}
+
+### 3) Force reissue pass (revokes previous active pass)
+POST {{baseUrl}}/reservations/{{reservationId}}/check-in-pass
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "reissue": true
+}
+
+### 4) Verify/consume pass token (one-time use)
+### Can send raw token, qr payload, or full URL containing ?token=
+
+POST {{baseUrl}}/check-in/verify
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "token": "a574bb4205ae4c40aee1a7eeb2751609d0b81094a5b343fd8e776da586b3861e",
+  "scannerDevice": "door-ipad-1"
 }

@@ -31,10 +31,12 @@ import { handleEventsAndTablesRoute } from "./lib/routes-events.mjs";
 import { handleReservationsAndHoldsRoute } from "./lib/routes-reservations-holds.mjs";
 import { handleClientsRoute } from "./lib/routes-clients.mjs";
 import { handleSquareWebhookRoute } from "./lib/routes-square-webhooks.mjs";
+import { handleCheckInRoute } from "./lib/routes-checkin.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
+import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -48,6 +50,9 @@ const SQUARE_ENV = process.env.SQUARE_ENV;
 const SQUARE_LOCATION_ID = process.env.SQUARE_LOCATION_ID;
 const SQUARE_API_VERSION = process.env.SQUARE_API_VERSION;
 const SQUARE_WEBHOOK_NOTIFICATION_URL = process.env.SQUARE_WEBHOOK_NOTIFICATION_URL;
+const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
+const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
+const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
@@ -209,6 +214,22 @@ const eventsService = createEventsService({
   createFrequentReservationsForEvent: clientsService.createFrequentReservationsForEvent,
 });
 
+const checkInPassesService = createCheckInPassesService({
+  ddb,
+  tableNames: {
+    CHECKIN_PASSES_TABLE,
+  },
+  env: {
+    CHECKIN_PASS_BASE_URL,
+    CHECKIN_PASS_TTL_DAYS,
+  },
+  requiredEnv,
+  httpError,
+  nowEpoch,
+  randomUUID,
+  addDaysToIsoDate,
+});
+
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
@@ -227,6 +248,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   getEventByDate: eventsService.getEventByDate,
   getDisabledTablesFromFrequent: clientsService.getDisabledTablesFromFrequent,
   getTablePriceForEvent,
+  ensureCheckInPassForReservation: checkInPassesService.issuePassForReservation,
 });
 
 const squarePaymentsService = createSquarePaymentsService({
@@ -352,6 +374,23 @@ export const handler = async (event) => {
       cancelReservation: reservationsHoldsService.cancelReservation,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;
+
+    const checkInRouteResponse = await handleCheckInRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      getBody,
+      getUserLabel,
+      requireStaffOrAdmin,
+      getReservationById: reservationsHoldsService.getReservationById,
+      issueCheckInPassForReservation: checkInPassesService.issuePassForReservation,
+      getActiveCheckInPassForReservation:
+        checkInPassesService.getActivePassForReservation,
+      verifyAndConsumeCheckInPass: checkInPassesService.verifyAndConsumePass,
+    });
+    if (checkInRouteResponse) return checkInRouteResponse;
 
     return json(404, { message: "Route not found", method, path }, cors);
   } catch (err) {

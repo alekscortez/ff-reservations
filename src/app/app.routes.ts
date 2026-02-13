@@ -31,6 +31,13 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/public/login/login').then((m) => m.Login),
   },
+  {
+    path: 'check-in/pass',
+    loadComponent: () =>
+      import('./features/public/check-in-pass/check-in-pass').then(
+        (m) => m.CheckInPassPage
+      ),
+  },
 
   // ✅ Staff (must be logged in)
   {
