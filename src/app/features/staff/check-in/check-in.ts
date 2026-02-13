@@ -198,18 +198,9 @@ export class CheckIn implements OnDestroy {
   copyPassLink(): void {
     const url = String(this.currentPass?.url ?? '').trim();
     if (!url) return;
-    if (!navigator?.clipboard?.writeText) {
-      this.notice = 'Clipboard is not available on this device.';
-      return;
-    }
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        this.notice = 'Pass link copied.';
-      })
-      .catch(() => {
-        this.notice = 'Failed to copy. Copy manually from the field.';
-      });
+    this.copyText(url).then((ok) => {
+      this.notice = ok ? 'Pass link copied.' : 'Failed to copy. Copy manually from the field.';
+    });
   }
 
   openSms(): void {
@@ -287,5 +278,38 @@ export class CheckIn implements OnDestroy {
       name.includes('format') ||
       message.includes('not found')
     );
+  }
+
+  private async copyText(value: string): Promise<boolean> {
+    const text = String(value ?? '').trim();
+    if (!text) return false;
+
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall through to legacy copy.
+      }
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
   }
 }
