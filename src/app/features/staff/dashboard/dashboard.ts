@@ -7,6 +7,7 @@ import { EventsService } from '../../../core/http/events.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
 import {
   CreateSquarePaymentLinkResponse,
+  ReservationHistoryItem,
   ReservationsService,
 } from '../../../core/http/reservations.service';
 import { TablesService } from '../../../core/http/tables.service';
@@ -14,6 +15,7 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { EventItem } from '../../../shared/models/event.model';
 import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
 import { TableForEvent } from '../../../shared/models/table.model';
+import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
 
 interface TableKpis {
   total: number;
@@ -64,9 +66,18 @@ interface CheckInPassState {
   expiresAt: number | null;
 }
 
+interface ReservationHistoryViewItem {
+  eventId: string;
+  eventType: string;
+  atMs: number;
+  actor: string;
+  source: string | null;
+  details: Record<string, unknown> | null;
+}
+
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule, RouterLink, ReactiveFormsModule, PhoneDisplayPipe],
+  imports: [CommonModule, RouterLink, ReactiveFormsModule, PhoneDisplayPipe, PaymentMethodLabelPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -107,6 +118,9 @@ export class Dashboard implements OnInit, OnDestroy {
   checkInPassLoadingId: string | null = null;
   checkInPassByReservationId: Record<string, GeneratedCheckInPass> = {};
   checkInPassStateByReservationId: Record<string, CheckInPassState> = {};
+  historyLoadingId: string | null = null;
+  historyError: string | null = null;
+  historyByReservationId: Record<string, ReservationHistoryViewItem[]> = {};
   detailItem: ReservationItem | null = null;
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
@@ -423,6 +437,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.checkInPassError = null;
     this.checkInPassNotice = null;
     this.loadCheckInPass(item);
+    this.loadHistory(item);
   }
 
   closeDetails(): void {
@@ -432,6 +447,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentLinkNotice = null;
     this.checkInPassError = null;
     this.checkInPassNotice = null;
+    this.historyError = null;
   }
 
   openUrgentPayment(item: UrgentPaymentItem): void {
@@ -482,6 +498,29 @@ export class Dashboard implements OnInit, OnDestroy {
   getCheckInPassState(item: ReservationItem | null | undefined): CheckInPassState | null {
     if (!item?.reservationId) return null;
     return this.checkInPassStateByReservationId[item.reservationId] ?? null;
+  }
+
+  getHistory(item: ReservationItem | null | undefined): ReservationHistoryViewItem[] {
+    if (!item?.reservationId) return [];
+    return this.historyByReservationId[item.reservationId] ?? [];
+  }
+
+  loadHistory(item: ReservationItem): void {
+    if (this.historyLoadingId === item.reservationId) return;
+    this.historyLoadingId = item.reservationId;
+    this.historyError = null;
+    this.reservationsApi.listHistory(item.reservationId, item.eventDate).subscribe({
+      next: (items) => {
+        this.historyByReservationId[item.reservationId] = (items ?? [])
+          .map((entry) => this.mapHistoryItem(entry))
+          .filter((entry): entry is ReservationHistoryViewItem => entry !== null);
+        this.historyLoadingId = null;
+      },
+      error: (err) => {
+        this.historyError = err?.error?.message || err?.message || 'Failed to load history';
+        this.historyLoadingId = null;
+      },
+    });
   }
 
   loadCheckInPass(item: ReservationItem): void {
@@ -784,6 +823,52 @@ export class Dashboard implements OnInit, OnDestroy {
     return 'border-brand-100 hover:border-brand-300 hover:bg-brand-50/60';
   }
 
+  activityTypeLabel(activity: ActivityItem): string {
+    return String(activity.type ?? '')
+      .toUpperCase()
+      .replace(/_/g, ' ');
+  }
+
+  historyEventLabel(eventType: string): string {
+    const normalized = String(eventType ?? '').trim().toUpperCase();
+    if (normalized === 'RESERVATION_CREATED') return 'Reservation Created';
+    if (normalized === 'PAYMENT_RECORDED') return 'Payment Recorded';
+    if (normalized === 'RESERVATION_CANCELLED') return 'Reservation Cancelled';
+    if (normalized === 'CHECKIN_PASS_ISSUED') return 'Check-In Pass Issued';
+    if (normalized === 'CHECKIN_PASS_REISSUED') return 'Check-In Pass Reissued';
+    if (normalized === 'CHECKED_IN') return 'Checked In';
+    return normalized.replace(/_/g, ' ');
+  }
+
+  historyEventBadgeClass(eventType: string): string {
+    const normalized = String(eventType ?? '').trim().toUpperCase();
+    if (normalized === 'CHECKED_IN') return 'bg-success-100 text-success-700 border-success-200';
+    if (normalized === 'PAYMENT_RECORDED') return 'bg-brand-100 text-brand-700 border-brand-200';
+    if (normalized === 'RESERVATION_CANCELLED') return 'bg-danger-100 text-danger-700 border-danger-200';
+    return 'bg-brand-50 text-brand-700 border-brand-200';
+  }
+
+  historySummary(item: ReservationHistoryViewItem): string {
+    const details = item.details ?? {};
+    const amount = this.historyNumber(details['amount']);
+    const method = this.historyString(details['method']);
+    const reason = this.historyString(details['reason']);
+    const paymentStatus = this.historyString(details['paymentStatus']);
+
+    if (item.eventType === 'PAYMENT_RECORDED' && amount !== null) {
+      const methodText = method ? ` · ${this.paymentMethodLabel(method)}` : '';
+      const statusText = paymentStatus ? ` · ${paymentStatus}` : '';
+      return `$${amount.toFixed(2)}${methodText}${statusText}`;
+    }
+    if (item.eventType === 'RESERVATION_CANCELLED' && reason) {
+      return reason;
+    }
+    if (item.eventType === 'RESERVATION_CREATED' && paymentStatus) {
+      return `Status ${paymentStatus}`;
+    }
+    return '';
+  }
+
   private isNextDay(deadlineAt: string, eventDate: string): boolean {
     const d = deadlineAt.match(/^(\d{4})-(\d{2})-(\d{2})T/);
     const e = eventDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -845,6 +930,49 @@ export class Dashboard implements OnInit, OnDestroy {
       revokedBy: String(pass?.revokedBy ?? '').trim() || null,
       expiresAt: Number(pass?.expiresAt ?? 0) || null,
     };
+  }
+
+  private mapHistoryItem(entry: ReservationHistoryItem | null | undefined): ReservationHistoryViewItem | null {
+    const eventId = String(entry?.eventId ?? '').trim();
+    const eventType = String(entry?.eventType ?? '').trim().toUpperCase();
+    const at = Number(entry?.at ?? 0);
+    if (!eventId || !eventType || !Number.isFinite(at) || at <= 0) return null;
+    const detailsRaw = entry?.details;
+    const details =
+      detailsRaw && typeof detailsRaw === 'object' && !Array.isArray(detailsRaw)
+        ? (detailsRaw as Record<string, unknown>)
+        : null;
+    return {
+      eventId,
+      eventType,
+      atMs: at * 1000,
+      actor: String(entry?.actor ?? '').trim() || 'system',
+      source: String(entry?.source ?? '').trim() || null,
+      details,
+    };
+  }
+
+  private historyString(value: unknown): string | null {
+    const text = String(value ?? '').trim();
+    return text ? text : null;
+  }
+
+  private historyNumber(value: unknown): number | null {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private paymentMethodLabel(value: string): string {
+    const normalized = String(value ?? '').trim().toLowerCase();
+    if (normalized === 'cash') return 'Cash';
+    if (normalized === 'cashapp') return 'Cash App';
+    if (normalized === 'square') return 'Square';
+    return normalized
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 
   private toSmsRecipient(phone: string | undefined): string {

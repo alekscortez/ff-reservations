@@ -366,6 +366,7 @@ export const handler = async (event) => {
       createReservation: reservationsHoldsService.createReservation,
       upsertCrmClient: clientsService.upsertCrmClient,
       listReservations: reservationsHoldsService.listReservations,
+      listReservationHistory: reservationsHoldsService.listReservationHistory,
       getReservationById: reservationsHoldsService.getReservationById,
       releaseOverdueReservationsForEventDate:
         reservationsHoldsService.releaseOverdueReservationsForEventDate,

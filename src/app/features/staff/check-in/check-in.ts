@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
-import { CheckInPass, CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
+import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
 
 @Component({
   selector: 'app-check-in',
@@ -14,18 +14,11 @@ export class CheckIn implements OnDestroy {
   private api = inject(CheckInService);
   @ViewChild('scannerVideo') scannerVideoRef?: ElementRef<HTMLVideoElement>;
 
-  eventDate = '';
-  reservationId = '';
-  scannerInput = '';
-  scannerDevice = 'staff-web';
-
-  loadingPass = false;
   loadingVerify = false;
   error: string | null = null;
   notice: string | null = null;
   scannerError: string | null = null;
 
-  currentPass: CheckInPass | null = null;
   verifyResult: CheckInVerifyResult | null = null;
 
   scannerSupported = this.hasScannerSupport();
@@ -42,65 +35,17 @@ export class CheckIn implements OnDestroy {
     this.stopScanner();
   }
 
-  fetchOrCreatePass(): void {
-    const eventDate = this.eventDate.trim();
-    const reservationId = this.reservationId.trim();
-    if (!this.isIsoDate(eventDate) || !reservationId) {
-      this.error = 'Event date and reservation ID are required.';
-      return;
-    }
-    this.loadingPass = true;
-    this.error = null;
-    this.notice = null;
-    this.api.getReservationPass(reservationId, eventDate).subscribe({
-      next: (res) => {
-        this.currentPass = res?.pass ?? null;
-        this.notice = this.currentPass
-          ? 'Active check-in pass is ready.'
-          : 'No active pass found.';
-        this.loadingPass = false;
-      },
-      error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to fetch check-in pass.';
-        this.loadingPass = false;
-      },
-    });
-  }
-
-  reissuePass(): void {
-    const eventDate = this.eventDate.trim();
-    const reservationId = this.reservationId.trim();
-    if (!this.isIsoDate(eventDate) || !reservationId) {
-      this.error = 'Event date and reservation ID are required.';
-      return;
-    }
-    this.loadingPass = true;
-    this.error = null;
-    this.notice = null;
-    this.api.issueReservationPass(reservationId, eventDate, true).subscribe({
-      next: (res) => {
-        this.currentPass = res?.pass ?? null;
-        this.notice = 'Pass reissued. Previous pass is now invalid.';
-        this.loadingPass = false;
-      },
-      error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to reissue pass.';
-        this.loadingPass = false;
-      },
-    });
-  }
-
-  verify(): void {
-    const parsedToken = this.extractToken(this.scannerInput);
+  private verifyToken(rawInput: string): void {
+    const parsedToken = this.extractToken(rawInput);
     if (!parsedToken) {
-      this.error = 'Paste or scan a token / pass URL first.';
+      this.error = 'No token detected. Try scanning again.';
       return;
     }
     this.loadingVerify = true;
     this.error = null;
     this.notice = null;
     this.verifyResult = null;
-    this.api.verifyToken(parsedToken, this.scannerDevice.trim() || 'staff-web').subscribe({
+    this.api.verifyToken(parsedToken, 'staff-web').subscribe({
       next: (result) => {
         this.verifyResult = result ?? null;
         this.notice = this.verifyResult?.ok ? 'Check-in accepted.' : null;
@@ -195,28 +140,6 @@ export class CheckIn implements OnDestroy {
     }
   }
 
-  copyPassLink(): void {
-    const url = String(this.currentPass?.url ?? '').trim();
-    if (!url) return;
-    this.copyText(url).then((ok) => {
-      this.notice = ok ? 'Pass link copied.' : 'Failed to copy. Copy manually from the field.';
-    });
-  }
-
-  openSms(): void {
-    const link = String(this.currentPass?.url ?? '').trim();
-    if (!link) return;
-    const body = encodeURIComponent(`Your FF check-in pass: ${link}`);
-    window.open(`sms:?&body=${body}`, '_blank');
-  }
-
-  openWhatsApp(): void {
-    const link = String(this.currentPass?.url ?? '').trim();
-    if (!link) return;
-    const body = encodeURIComponent(`Your FF check-in pass: ${link}`);
-    window.open(`https://wa.me/?text=${body}`, '_blank');
-  }
-
   resultBadgeClass(): string {
     const code = String(this.verifyResult?.code ?? '').toUpperCase();
     if (code === 'CHECKED_IN') return 'bg-success-100 text-success-800 border-success-300';
@@ -233,8 +156,7 @@ export class CheckIn implements OnDestroy {
     }
     this.lastScannedToken = parsedToken;
     this.lastScannedAt = now;
-    this.scannerInput = raw;
-    this.verify();
+    this.verifyToken(parsedToken);
   }
 
   private extractToken(rawInput: string): string {
@@ -261,10 +183,6 @@ export class CheckIn implements OnDestroy {
     }
   }
 
-  private isIsoDate(value: string): boolean {
-    return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? '').trim());
-  }
-
   private hasScannerSupport(): boolean {
     return Boolean(globalThis?.navigator?.mediaDevices?.getUserMedia);
   }
@@ -280,36 +198,4 @@ export class CheckIn implements OnDestroy {
     );
   }
 
-  private async copyText(value: string): Promise<boolean> {
-    const text = String(value ?? '').trim();
-    if (!text) return false;
-
-    if (navigator?.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text);
-        return true;
-      } catch {
-        // Fall through to legacy copy.
-      }
-    }
-
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.setAttribute('readonly', 'true');
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      textarea.style.pointerEvents = 'none';
-      textarea.style.left = '-9999px';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      textarea.setSelectionRange(0, textarea.value.length);
-      const copied = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      return copied;
-    } catch {
-      return false;
-    }
-  }
 }

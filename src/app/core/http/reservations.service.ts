@@ -70,6 +70,19 @@ export interface CreateSquarePaymentLinkResponse {
   };
 }
 
+export interface ReservationHistoryItem {
+  eventId?: string | null;
+  eventType?: string | null;
+  reservationId?: string | null;
+  eventDate?: string | null;
+  tableId?: string | null;
+  customerName?: string | null;
+  actor?: string | null;
+  source?: string | null;
+  at?: number | null;
+  details?: Record<string, unknown> | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ReservationsService {
   private api = inject(ApiClient);
@@ -137,5 +150,11 @@ export class ReservationsService {
       idempotencyKey: payload.idempotencyKey ?? '',
       }
     );
+  }
+
+  listHistory(reservationId: string, eventDate: string) {
+    return this.api
+      .get<{ items: ReservationHistoryItem[] }>(`/reservations/${reservationId}/history`, { eventDate })
+      .pipe(map((res) => res.items ?? []));
   }
 }
