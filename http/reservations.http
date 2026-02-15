@@ -10,8 +10,8 @@ Content-Type: application/json
 
 {
   "eventDate": "2026-02-14",
-  "tableId": "A09",
-  "holdId": "cc9d17ff-b1a0-4f58-b49d-413e1ce8be55",
+  "tableId": "C108",
+  "holdId": "d9dfa735-3be2-40c8-8fbd-e5224d5d1998",
   "customerName": "John Doe",
   "phone": "+19561231234",
   "depositAmount": 0,
@@ -30,7 +30,7 @@ Authorization: Bearer {{accessToken}}
 
 ### Add payment to reservation
 # Replace reservationId with returned item.reservationId from create call
-@reservationId = e47ab7b2-90be-4a30-a33f-68f35c6ee476
+@reservationId = 69f8985f-589f-46f0-a218-3434c157c2a2
 PUT {{baseUrl}}/reservations/{{reservationId}}/payment
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -68,9 +68,24 @@ Content-Type: application/json
 
 {
   "eventDate": "2026-02-14",
-  "amount": 250,
+  "amount": 70,
   "note": "Table hold payment link",
   "idempotencyKey": "c57cd611-e4f5-4f7c-b216-b5a5b131cdb5"
+}
+
+###
+
+### Create Square payment link and send via backend SMS (Phase 1)
+### Reservation phone must be valid E.164 (example: +19561231234).
+POST {{baseUrl}}/reservations/{{reservationId}}/payment-link/square/sms
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-14",
+  "amount": 70,
+  "note": "Table payment link via SMS",
+  "idempotencyKey": "3a937807-febb-418d-a86b-41a677d94635"
 }
 
 ###

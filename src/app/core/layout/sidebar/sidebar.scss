@@ -15,3 +15,11 @@
 :host-context(.mobile-nav-open) .sidebar-backdrop {
   display: block;
 }
+
+:host-context(.reservations-modal-open) .sidebar {
+  pointer-events: none;
+}
+
+:host-context(.reservations-new-modal-open) .sidebar {
+  pointer-events: none;
+}

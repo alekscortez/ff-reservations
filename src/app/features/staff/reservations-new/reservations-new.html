@@ -53,7 +53,7 @@
     </div>
   </section>
 
-  <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showPastModal">
+  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showPastModal">
     <div class="absolute inset-0 bg-black/50" (click)="showPastModal = false"></div>
     <div class="relative w-[92vw] max-w-2xl rounded-2xl bg-white p-4 md:p-6">
       <div class="flex items-center justify-between gap-4">
@@ -103,7 +103,8 @@
         <span class="text-sm text-danger-700" *ngIf="error && !showReservationModal">{{ error }}</span>
         <span class="text-sm text-brand-500" *ngIf="!loading && !error">
           Total {{ tableCounts().total }} · Available {{ tableCounts().available }} · Hold
-          {{ tableCounts().hold }} · Reserved {{ tableCounts().reserved }} · Disabled
+          {{ tableCounts().hold }} · Pending payment {{ tableCounts().pendingPayment }} · Reserved
+          {{ tableCounts().reserved }} · Disabled
           {{ tableCounts().disabled }}
         </span>
       </div>
@@ -187,6 +188,14 @@
             <button
               type="button"
               class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+              (click)="setFilterStatus('PENDING_PAYMENT')"
+            >
+              Pending Payment
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
               [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
               (click)="setFilterStatus('RESERVED')"
             >
@@ -244,6 +253,7 @@
         [ngClass]="{
           'border-brand-900': selectedTable?.id === t.id,
           'border-accent-400 bg-accent-50': t.status === 'HOLD',
+          'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
           'border-danger-400 bg-danger-50': t.status === 'RESERVED',
           'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
         }"
@@ -255,7 +265,7 @@
         <div
           class="grid grid-cols-[1fr_auto] items-start gap-1"
           [ngClass]="{
-            'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD',
+            'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD' || t.status === 'PENDING_PAYMENT',
             'text-brand-600': t.status === 'RESERVED',
             'text-brand-400': t.status === 'DISABLED'
           }"
@@ -268,11 +278,18 @@
           [ngClass]="{
             'text-brand-500': t.status === 'AVAILABLE',
             'text-accent-700': t.status === 'HOLD',
+            'text-warning-700': t.status === 'PENDING_PAYMENT',
             'text-danger-700': t.status === 'RESERVED',
             'text-brand-400': t.status === 'DISABLED'
           }"
         >
-          {{ t.status === 'AVAILABLE' ? 'Available' : t.status }}
+          {{
+            t.status === 'AVAILABLE'
+              ? 'Available'
+              : t.status === 'PENDING_PAYMENT'
+                ? 'Pending Payment'
+                : t.status
+          }}
         </div>
       </button>
     </div>
@@ -308,7 +325,7 @@
     </button>
   </div>
 
-  <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
+  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
     <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
     <div class="relative h-full w-full max-w-3xl overflow-auto bg-white p-4 pb-28 md:h-auto md:rounded-2xl md:p-6">
       <div class="grid gap-4">
@@ -560,7 +577,10 @@
   </div>
 </section>
 
-<div class="fixed bottom-0 left-0 right-0 z-[60] w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden" *ngIf="(eventDate || (showReservationModal && selectedTable)) && !showReleaseConfirm">
+<div
+  class="fixed bottom-0 left-0 right-0 z-[220] w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden"
+  *ngIf="(eventDate || (showReservationModal && selectedTable)) && !showReleaseConfirm"
+>
   <ng-container *ngIf="showReservationModal && selectedTable; else mobileHoldBar">
     <button
       type="button"
@@ -595,7 +615,7 @@
   </ng-template>
 </div>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showReleaseConfirm">
+<div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReleaseConfirm">
   <div class="absolute inset-0 bg-black/40" (click)="cancelReleasePrompt()"></div>
   <div class="relative w-[90vw] max-w-sm rounded-2xl bg-white p-5 text-center">
     <h4 class="text-lg font-semibold text-brand-900">Release hold?</h4>

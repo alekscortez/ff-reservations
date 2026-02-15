@@ -7,6 +7,9 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import {
+  SNSClient,
+} from "@aws-sdk/client-sns";
+import {
   DynamoDBDocumentClient,
 } from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "crypto";
@@ -37,6 +40,7 @@ import { createReservationsHoldsService } from "./lib/services-reservations-hold
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
+import { createSmsNotificationsService } from "./lib/services-sms-notifications.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -50,6 +54,12 @@ const SQUARE_ENV = process.env.SQUARE_ENV;
 const SQUARE_LOCATION_ID = process.env.SQUARE_LOCATION_ID;
 const SQUARE_API_VERSION = process.env.SQUARE_API_VERSION;
 const SQUARE_WEBHOOK_NOTIFICATION_URL = process.env.SQUARE_WEBHOOK_NOTIFICATION_URL;
+const SMS_ENABLED = process.env.SMS_ENABLED;
+const SMS_SENDER_ID = process.env.SMS_SENDER_ID;
+const SMS_TYPE = process.env.SMS_TYPE;
+const SMS_MAX_PRICE_USD = process.env.SMS_MAX_PRICE_USD;
+const AUTO_SEND_SQUARE_LINK_SMS = process.env.AUTO_SEND_SQUARE_LINK_SMS;
+const PAYMENT_LINK_TTL_MINUTES = process.env.PAYMENT_LINK_TTL_MINUTES;
 const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
 const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
@@ -61,6 +71,7 @@ const TABLE_TEMPLATE = JSON.parse(fs.readFileSync(TABLE_TEMPLATE_PATH, "utf8"));
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const cognito = new CognitoIdentityProviderClient({});
 const secretsManager = new SecretsManagerClient({});
+const sns = new SNSClient({});
 const userCache = new Map();
 
 // ---------- helpers ----------
@@ -231,6 +242,33 @@ const checkInPassesService = createCheckInPassesService({
   addDaysToIsoDate,
 });
 
+const squarePaymentsService = createSquarePaymentsService({
+  secretClient: secretsManager,
+  env: {
+    SQUARE_SECRET_ARN,
+    SQUARE_ENV,
+    SQUARE_LOCATION_ID,
+    SQUARE_API_VERSION,
+    SQUARE_CURRENCY: process.env.SQUARE_CURRENCY,
+    SQUARE_WEBHOOK_NOTIFICATION_URL,
+  },
+  requiredEnv,
+  httpError,
+  randomUUID,
+});
+
+const smsNotificationsService = createSmsNotificationsService({
+  snsClient: sns,
+  env: {
+    SMS_ENABLED,
+    SMS_SENDER_ID,
+    SMS_TYPE,
+    SMS_MAX_PRICE_USD,
+  },
+  httpError,
+  nowEpoch,
+});
+
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
@@ -250,21 +288,10 @@ const reservationsHoldsService = createReservationsHoldsService({
   getDisabledTablesFromFrequent: clientsService.getDisabledTablesFromFrequent,
   getTablePriceForEvent,
   ensureCheckInPassForReservation: checkInPassesService.issuePassForReservation,
-});
-
-const squarePaymentsService = createSquarePaymentsService({
-  secretClient: secretsManager,
-  env: {
-    SQUARE_SECRET_ARN,
-    SQUARE_ENV,
-    SQUARE_LOCATION_ID,
-    SQUARE_API_VERSION,
-    SQUARE_CURRENCY: process.env.SQUARE_CURRENCY,
-    SQUARE_WEBHOOK_NOTIFICATION_URL,
-  },
-  requiredEnv,
-  httpError,
-  randomUUID,
+  deactivateSquarePaymentLink: squarePaymentsService.deactivatePaymentLink,
+  sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
+  sendCheckInPassSms: smsNotificationsService.sendCheckInPassSms,
+  paymentLinkTtlMinutes: PAYMENT_LINK_TTL_MINUTES,
 });
 
 // ---------- router ----------
@@ -302,6 +329,7 @@ export const handler = async (event) => {
       listEvents: eventsService.listEvents,
       getEventByDate: eventsService.getEventByDate,
       listTableLocks: reservationsHoldsService.listTableLocks,
+      listReservations: reservationsHoldsService.listReservations,
       releaseOverdueReservationsForEventDate:
         reservationsHoldsService.releaseOverdueReservationsForEventDate,
       getDisabledTablesFromFrequent: clientsService.getDisabledTablesFromFrequent,
@@ -359,6 +387,8 @@ export const handler = async (event) => {
       getBody,
       getUserLabel,
       getGroupsFromEvent,
+      autoSendSquareLinkSmsEnabled:
+        String(AUTO_SEND_SQUARE_LINK_SMS ?? "false").trim().toLowerCase() === "true",
       requireStaffOrAdmin,
       createHold: reservationsHoldsService.createHold,
       listHolds: reservationsHoldsService.listHolds,
@@ -371,8 +401,12 @@ export const handler = async (event) => {
       releaseOverdueReservationsForEventDate:
         reservationsHoldsService.releaseOverdueReservationsForEventDate,
       addReservationPayment: reservationsHoldsService.addReservationPayment,
+      setReservationPaymentLinkWindow:
+        reservationsHoldsService.setReservationPaymentLinkWindow,
+      appendReservationHistory: reservationsHoldsService.appendReservationHistory,
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,
+      sendPaymentLinkSms: smsNotificationsService.sendPaymentLinkSms,
       cancelReservation: reservationsHoldsService.cancelReservation,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;

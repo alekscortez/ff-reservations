@@ -18,6 +18,21 @@ export interface CreateReservationPayload {
   paymentDeadlineTz?: string | null;
 }
 
+export interface CreateReservationResponse {
+  item: {
+    reservationId: string;
+  };
+  autoSquareLinkSms?: {
+    attempted?: boolean;
+    sent?: boolean;
+    linkAmount?: number;
+    paymentLinkId?: string | null;
+    to?: string | null;
+    messageId?: string | null;
+    errorMessage?: string | null;
+  } | null;
+}
+
 export interface AddPaymentPayload {
   reservationId: string;
   eventDate: string;
@@ -70,6 +85,16 @@ export interface CreateSquarePaymentLinkResponse {
   };
 }
 
+export interface CreateSquarePaymentLinkSmsResponse extends CreateSquarePaymentLinkResponse {
+  sms: {
+    sent: boolean;
+    provider?: string | null;
+    messageId?: string | null;
+    to?: string | null;
+    sentAt?: number | null;
+  };
+}
+
 export interface ReservationHistoryItem {
   eventId?: string | null;
   eventType?: string | null;
@@ -88,9 +113,7 @@ export class ReservationsService {
   private api = inject(ApiClient);
 
   create(payload: CreateReservationPayload) {
-    return this.api.post<{ item: { reservationId: string } }>('/reservations', payload).pipe(
-      map((res) => res.item)
-    );
+    return this.api.post<CreateReservationResponse>('/reservations', payload);
   }
 
   list(eventDate: string) {
@@ -144,10 +167,22 @@ export class ReservationsService {
     return this.api.post<CreateSquarePaymentLinkResponse>(
       `/reservations/${payload.reservationId}/payment-link/square`,
       {
-      eventDate: payload.eventDate,
-      amount: payload.amount,
-      note: payload.note ?? '',
-      idempotencyKey: payload.idempotencyKey ?? '',
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        note: payload.note ?? '',
+        idempotencyKey: payload.idempotencyKey ?? '',
+      }
+    );
+  }
+
+  createSquarePaymentLinkSms(payload: CreateSquarePaymentLinkPayload) {
+    return this.api.post<CreateSquarePaymentLinkSmsResponse>(
+      `/reservations/${payload.reservationId}/payment-link/square/sms`,
+      {
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        note: payload.note ?? '',
+        idempotencyKey: payload.idempotencyKey ?? '',
       }
     );
   }

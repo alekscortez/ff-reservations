@@ -1,4 +1,9 @@
-export type TableStatus = 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED';
+export type TableStatus =
+  | 'AVAILABLE'
+  | 'HOLD'
+  | 'PENDING_PAYMENT'
+  | 'RESERVED'
+  | 'DISABLED';
 
 export interface TableTemplate {
   version: string;

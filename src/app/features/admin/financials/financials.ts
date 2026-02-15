@@ -6,7 +6,11 @@ import { catchError, forkJoin, map, of, Subscription } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { EventItem } from '../../../shared/models/event.model';
-import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
+import {
+  PaymentMethod,
+  ReservationItem,
+  ReservationPayment,
+} from '../../../shared/models/reservation.model';
 
 interface FinancialRow {
   eventId: string;
@@ -68,6 +72,25 @@ interface MethodTotals {
   square: number;
 }
 
+interface PaymentLedgerRow {
+  paymentId: string;
+  eventDate: string;
+  eventName: string;
+  reservationId: string;
+  tableId: string;
+  customerName: string;
+  amount: number;
+  method: PaymentMethod;
+  source: string;
+  createdAt: number;
+  createdBy: string | null;
+  providerPaymentId: string | null;
+  orderId: string | null;
+  providerStatus: string | null;
+  receiptUrl: string | null;
+  isFallback: boolean;
+}
+
 @Component({
   selector: 'app-financials',
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
@@ -84,6 +107,7 @@ export class Financials implements OnInit, OnDestroy {
   filteredEvents: EventItem[] = [];
   rows: FinancialRow[] = [];
   receivables: FinancialRow[] = [];
+  ledgerRows: PaymentLedgerRow[] = [];
   eventSummaries: EventFinancialSummary[] = [];
   methodTotals: MethodTotals = { cash: 0, cashapp: 0, square: 0 };
 
@@ -253,6 +277,70 @@ export class Financials implements OnInit, OnDestroy {
     return 'bg-brand-100 text-brand-700';
   }
 
+  sourceBadgeClass(source: string | null | undefined): string {
+    const normalized = String(source ?? '').trim().toLowerCase();
+    if (normalized === 'square-webhook') return 'bg-success-100 text-success-700';
+    if (normalized === 'square-direct') return 'bg-brand-100 text-brand-700';
+    if (normalized === 'manual') return 'bg-accent-100 text-accent-800';
+    return 'bg-brand-50 text-brand-600';
+  }
+
+  formatMethodLabel(method: PaymentMethod | string | null | undefined): string {
+    const normalized = String(method ?? '').trim().toLowerCase();
+    if (!normalized) return '—';
+    if (normalized === 'cash') return 'Cash';
+    if (normalized === 'cashapp') return 'Cash App';
+    if (normalized === 'square') return 'Square';
+    return normalized
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  formatSourceLabel(source: string | null | undefined): string {
+    const normalized = String(source ?? '').trim().toLowerCase();
+    if (!normalized) return '—';
+    if (normalized === 'square-webhook') return 'Square Auto Confirmed';
+    if (normalized === 'square-direct') return 'Square Charged by Staff';
+    if (normalized === 'manual') return 'Recorded Manually';
+    return normalized
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  formatEpochShort(epochSeconds: number): string {
+    if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return '—';
+    return new Date(epochSeconds * 1000).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  formatLedgerActor(row: PaymentLedgerRow): string {
+    const source = String(row?.source ?? '').trim().toLowerCase();
+    if (source === 'square-webhook') return 'Square System';
+
+    const actor = String(row?.createdBy ?? '').trim();
+    const isSystemActor = actor.toLowerCase().startsWith('system:');
+
+    if ((source === 'square-direct' || source === 'manual') && (!actor || isSystemActor)) {
+      return 'Staff (Unknown)';
+    }
+
+    if (isSystemActor && actor.toLowerCase() === 'system:square-webhook') {
+      return 'Square System';
+    }
+
+    return actor || '—';
+  }
+
   private setDefaultRange(): void {
     const now = new Date();
     const yyyy = now.getFullYear();
@@ -279,6 +367,7 @@ export class Financials implements OnInit, OnDestroy {
       next: (snapshots) => {
         this.rows = this.buildRows(snapshots);
         this.receivables = this.buildReceivables(this.rows);
+        this.ledgerRows = this.buildPaymentLedger(snapshots);
         this.eventSummaries = this.buildEventSummaries(this.filteredEvents, this.rows, this.receivables);
         this.overview = this.buildOverview(this.filteredEvents, this.rows, this.receivables);
         this.methodTotals = this.buildMethodTotals(snapshots);
@@ -490,9 +579,115 @@ export class Financials implements OnInit, OnDestroy {
     return totals;
   }
 
+  private buildPaymentLedger(snapshots: EventReservationsSnapshot[]): PaymentLedgerRow[] {
+    const rows: PaymentLedgerRow[] = [];
+
+    for (const { event, reservations } of snapshots) {
+      for (const reservation of reservations) {
+        const eventDate = String(event.eventDate ?? '').trim();
+        const eventName = String(event.eventName ?? '').trim();
+        const reservationId = String(reservation.reservationId ?? '').trim();
+        const tableId = String(reservation.tableId ?? '').trim();
+        const customerName = String(reservation.customerName ?? '').trim();
+        const payments = Array.isArray(reservation.payments) ? reservation.payments : [];
+
+        if (payments.length > 0) {
+          for (const payment of payments) {
+            const mapped = this.mapPaymentLedgerRow({
+              eventDate,
+              eventName,
+              reservationId,
+              tableId,
+              customerName,
+              reservation,
+              payment,
+            });
+            if (mapped) rows.push(mapped);
+          }
+          continue;
+        }
+
+        const fallbackAmount = Number(reservation.depositAmount ?? 0);
+        const fallbackMethod = reservation.paymentMethod;
+        if (
+          fallbackAmount > 0 &&
+          (fallbackMethod === 'cash' || fallbackMethod === 'cashapp' || fallbackMethod === 'square')
+        ) {
+          rows.push({
+            paymentId: `fallback-${reservationId}`,
+            eventDate,
+            eventName,
+            reservationId,
+            tableId,
+            customerName,
+            amount: fallbackAmount,
+            method: fallbackMethod,
+            source: 'manual',
+            createdAt: Number(reservation.createdAt ?? 0),
+            createdBy: String(reservation.createdBy ?? '').trim() || null,
+            providerPaymentId: null,
+            orderId: null,
+            providerStatus: null,
+            receiptUrl: null,
+            isFallback: true,
+          });
+        }
+      }
+    }
+
+    return rows.sort((a, b) => {
+      const createdCmp = Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0);
+      if (createdCmp !== 0) return createdCmp;
+      const dateCmp = String(b.eventDate ?? '').localeCompare(String(a.eventDate ?? ''));
+      if (dateCmp !== 0) return dateCmp;
+      return String(a.tableId ?? '').localeCompare(String(b.tableId ?? ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    });
+  }
+
+  private mapPaymentLedgerRow(input: {
+    eventDate: string;
+    eventName: string;
+    reservationId: string;
+    tableId: string;
+    customerName: string;
+    reservation: ReservationItem;
+    payment: ReservationPayment;
+  }): PaymentLedgerRow | null {
+    const { eventDate, eventName, reservationId, tableId, customerName, reservation, payment } = input;
+    const method = payment?.method;
+    if (method !== 'cash' && method !== 'cashapp' && method !== 'square') return null;
+
+    const provider = payment?.provider && typeof payment.provider === 'object' ? payment.provider : null;
+    const source = String(payment?.source ?? '').trim().toLowerCase();
+    const normalizedSource = source || (method === 'square' ? 'square-direct' : 'manual');
+
+    return {
+      paymentId: String(payment?.paymentId ?? '').trim() || `payment-${reservationId}`,
+      eventDate,
+      eventName,
+      reservationId,
+      tableId,
+      customerName,
+      amount: Number(payment?.amount ?? 0),
+      method,
+      source: normalizedSource,
+      createdAt: Number(payment?.createdAt ?? reservation.createdAt ?? 0),
+      createdBy: String(payment?.createdBy ?? '').trim() || null,
+      providerPaymentId: String(provider?.providerPaymentId ?? '').trim() || null,
+      orderId: String(provider?.orderId ?? '').trim() || null,
+      providerStatus: String(provider?.providerStatus ?? '').trim() || null,
+      receiptUrl: String(provider?.receiptUrl ?? '').trim() || null,
+      isFallback: false,
+    };
+  }
+
   private clearReport(): void {
     this.rows = [];
     this.receivables = [];
+    this.ledgerRows = [];
     this.eventSummaries = [];
     this.methodTotals = { cash: 0, cashapp: 0, square: 0 };
     this.overview = {

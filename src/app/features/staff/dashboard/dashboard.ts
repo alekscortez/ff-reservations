@@ -16,6 +16,7 @@ import { EventItem } from '../../../shared/models/event.model';
 import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
+import { SystemActorLabelPipe } from '../../../shared/system-actor-label.pipe';
 
 interface TableKpis {
   total: number;
@@ -75,9 +76,23 @@ interface ReservationHistoryViewItem {
   details: Record<string, unknown> | null;
 }
 
+interface PaymentLinkSmsState {
+  status: 'SENT' | 'FAILED';
+  atMs: number;
+  to: string | null;
+  errorMessage: string | null;
+}
+
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule, RouterLink, ReactiveFormsModule, PhoneDisplayPipe, PaymentMethodLabelPipe],
+  imports: [
+    CommonModule,
+    RouterLink,
+    ReactiveFormsModule,
+    PhoneDisplayPipe,
+    PaymentMethodLabelPipe,
+    SystemActorLabelPipe,
+  ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -274,7 +289,7 @@ export class Dashboard implements OnInit, OnDestroy {
     for (const table of tables) {
       if (table.status === 'AVAILABLE') kpis.available += 1;
       if (table.status === 'HOLD') kpis.hold += 1;
-      if (table.status === 'RESERVED') kpis.reserved += 1;
+      if (table.status === 'RESERVED' || table.status === 'PENDING_PAYMENT') kpis.reserved += 1;
       if (table.status === 'DISABLED') kpis.disabled += 1;
     }
 
@@ -432,6 +447,10 @@ export class Dashboard implements OnInit, OnDestroy {
   openActivityDetails(activity: ActivityItem): void {
     const item = this.reservations.find((reservation) => reservation.reservationId === activity.reservationId);
     if (!item) return;
+    this.openReservationDetails(item);
+  }
+
+  private openReservationDetails(item: ReservationItem): void {
     this.detailItem = item;
     this.showDetailsModal = true;
     this.checkInPassError = null;
@@ -463,6 +482,21 @@ export class Dashboard implements OnInit, OnDestroy {
       method: 'cash',
       note: '',
     });
+  }
+
+  isSquarePaymentMethodSelected(): boolean {
+    return this.paymentForm.controls.method.value === 'square';
+  }
+
+  submitSquarePaymentFromModal(): void {
+    const item = this.paymentItem;
+    if (!item) return;
+    if (!this.canGeneratePaymentLink(item)) return;
+    if (this.paymentLinkLoadingId) return;
+
+    this.generatePaymentLink(item);
+    this.closeUrgentPayment();
+    this.openReservationDetails(item);
   }
 
   closeUrgentPayment(): void {
@@ -715,6 +749,53 @@ export class Dashboard implements OnInit, OnDestroy {
       });
   }
 
+  sendPaymentLinkSms(item: ReservationItem): void {
+    if (!this.canGeneratePaymentLink(item)) return;
+    if (this.paymentLinkLoadingId) return;
+
+    const remaining = this.remainingAmount(item);
+    if (remaining <= 0) return;
+
+    this.paymentLinkLoadingId = item.reservationId;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+
+    this.reservationsApi
+      .createSquarePaymentLinkSms({
+        reservationId: item.reservationId,
+        eventDate: item.eventDate,
+        amount: remaining,
+        note: `Payment link for table ${item.tableId} via SMS`,
+      })
+      .subscribe({
+        next: (res) => {
+          const url = String(res?.square?.url ?? '').trim();
+          if (!url) {
+            this.paymentLinkError = 'SMS sent flow succeeded but no payment URL was returned.';
+            this.paymentLinkLoadingId = null;
+            return;
+          }
+          this.paymentLinksByReservationId[item.reservationId] = {
+            url,
+            amount: Number(res?.reservation?.linkAmount ?? remaining),
+            createdAtMs: Date.now(),
+            audit: res?.square?.audit,
+          };
+          const to = String(res?.sms?.to ?? '').trim();
+          const messageId = String(res?.sms?.messageId ?? '').trim();
+          this.paymentLinkNotice = to
+            ? `SMS sent to ${to}${messageId ? ` (${messageId})` : ''}.`
+            : 'SMS sent successfully.';
+          this.paymentLinkLoadingId = null;
+        },
+        error: (err) => {
+          this.paymentLinkError =
+            err?.error?.message || err?.message || 'Failed to send payment link SMS';
+          this.paymentLinkLoadingId = null;
+        },
+      });
+  }
+
   copyPaymentLink(item: ReservationItem): void {
     const link = this.getPaymentLink(item);
     if (!link) return;
@@ -770,15 +851,44 @@ export class Dashboard implements OnInit, OnDestroy {
     return this.buildShareMessage(item, link.url);
   }
 
+  getPaymentLinkSmsState(item: ReservationItem | null | undefined): PaymentLinkSmsState | null {
+    const history = this.getHistory(item);
+    if (!history.length) return null;
+    const smsEvent = history.find((entry) => {
+      const type = String(entry?.eventType ?? '').trim().toUpperCase();
+      return type === 'PAYMENT_LINK_SMS_SENT' || type === 'PAYMENT_LINK_SMS_FAILED';
+    });
+    if (!smsEvent) return null;
+    const details = smsEvent.details ?? {};
+    const eventType = String(smsEvent.eventType ?? '').trim().toUpperCase();
+    return {
+      status: eventType === 'PAYMENT_LINK_SMS_SENT' ? 'SENT' : 'FAILED',
+      atMs: smsEvent.atMs,
+      to: this.historyString(details['to']),
+      errorMessage: this.historyString(details['errorMessage']),
+    };
+  }
+
+  paymentLinkSmsBadgeClass(status: string | null | undefined): string {
+    const normalized = String(status ?? '').trim().toUpperCase();
+    if (normalized === 'SENT') return 'border-success-300 bg-success-100 text-success-800';
+    if (normalized === 'FAILED') return 'border-danger-300 bg-danger-100 text-danger-800';
+    return 'border-brand-200 bg-brand-50 text-brand-700';
+  }
+
   submitUrgentPayment(): void {
     if (!this.paymentItem) return;
+    const method = this.paymentForm.controls.method.value;
+    if (method === 'square') {
+      this.submitSquarePaymentFromModal();
+      return;
+    }
     if (this.paymentForm.invalid) return;
 
     this.paymentLoading = true;
     this.paymentError = null;
 
     const amount = Number(this.paymentForm.controls.amount.value);
-    const method = this.paymentForm.controls.method.value;
     const note = this.paymentForm.controls.note.value;
     const targetReservationId = this.paymentItem.reservationId;
     const targetEventDate = this.paymentItem.eventDate;
@@ -833,6 +943,10 @@ export class Dashboard implements OnInit, OnDestroy {
     const normalized = String(eventType ?? '').trim().toUpperCase();
     if (normalized === 'RESERVATION_CREATED') return 'Reservation Created';
     if (normalized === 'PAYMENT_RECORDED') return 'Payment Recorded';
+    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'Payment Request Sent';
+    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
+    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
+    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'Check-In Pass Failed';
     if (normalized === 'RESERVATION_CANCELLED') return 'Reservation Cancelled';
     if (normalized === 'CHECKIN_PASS_ISSUED') return 'Check-In Pass Issued';
     if (normalized === 'CHECKIN_PASS_REISSUED') return 'Check-In Pass Reissued';
@@ -844,6 +958,10 @@ export class Dashboard implements OnInit, OnDestroy {
     const normalized = String(eventType ?? '').trim().toUpperCase();
     if (normalized === 'CHECKED_IN') return 'bg-success-100 text-success-700 border-success-200';
     if (normalized === 'PAYMENT_RECORDED') return 'bg-brand-100 text-brand-700 border-brand-200';
+    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
+    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
+    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
+    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
     if (normalized === 'RESERVATION_CANCELLED') return 'bg-danger-100 text-danger-700 border-danger-200';
     return 'bg-brand-50 text-brand-700 border-brand-200';
   }
@@ -854,6 +972,8 @@ export class Dashboard implements OnInit, OnDestroy {
     const method = this.historyString(details['method']);
     const reason = this.historyString(details['reason']);
     const paymentStatus = this.historyString(details['paymentStatus']);
+    const smsTo = this.historyString(details['to']);
+    const smsError = this.historyString(details['errorMessage']);
 
     if (item.eventType === 'PAYMENT_RECORDED' && amount !== null) {
       const methodText = method ? ` · ${this.paymentMethodLabel(method)}` : '';
@@ -865,6 +985,18 @@ export class Dashboard implements OnInit, OnDestroy {
     }
     if (item.eventType === 'RESERVATION_CREATED' && paymentStatus) {
       return `Status ${paymentStatus}`;
+    }
+    if (item.eventType === 'PAYMENT_LINK_SMS_SENT') {
+      return smsTo ? `Sent to ${smsTo}` : 'SMS sent';
+    }
+    if (item.eventType === 'PAYMENT_LINK_SMS_FAILED') {
+      return smsError || 'SMS send failed';
+    }
+    if (item.eventType === 'CHECKIN_PASS_SMS_SENT') {
+      return smsTo ? `Sent to ${smsTo}` : 'SMS sent';
+    }
+    if (item.eventType === 'CHECKIN_PASS_SMS_FAILED') {
+      return smsError || 'SMS send failed';
     }
     return '';
   }

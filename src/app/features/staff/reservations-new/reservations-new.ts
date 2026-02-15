@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, DoCheck, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -33,8 +33,10 @@ interface CreatedReservationContext {
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })
-export class ReservationsNew implements OnInit, OnDestroy {
+export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   private readonly filterStorageKey = 'ff_new_res_filters_v1';
+  private readonly sidebarModalLockClass = 'reservations-new-modal-open';
+  private sidebarModalLockActive = false;
   private route = inject(ActivatedRoute);
   private eventsApi = inject(EventsService);
   private tablesApi = inject(TablesService);
@@ -83,7 +85,9 @@ export class ReservationsNew implements OnInit, OnDestroy {
   });
 
   filterQuery = new FormControl('', { nonNullable: true });
-  filterStatus = new FormControl<'ALL' | 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED'>('ALL', {
+  filterStatus = new FormControl<
+    'ALL' | 'AVAILABLE' | 'HOLD' | 'PENDING_PAYMENT' | 'RESERVED' | 'DISABLED'
+  >('ALL', {
     nonNullable: true,
   });
   filterSection = new FormControl<string>('ALL', { nonNullable: true });
@@ -174,8 +178,13 @@ export class ReservationsNew implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.syncSidebarModalLock(true);
     this.stopPolling();
     this.clearHoldTimer();
+  }
+
+  ngDoCheck(): void {
+    this.syncSidebarModalLock();
   }
 
   loadTables(date: string, opts: { silent?: boolean } = {}): void {
@@ -461,6 +470,8 @@ export class ReservationsNew implements OnInit, OnDestroy {
       })
       .subscribe({
         next: (created) => {
+          const createdItem = created?.item;
+          const autoSquareLinkSms = created?.autoSquareLinkSms;
           this.holdId = null;
           this.holdExpiresAt = null;
           this.holdCountdown = 0;
@@ -470,14 +481,24 @@ export class ReservationsNew implements OnInit, OnDestroy {
           this.loadTables(this.eventDate!);
 
           if (paymentMethod === 'square') {
+            if (autoSquareLinkSms?.sent) {
+              this.loading = false;
+              this.finishReservationFlow();
+              return;
+            }
             this.createdReservation = {
-              reservationId: created.reservationId,
+              reservationId: String(createdItem?.reservationId ?? ''),
               eventDate: this.eventDate!,
               tableId: this.selectedTable!.id,
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
             };
+            if (!this.createdReservation.reservationId) {
+              this.error = 'Reservation created but reservation id was missing.';
+              this.loading = false;
+              return;
+            }
             this.loading = false;
             this.generateSquarePaymentLink();
             return;
@@ -846,7 +867,9 @@ export class ReservationsNew implements OnInit, OnDestroy {
     });
   }
 
-  setFilterStatus(status: 'ALL' | 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED'): void {
+  setFilterStatus(
+    status: 'ALL' | 'AVAILABLE' | 'HOLD' | 'PENDING_PAYMENT' | 'RESERVED' | 'DISABLED'
+  ): void {
     this.filterStatus.setValue(status);
     this.showFiltersPanel = false;
     this.saveFilters();
@@ -878,6 +901,7 @@ export class ReservationsNew implements OnInit, OnDestroy {
     if (status === 'ALL') return 'All';
     if (status === 'AVAILABLE') return 'Available';
     if (status === 'HOLD') return 'Hold';
+    if (status === 'PENDING_PAYMENT') return 'Pending Payment';
     if (status === 'RESERVED') return 'Reserved';
     return 'Disabled';
   }
@@ -917,9 +941,24 @@ export class ReservationsNew implements OnInit, OnDestroy {
       const raw = localStorage.getItem(this.filterStorageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as { status?: string; section?: string };
-      const validStatuses = ['ALL', 'AVAILABLE', 'HOLD', 'RESERVED', 'DISABLED'];
+      const validStatuses = [
+        'ALL',
+        'AVAILABLE',
+        'HOLD',
+        'PENDING_PAYMENT',
+        'RESERVED',
+        'DISABLED',
+      ];
       if (parsed.status && validStatuses.includes(parsed.status)) {
-        this.filterStatus.setValue(parsed.status as 'ALL' | 'AVAILABLE' | 'HOLD' | 'RESERVED' | 'DISABLED');
+        this.filterStatus.setValue(
+          parsed.status as
+            | 'ALL'
+            | 'AVAILABLE'
+            | 'HOLD'
+            | 'PENDING_PAYMENT'
+            | 'RESERVED'
+            | 'DISABLED'
+        );
       }
       if (parsed.section) {
         this.filterSection.setValue(parsed.section);
@@ -1009,14 +1048,44 @@ export class ReservationsNew implements OnInit, OnDestroy {
     this.phoneCountry = 'US';
   }
 
-  tableCounts(): { total: number; available: number; hold: number; reserved: number; disabled: number } {
-    const counts = { total: this.tables.length, available: 0, hold: 0, reserved: 0, disabled: 0 };
+  tableCounts(): {
+    total: number;
+    available: number;
+    hold: number;
+    pendingPayment: number;
+    reserved: number;
+    disabled: number;
+  } {
+    const counts = {
+      total: this.tables.length,
+      available: 0,
+      hold: 0,
+      pendingPayment: 0,
+      reserved: 0,
+      disabled: 0,
+    };
     for (const t of this.tables) {
       if (t.status === 'AVAILABLE') counts.available += 1;
       if (t.status === 'HOLD') counts.hold += 1;
+      if (t.status === 'PENDING_PAYMENT') counts.pendingPayment += 1;
       if (t.status === 'RESERVED') counts.reserved += 1;
       if (t.status === 'DISABLED') counts.disabled += 1;
     }
     return counts;
+  }
+
+  private syncSidebarModalLock(forceUnlock = false): void {
+    if (typeof document === 'undefined') return;
+
+    const shouldLock = !forceUnlock && (
+      this.showPastModal ||
+      this.showReservationModal ||
+      this.showReleaseConfirm
+    );
+
+    if (shouldLock === this.sidebarModalLockActive) return;
+
+    document.body.classList.toggle(this.sidebarModalLockClass, shouldLock);
+    this.sidebarModalLockActive = shouldLock;
   }
 }

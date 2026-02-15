@@ -7,7 +7,7 @@ Content-Type: application/json
 
 {
   "eventDate": "2026-02-14",
-  "tableId": "A09",
+  "tableId": "C108",
   "customerName": "John Doe",
   "phone": "+19561231234"
 }

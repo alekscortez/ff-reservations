@@ -94,10 +94,10 @@
               <button
                 type="button"
                 class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                (click)="generatePaymentLink(item.reservation)"
+                (click)="sendPaymentLinkSms(item.reservation)"
                 [disabled]="paymentLinkLoadingId === item.reservation.reservationId || !canGeneratePaymentLink(item.reservation)"
               >
-                {{ paymentLinkLoadingId === item.reservation.reservationId ? 'Generating…' : 'Send Link' }}
+                {{ paymentLinkLoadingId === item.reservation.reservationId ? 'Sending…' : 'Send SMS' }}
               </button>
               <button
                 type="button"
@@ -227,7 +227,7 @@
   </section>
 </section>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showDetailsModal && detailItem">
+<div class="fixed inset-0 z-[120] flex items-center justify-center" *ngIf="showDetailsModal && detailItem">
   <div class="absolute inset-0 bg-black/40" (click)="closeDetails()"></div>
   <section class="relative h-[92dvh] w-[94vw] max-w-2xl overflow-auto overflow-x-hidden rounded-2xl bg-white p-4 md:h-auto md:p-6">
     <div class="flex items-start justify-between gap-3">
@@ -283,18 +283,39 @@
       <article class="rounded-xl border border-brand-100 p-3" *ngIf="canGeneratePaymentLink(detailItem)">
         <div class="flex items-center justify-between gap-3">
           <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Link</p>
-          <button
-            type="button"
-            class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            [disabled]="paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
-            (click)="generatePaymentLink(detailItem)"
-          >
-            {{ paymentLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Link' }}
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
+              (click)="sendPaymentLinkSms(detailItem)"
+            >
+              {{ paymentLinkLoadingId === detailItem.reservationId ? 'Sending…' : 'Send SMS' }}
+            </button>
+            <button
+              type="button"
+              class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
+              (click)="generatePaymentLink(detailItem)"
+            >
+              {{ paymentLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Link' }}
+            </button>
+          </div>
         </div>
 
         <p class="mt-2 text-xs text-danger-700" *ngIf="paymentLinkError">{{ paymentLinkError }}</p>
         <p class="mt-2 text-xs text-success-700" *ngIf="paymentLinkNotice">{{ paymentLinkNotice }}</p>
+
+        <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="getPaymentLinkSmsState(detailItem) as smsState">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" [ngClass]="paymentLinkSmsBadgeClass(smsState.status)">
+              {{ smsState.status === 'SENT' ? 'SMS SENT' : 'SMS FAILED' }}
+            </span>
+            <span class="text-xs text-brand-600">{{ smsState.atMs | date:'short' }}</span>
+          </div>
+          <p class="mt-1 text-xs text-brand-700" *ngIf="smsState.to">To {{ smsState.to }}</p>
+          <p class="mt-1 break-all text-xs text-danger-700" *ngIf="smsState.errorMessage">{{ smsState.errorMessage }}</p>
+        </div>
 
         <div class="mt-2 grid min-w-0 gap-2" *ngIf="getPaymentLink(detailItem) as paymentLink">
           <p class="text-xs text-brand-600">
@@ -319,7 +340,7 @@
               class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800"
               (click)="openSmsShare(detailItem)"
             >
-              SMS
+              SMS App
             </button>
             <button
               type="button"
@@ -369,8 +390,8 @@
               {{ usedAtMs | date:'short' }}
             </span>
           </div>
-          <p class="mt-1 text-xs text-brand-700" *ngIf="state.usedBy">By {{ state.usedBy }}</p>
-          <p class="mt-1 text-xs text-brand-700" *ngIf="state.revokedBy">Revoked by {{ state.revokedBy }}</p>
+          <p class="mt-1 text-xs text-brand-700" *ngIf="state.usedBy">By {{ state.usedBy | systemActorLabel }}</p>
+          <p class="mt-1 text-xs text-brand-700" *ngIf="state.revokedBy">Revoked by {{ state.revokedBy | systemActorLabel }}</p>
         </div>
 
         <p class="mt-2 text-xs text-danger-700" *ngIf="checkInPassError">{{ checkInPassError }}</p>
@@ -434,7 +455,7 @@
               <div class="min-w-0">
                 <p class="text-xs font-semibold text-brand-900">{{ historyEventLabel(h.eventType) }}</p>
                 <p class="mt-0.5 text-[11px] text-brand-600" *ngIf="historySummary(h) as summary">{{ summary }}</p>
-                <p class="mt-0.5 text-[11px] text-brand-500">By {{ h.actor }}</p>
+                <p class="mt-0.5 text-[11px] text-brand-500">By {{ h.actor | systemActorLabel }}</p>
               </div>
               <div class="text-right">
                 <span class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" [ngClass]="historyEventBadgeClass(h.eventType)">
@@ -464,7 +485,7 @@
   </section>
 </div>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showPaymentModal && paymentItem">
+<div class="fixed inset-0 z-[120] flex items-center justify-center" *ngIf="showPaymentModal && paymentItem">
   <div class="absolute inset-0 bg-black/40" (click)="closeUrgentPayment()"></div>
   <section class="relative w-[92vw] max-w-md rounded-2xl bg-white p-4 md:p-6">
     <div class="flex items-center justify-between gap-3">
@@ -515,13 +536,25 @@
       </label>
 
       <p class="text-sm text-danger-700" *ngIf="paymentError">{{ paymentError }}</p>
+      <p class="text-xs text-brand-600" *ngIf="isSquarePaymentMethodSelected()">
+        Square in this modal generates a payment link. Reader charge can be added later.
+      </p>
+      <p class="text-sm text-danger-700" *ngIf="paymentLinkError && isSquarePaymentMethodSelected()">{{ paymentLinkError }}</p>
 
       <button
         type="submit"
         class="h-11 rounded-lg bg-brand-900 text-sm font-semibold text-white disabled:opacity-50"
-        [disabled]="paymentLoading || paymentForm.invalid"
+        [disabled]="
+          isSquarePaymentMethodSelected()
+            ? paymentLinkLoadingId === paymentItem?.reservationId || !paymentItem || !canGeneratePaymentLink(paymentItem)
+            : paymentLoading || paymentForm.invalid
+        "
       >
-        {{ paymentLoading ? 'Saving…' : 'Submit Payment' }}
+        {{
+          isSquarePaymentMethodSelected()
+            ? (paymentLinkLoadingId === paymentItem?.reservationId ? 'Generating…' : 'Generate Link')
+            : (paymentLoading ? 'Saving…' : 'Submit Payment')
+        }}
       </button>
     </form>
   </section>
