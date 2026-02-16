@@ -32,6 +32,7 @@ export class Topbar implements OnInit, OnDestroy {
   private routeSub: Subscription | null = null;
   private contextSub: Subscription | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private topbarPollingSeconds = 30;
 
   ngOnInit(): void {
     this.roleSub = this.auth.groups$().subscribe((groups) => {
@@ -113,41 +114,53 @@ export class Topbar implements OnInit, OnDestroy {
   }
 
   private loadTopbarContext(): void {
-    const today = this.todayString();
-
     this.contextSub?.unsubscribe();
     this.contextSub = this.eventsApi
-      .getEventByDate(today)
+      .getCurrentContext()
       .pipe(
-        map((event) => ({ event, mode: 'TODAY' as const })),
         catchError((err) => {
-          if (Number(err?.status) !== 404) {
-            return of({ event: null, mode: 'NONE' as const });
+          if (Number(err?.status) === 403 || Number(err?.status) === 401) {
+            return of(null);
           }
-          return this.eventsApi.listEvents().pipe(
-            map((events) => {
-              const next =
-                [...(events ?? [])]
-                  .filter((e) => (e.eventDate || '') >= today)
-                  .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''))[0] ?? null;
-              return { event: next, mode: next ? ('NEXT' as const) : ('NONE' as const) };
-            }),
-            catchError(() => of({ event: null, mode: 'NONE' as const }))
-          );
+          return of(null);
         }),
         switchMap((ctx) => {
-          if (!ctx.event?.eventDate) {
-            return of({ ctx, urgentCount: 0 });
+          if (!ctx) {
+            return of({
+              contextEvent: null,
+              contextMode: 'NONE' as const,
+              urgentCount: 0,
+            });
           }
-          return this.reservationsApi.list(ctx.event.eventDate).pipe(
-            map((items) => ({ ctx, urgentCount: this.computeUrgentCount(items ?? []) })),
-            catchError(() => of({ ctx, urgentCount: 0 }))
+          this.setPollingSeconds(ctx.settings?.clientAvailabilityPollingSeconds);
+          const contextEvent = ctx.event ?? ctx.nextEvent ?? null;
+          const contextMode = ctx.event ? ('TODAY' as const) : contextEvent ? ('NEXT' as const) : ('NONE' as const);
+          if (!contextEvent?.eventDate) {
+            return of({
+              contextEvent,
+              contextMode,
+              urgentCount: 0,
+            });
+          }
+          return this.reservationsApi.list(contextEvent.eventDate).pipe(
+            map((items) => ({
+              contextEvent,
+              contextMode,
+              urgentCount: this.computeUrgentCount(items ?? []),
+            })),
+            catchError(() =>
+              of({
+                contextEvent,
+                contextMode,
+                urgentCount: 0,
+              })
+            )
           );
         })
       )
-      .subscribe(({ ctx, urgentCount }) => {
-        this.contextEvent = ctx.event;
-        this.contextMode = ctx.mode;
+      .subscribe(({ contextEvent, contextMode, urgentCount }) => {
+        this.contextEvent = contextEvent;
+        this.contextMode = contextMode;
         this.urgentPaymentCount = urgentCount;
       });
   }
@@ -174,7 +187,10 @@ export class Topbar implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(() => this.loadTopbarContext(), 30000);
+    this.pollTimer = setInterval(
+      () => this.loadTopbarContext(),
+      this.topbarPollingSeconds * 1000
+    );
   }
 
   private stopPolling(): void {
@@ -192,11 +208,14 @@ export class Topbar implements OnInit, OnDestroy {
     this.contextSub = null;
   }
 
-  private todayString(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  private setPollingSeconds(value: number | null | undefined): void {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    const next = Math.min(120, Math.max(5, Math.round(parsed)));
+    if (next === this.topbarPollingSeconds) return;
+    this.topbarPollingSeconds = next;
+    if (this.isStaffOrAdmin) {
+      this.startPolling();
+    }
   }
 }

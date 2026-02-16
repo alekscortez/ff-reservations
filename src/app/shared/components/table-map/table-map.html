@@ -1,1 +1,11 @@
-<p>table-map works!</p>
+<section class="table-map-shell">
+  <div class="table-map-canvas" (click)="onSvgClick($event)">
+    <div class="table-map-svg" *ngIf="safeSvgMarkup" [innerHTML]="safeSvgMarkup"></div>
+    <div class="table-map-empty" *ngIf="!safeSvgMarkup && !loadError">
+      Loading map...
+    </div>
+    <div class="table-map-error" *ngIf="loadError">
+      {{ loadError }}
+    </div>
+  </div>
+</section>

@@ -110,7 +110,7 @@
       </div>
     </div>
 
-    <div class="mt-4 grid gap-2">
+    <div class="mt-4 grid gap-2 lg:hidden">
       <div class="flex items-end gap-2">
         <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
           Search table
@@ -153,6 +153,29 @@
             <span class="text-[10px]">{{ showFiltersPanel ? '▲' : '▼' }}</span>
           </button>
         </div>
+      </div>
+      <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
+        <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
+          <button
+            type="button"
+            class="rounded-full px-3 py-1 text-xs font-semibold"
+            [ngClass]="isTableViewMode('MAP') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            (click)="setTableViewMode('MAP')"
+          >
+            Map
+          </button>
+          <button
+            type="button"
+            class="rounded-full px-3 py-1 text-xs font-semibold"
+            [ngClass]="isTableViewMode('LIST') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            (click)="setTableViewMode('LIST')"
+          >
+            List
+          </button>
+        </div>
+        <p class="text-[11px] text-brand-500" *ngIf="isTableViewMode('MAP')">
+          Tap a green table to start reservation
+        </p>
       </div>
       <div
         class="grid w-full gap-3 rounded-xl border border-brand-100 bg-white p-3 shadow-sm"
@@ -247,7 +270,19 @@
       </div>
     </div>
 
-    <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+    <div class="mt-4 lg:hidden" *ngIf="isTableViewMode('MAP')">
+      <app-table-map
+        [tables]="tables"
+        [sectionColors]="tableSectionColors"
+        [selectedTableId]="selectedTable?.id ?? null"
+        (tableSelect)="selectTable($event)"
+      ></app-table-map>
+    </div>
+
+    <div
+      class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:hidden"
+      *ngIf="isTableViewMode('LIST')"
+    >
       <button
         class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
         [ngClass]="{
@@ -294,36 +329,246 @@
       </button>
     </div>
 
-    <div class="mt-4 hidden flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-100 bg-brand-50/60 px-3 py-3 lg:flex">
-      <div class="text-sm text-brand-700">
-        <span class="font-semibold text-brand-900">
-          {{ selectedTable ? ('Table ' + selectedTable.id) : 'Select a table' }}
-        </span>
-        <span *ngIf="selectedTable" class="ml-2 text-brand-600">
-          ${{ selectedTable.price }}
-        </span>
+    <div
+      #desktopSplitPanel
+      class="desktop-split mt-4 hidden lg:grid lg:grid-cols-12 lg:gap-4"
+      [style.height.px]="desktopSplitHeightPx ?? null"
+    >
+      <div class="desktop-map-col lg:col-span-8">
+        <div class="desktop-map-panel-card">
+          <app-table-map
+            class="desktop-map-widget"
+            [tables]="tables"
+            [sectionColors]="tableSectionColors"
+            [selectedTableId]="selectedTable?.id ?? null"
+            (tableSelect)="selectTable($event)"
+          ></app-table-map>
+        </div>
       </div>
-      <button
-        type="button"
-        class="h-11 rounded-full px-5 text-sm font-semibold text-white disabled:opacity-60"
-        (click)="startHoldFlow()"
-        [disabled]="loading || !selectedTable"
-        [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900'"
-      >
-        Hold &amp; Reserve
-      </button>
+
+      <div class="desktop-table-panel lg:col-span-4">
+        <div class="desktop-table-panel-card rounded-xl border border-brand-100 bg-white p-3 shadow-sm">
+          <div class="mb-3 grid gap-2">
+            <div class="flex items-end gap-2">
+              <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
+                Search table
+                <input
+                  type="text"
+                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm"
+                  [formControl]="filterQuery"
+                  placeholder="A01, B38..."
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                />
+              </label>
+              <div class="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border border-brand-200 px-2.5 text-brand-800"
+                  [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
+                  (click)="toggleFiltersPanel()"
+                  aria-label="Open filters"
+                  title="Filters"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                  </svg>
+                  <span
+                    class="min-w-5 rounded-full bg-brand-900 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
+                    *ngIf="activeFiltersCount() > 0"
+                  >
+                    {{ activeFiltersCount() }}
+                  </span>
+                  <span class="text-[10px]">{{ showFiltersPanel ? '▲' : '▼' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="grid w-full gap-3 rounded-xl border border-brand-100 bg-white p-3"
+              *ngIf="showFiltersPanel"
+            >
+              <div class="grid gap-2">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'ALL' }"
+                    (click)="setFilterStatus('ALL')"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'AVAILABLE' }"
+                    (click)="setFilterStatus('AVAILABLE')"
+                  >
+                    Available
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'HOLD' }"
+                    (click)="setFilterStatus('HOLD')"
+                  >
+                    Hold
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+                    (click)="setFilterStatus('PENDING_PAYMENT')"
+                  >
+                    Pending Payment
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
+                    (click)="setFilterStatus('RESERVED')"
+                  >
+                    Reserved
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'DISABLED' }"
+                    (click)="setFilterStatus('DISABLED')"
+                  >
+                    Disabled
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Section</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+                    (click)="setFilterSection('ALL')"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    *ngFor="let s of sections"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+                    (click)="setFilterSection(s)"
+                  >
+                    Section {{ s }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex justify-end" *ngIf="hasActiveFilters()">
+                <button
+                  type="button"
+                  class="rounded-full border border-brand-200 px-3 py-1 text-xs text-brand-700"
+                  (click)="clearFilters()"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-2 flex shrink-0 items-center justify-between">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
+            <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+          </div>
+          <div class="desktop-table-list min-h-0 flex-1 space-y-2 pr-1">
+            <button
+              class="w-full rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
+              [ngClass]="{
+                'border-brand-900': selectedTable?.id === t.id,
+                'border-accent-400 bg-accent-50': t.status === 'HOLD',
+                'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
+                'border-danger-400 bg-danger-50': t.status === 'RESERVED',
+                'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
+              }"
+              *ngFor="let t of filteredTables()"
+              type="button"
+              (click)="selectTable(t)"
+              [disabled]="t.status !== 'AVAILABLE'"
+            >
+              <div
+                class="grid grid-cols-[1fr_auto] items-start gap-1"
+                [ngClass]="{
+                  'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD' || t.status === 'PENDING_PAYMENT',
+                  'text-brand-600': t.status === 'RESERVED',
+                  'text-brand-400': t.status === 'DISABLED'
+                }"
+              >
+                <span class="text-lg font-semibold">{{ t.id }}</span>
+                <span class="text-base font-semibold">${{ t.price }}</span>
+              </div>
+              <div
+                class="mt-2 text-[11px] uppercase tracking-[0.2em]"
+                [ngClass]="{
+                  'text-brand-500': t.status === 'AVAILABLE',
+                  'text-accent-700': t.status === 'HOLD',
+                  'text-warning-700': t.status === 'PENDING_PAYMENT',
+                  'text-danger-700': t.status === 'RESERVED',
+                  'text-brand-400': t.status === 'DISABLED'
+                }"
+              >
+                {{
+                  t.status === 'AVAILABLE'
+                    ? 'Available'
+                    : t.status === 'PENDING_PAYMENT'
+                      ? 'Pending Payment'
+                      : t.status
+                }}
+              </div>
+            </button>
+          </div>
+          <div class="desktop-table-actions mt-3 shrink-0 border-t border-brand-100 pt-3">
+            <div class="mb-2 text-sm text-brand-700">
+              <span class="font-semibold text-brand-900">
+                {{ selectedTable ? ('Table ' + selectedTable.id) : 'Select a table' }}
+              </span>
+              <span *ngIf="selectedTable" class="ml-2 text-brand-600">
+                ${{ selectedTable.price }}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                class="h-11 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:opacity-50"
+                (click)="clearEventSelection()"
+                [disabled]="loading || showReservationModal || showPastModal"
+              >
+                Change Event
+              </button>
+              <button
+                type="button"
+                class="h-11 rounded-lg px-3 text-sm font-semibold text-white disabled:opacity-60"
+                (click)="startHoldFlow()"
+                [disabled]="loading || !selectedTable"
+                [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900'"
+              >
+                Hold &amp; Reserve
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
-
-  <div class="mt-6 hidden justify-center lg:flex" *ngIf="eventDate && !showPastModal && !showReservationModal">
-    <button
-      type="button"
-      class="rounded-full border border-brand-200 px-4 py-2 text-sm text-brand-700"
-      (click)="clearEventSelection()"
-    >
-      Change Event
-    </button>
-  </div>
 
   <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
     <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>

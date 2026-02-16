@@ -3,3 +3,58 @@
   width: 100%;
   align-self: stretch;
 }
+
+@media (min-width: 1024px) {
+  .desktop-split {
+    align-items: stretch;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .desktop-map-col {
+    align-self: stretch;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .desktop-map-panel-card {
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+  }
+
+  .desktop-map-widget {
+    display: block;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+  }
+
+  .desktop-table-panel {
+    align-self: stretch;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+  }
+
+  .desktop-table-panel-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .desktop-table-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .desktop-table-actions {
+    margin-top: 0.75rem;
+    flex-shrink: 0;
+  }
+}

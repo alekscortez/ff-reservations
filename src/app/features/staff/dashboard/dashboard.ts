@@ -105,6 +105,8 @@ export class Dashboard implements OnInit, OnDestroy {
   contextLabel: 'TODAY EVENT' | 'NEXT EVENT' = 'TODAY EVENT';
   contextEvent: EventItem | null = null;
   nextUpcomingEvent: EventItem | null = null;
+  businessDate = '';
+  dashboardPollingSeconds = 15;
 
   tables: TableForEvent[] = [];
   reservations: ReservationItem[] = [];
@@ -161,49 +163,26 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   refreshDashboard(): void {
-    const today = this.todayString();
     this.loadingContext = true;
     this.error = null;
-
-    this.eventsApi.getEventByDate(today).subscribe({
-      next: (event) => {
-        this.contextLabel = 'TODAY EVENT';
-        this.contextEvent = event;
-        this.nextUpcomingEvent = null;
-        this.loadingContext = false;
-        this.loadSnapshotFor(event.eventDate, false);
-        this.startPolling(event.eventDate);
-      },
-      error: (err) => {
-        if (Number(err?.status) === 404) {
-          this.loadFallbackEvent(today);
-          return;
-        }
-        this.error = err?.error?.message || err?.message || 'Failed to load dashboard';
-        this.loadingContext = false;
-        this.contextEvent = null;
-        this.nextUpcomingEvent = null;
-        this.clearSnapshot();
-        this.stopPolling();
-      },
-    });
-  }
-
-  private loadFallbackEvent(today: string): void {
-    this.eventsApi.listEvents().subscribe({
-      next: (events) => {
-        const next = [...(events ?? [])]
-          .filter((e) => (e.eventDate || '') >= today)
-          .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''))[0] ?? null;
-
-        this.contextLabel = 'NEXT EVENT';
-        this.contextEvent = next;
-        this.nextUpcomingEvent = next;
+    this.eventsApi.getCurrentContext().subscribe({
+      next: (ctx) => {
+        this.businessDate = String(ctx?.businessDate ?? '').trim() || this.todayString();
+        this.dashboardPollingSeconds = this.normalizePollingSeconds(
+          ctx?.settings?.dashboardPollingSeconds,
+          15
+        );
+        const currentEvent = ctx?.event ?? null;
+        const nextEvent = ctx?.nextEvent ?? null;
+        const targetEvent = currentEvent ?? nextEvent ?? null;
+        this.contextLabel = currentEvent ? 'TODAY EVENT' : 'NEXT EVENT';
+        this.contextEvent = targetEvent;
+        this.nextUpcomingEvent = nextEvent;
         this.loadingContext = false;
 
-        if (next?.eventDate) {
-          this.loadSnapshotFor(next.eventDate, false);
-          this.startPolling(next.eventDate);
+        if (targetEvent?.eventDate) {
+          this.loadSnapshotFor(targetEvent.eventDate, false);
+          this.startPolling(targetEvent.eventDate);
         } else {
           this.clearSnapshot();
           this.stopPolling();
@@ -253,7 +232,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.stopPolling();
     this.pollTimer = setInterval(() => {
       this.loadSnapshotFor(eventDate, true);
-    }, 15000);
+    }, this.dashboardPollingSeconds * 1000);
   }
 
   private stopPolling(): void {
@@ -1018,6 +997,12 @@ export class Dashboard implements OnInit, OnDestroy {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private normalizePollingSeconds(value: number | null | undefined, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(120, Math.max(5, Math.round(parsed)));
   }
 
   private remainingAmount(item: ReservationItem): number {

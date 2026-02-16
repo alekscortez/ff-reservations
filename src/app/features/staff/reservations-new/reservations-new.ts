@@ -1,4 +1,14 @@
-import { Component, OnInit, OnDestroy, DoCheck, inject } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  DoCheck,
+  ElementRef,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  inject,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -17,6 +27,7 @@ import {
   normalizePhoneToE164,
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+import { TableMap } from '../../../shared/components/table-map/table-map';
 
 interface CreatedReservationContext {
   reservationId: string;
@@ -29,11 +40,11 @@ interface CreatedReservationContext {
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })
-export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
+export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
   private readonly filterStorageKey = 'ff_new_res_filters_v1';
   private readonly sidebarModalLockClass = 'reservations-new-modal-open';
   private sidebarModalLockActive = false;
@@ -43,6 +54,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   private holdsApi = inject(HoldsService);
   private reservationsApi = inject(ReservationsService);
   private clientsApi = inject(ClientsService);
+  @ViewChild('desktopSplitPanel') desktopSplitPanel?: ElementRef<HTMLElement>;
 
   eventDate: string | null = null;
   event: EventItem | null = null;
@@ -70,6 +82,17 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   paymentDeadlineDate = new FormControl('', { nonNullable: true });
   paymentDeadlineTime = new FormControl('00:00', { nonNullable: true });
   paymentDeadlineTz = 'America/Chicago';
+  businessDate = this.todayString();
+  tablePollingSeconds = 10;
+  defaultPaymentDeadlineHour = 0;
+  defaultPaymentDeadlineMinute = 0;
+  tableSectionColors: Record<string, string> = {
+    A: '#ec008c',
+    B: '#2e3192',
+    C: '#00aeef',
+    D: '#f7941d',
+    E: '#711411',
+  };
 
   form = new FormGroup({
     customerName: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -91,6 +114,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
     nonNullable: true,
   });
   filterSection = new FormControl<string>('ALL', { nonNullable: true });
+  tableViewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
   showFiltersPanel = false;
   phoneCountry: 'US' | 'MX' = 'US';
   pastFilterDate = new FormControl('', { nonNullable: true });
@@ -104,9 +128,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   paymentLinkNotice: string | null = null;
   paymentLinkUrl: string | null = null;
   createdReservation: CreatedReservationContext | null = null;
+  desktopSplitHeightPx: number | null = null;
+  private desktopLayoutRafId: number | null = null;
 
   ngOnInit(): void {
     this.restoreSavedFilters();
+    this.loadRuntimeContext();
     this.route.queryParamMap.subscribe((params) => {
       this.eventDate = params.get('date');
       if (this.eventDate) {
@@ -177,10 +204,18 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
       });
   }
 
+  ngAfterViewInit(): void {
+    this.scheduleDesktopSplitLayout();
+  }
+
   ngOnDestroy(): void {
     this.syncSidebarModalLock(true);
     this.stopPolling();
     this.clearHoldTimer();
+    if (this.desktopLayoutRafId !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(this.desktopLayoutRafId);
+      this.desktopLayoutRafId = null;
+    }
   }
 
   ngDoCheck(): void {
@@ -208,6 +243,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
           this.selectedTable = null;
         }
         if (!silent) this.loading = false;
+        this.scheduleDesktopSplitLayout();
       },
       error: (err) => {
         if (!silent) {
@@ -219,8 +255,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   }
 
   private startPolling(): void {
-    if (this.pollSub) return;
-    this.pollSub = interval(10000).subscribe(() => {
+    this.stopPolling();
+    this.pollSub = interval(this.tablePollingSeconds * 1000).subscribe(() => {
       if (!this.eventDate) return;
       if (this.showReservationModal) return;
       this.loadTables(this.eventDate, { silent: true });
@@ -268,21 +304,20 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
     this.showReservationModal = false;
     this.showFiltersPanel = false;
     this.stopPolling();
+    this.desktopSplitHeightPx = null;
   }
 
   upcomingEvents(): EventItem[] {
-    const today = this.todayString();
     return this.events
-      .filter((e) => (e.eventDate || '') >= today)
+      .filter((e) => (e.eventDate || '') >= this.businessDate)
       .slice(0, 4);
   }
 
   pastEvents(): EventItem[] {
-    const today = this.todayString();
     const dateFilter = this.pastFilterDate.value.trim();
     const nameFilter = this.pastFilterName.value.trim().toLowerCase();
     return this.events
-      .filter((e) => (e.eventDate || '') < today)
+      .filter((e) => (e.eventDate || '') < this.businessDate)
       .filter((e) => (dateFilter ? e.eventDate === dateFilter : true))
       .filter((e) =>
         nameFilter ? (e.eventName || '').toLowerCase().includes(nameFilter) : true
@@ -647,7 +682,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
   private setDefaultPaymentDeadline(): void {
     if (!this.eventDate) return;
     this.paymentDeadlineDate.setValue(this.nextDate(this.eventDate));
-    this.paymentDeadlineTime.setValue('00:00');
+    this.paymentDeadlineTime.setValue(
+      this.formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute)
+    );
   }
 
   private nextDate(date: string): string {
@@ -705,6 +742,30 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
     const nowIso = this.nowInTimeZoneLocalIso(tz || 'America/Chicago');
     if (!nowIso) return false;
     return normalizedDeadline > nowIso;
+  }
+
+  private normalizePollingSeconds(value: number | null | undefined, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(120, Math.max(5, Math.round(parsed)));
+  }
+
+  private normalizeHour(value: number | null | undefined, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(23, Math.max(0, Math.round(parsed)));
+  }
+
+  private normalizeMinute(value: number | null | undefined, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(59, Math.max(0, Math.round(parsed)));
+  }
+
+  private formatHm(hour: number, minute: number): string {
+    return `${String(this.normalizeHour(hour, 0)).padStart(2, '0')}:${String(
+      this.normalizeMinute(minute, 0)
+    ).padStart(2, '0')}`;
   }
 
   private formErrorMessage(): string {
@@ -867,6 +928,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
     });
   }
 
+  setTableViewMode(mode: 'MAP' | 'LIST'): void {
+    this.tableViewMode.setValue(mode);
+  }
+
+  isTableViewMode(mode: 'MAP' | 'LIST'): boolean {
+    return this.tableViewMode.value === mode;
+  }
+
   setFilterStatus(
     status: 'ALL' | 'AVAILABLE' | 'HOLD' | 'PENDING_PAYMENT' | 'RESERVED' | 'DISABLED'
   ): void {
@@ -883,6 +952,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
 
   toggleFiltersPanel(): void {
     this.showFiltersPanel = !this.showFiltersPanel;
+    this.scheduleDesktopSplitLayout();
   }
 
   clearFilters(): void {
@@ -1087,5 +1157,104 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck {
 
     document.body.classList.toggle(this.sidebarModalLockClass, shouldLock);
     this.sidebarModalLockActive = shouldLock;
+  }
+
+  private loadRuntimeContext(): void {
+    this.eventsApi.getCurrentContext().subscribe({
+      next: (ctx) => {
+        this.businessDate = String(ctx?.businessDate ?? '').trim() || this.todayString();
+        this.paymentDeadlineTz = String(ctx?.settings?.operatingTz ?? '').trim() || 'America/Chicago';
+        this.defaultPaymentDeadlineHour = this.normalizeHour(
+          ctx?.settings?.defaultPaymentDeadlineHour,
+          0
+        );
+        this.defaultPaymentDeadlineMinute = this.normalizeMinute(
+          ctx?.settings?.defaultPaymentDeadlineMinute,
+          0
+        );
+        this.paymentDeadlineTime.setValue(this.formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute));
+        this.tablePollingSeconds = this.normalizePollingSeconds(
+          ctx?.settings?.tableAvailabilityPollingSeconds,
+          10
+        );
+        this.tableSectionColors = this.normalizeSectionMapColors(ctx?.settings?.sectionMapColors);
+        if (this.eventDate) {
+          this.startPolling();
+          return;
+        }
+        const preferredEventDate =
+          String(ctx?.event?.eventDate ?? '').trim() ||
+          String(ctx?.nextEvent?.eventDate ?? '').trim();
+        if (preferredEventDate) {
+          this.selectEvent(preferredEventDate);
+        }
+      },
+      error: () => {
+        this.businessDate = this.todayString();
+      },
+    });
+  }
+
+  private normalizeSectionMapColors(raw: unknown): Record<string, string> {
+    const fallback = {
+      A: '#ec008c',
+      B: '#2e3192',
+      C: '#00aeef',
+      D: '#f7941d',
+      E: '#711411',
+    };
+    if (!raw || typeof raw !== 'object') return fallback;
+    const isHexColor = (value: unknown): value is string =>
+      /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(String(value ?? '').trim());
+    const value = raw as Record<string, unknown>;
+    return {
+      A: isHexColor(value['A']) ? String(value['A']).toLowerCase() : fallback.A,
+      B: isHexColor(value['B']) ? String(value['B']).toLowerCase() : fallback.B,
+      C: isHexColor(value['C']) ? String(value['C']).toLowerCase() : fallback.C,
+      D: isHexColor(value['D']) ? String(value['D']).toLowerCase() : fallback.D,
+      E: isHexColor(value['E']) ? String(value['E']).toLowerCase() : fallback.E,
+    };
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.scheduleDesktopSplitLayout();
+  }
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    if (this.desktopSplitHeightPx !== null) {
+      this.scheduleDesktopSplitLayout();
+    }
+  }
+
+  private scheduleDesktopSplitLayout(): void {
+    if (typeof window === 'undefined') return;
+    if (this.desktopLayoutRafId !== null) {
+      window.cancelAnimationFrame(this.desktopLayoutRafId);
+      this.desktopLayoutRafId = null;
+    }
+    this.desktopLayoutRafId = window.requestAnimationFrame(() => {
+      this.desktopLayoutRafId = null;
+      this.recalculateDesktopSplitHeight();
+    });
+  }
+
+  private recalculateDesktopSplitHeight(): void {
+    if (typeof window === 'undefined') return;
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+    if (!isDesktop) {
+      this.desktopSplitHeightPx = null;
+      return;
+    }
+    const host = this.desktopSplitPanel?.nativeElement;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    const bottomGapPx = 8;
+    const minHeightPx = 320;
+    this.desktopSplitHeightPx = Math.max(
+      minHeightPx,
+      Math.floor(window.innerHeight - rect.top - bottomGapPx)
+    );
   }
 }

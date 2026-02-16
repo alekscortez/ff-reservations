@@ -86,11 +86,14 @@ export const routes: Routes = [
     canMatch: [authGuard, roleGuard(['Admin'])],
     children: [
       {
+        path: '',
+        pathMatch: 'full',
+        redirectTo: '/staff/dashboard',
+      },
+      {
         path: 'dashboard',
-        loadComponent: () =>
-          import('./features/admin/admin-dashboard/admin-dashboard').then(
-            (m) => m.AdminDashboard
-          ),
+        pathMatch: 'full',
+        redirectTo: '/staff/dashboard',
       },
       {
         path: 'financials',
@@ -108,6 +111,13 @@ export const routes: Routes = [
         path: 'events',
         loadComponent: () =>
           import('./features/admin/events/events').then((m) => m.Events),
+      },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/admin/settings/settings').then(
+            (m) => m.AdminSettings
+          ),
       },
       {
         path: 'frequent-clients',

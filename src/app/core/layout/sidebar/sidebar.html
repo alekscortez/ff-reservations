@@ -20,9 +20,6 @@
 
     <ng-container *ngIf="(isAdmin$ | async)">
       <div class="mt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-500">Admin</div>
-      <a routerLink="/admin/dashboard" routerLinkActive="active"
-         class="mt-1 rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
-         (click)="closeMobileNav()">Dashboard</a>
       <a routerLink="/admin/events" routerLinkActive="active"
          class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
          (click)="closeMobileNav()">Events</a>
@@ -35,6 +32,9 @@
       <a routerLink="/admin/users" routerLinkActive="active"
          class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
          (click)="closeMobileNav()">Users</a>
+      <a routerLink="/admin/settings" routerLinkActive="active"
+         class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
+         (click)="closeMobileNav()">Settings</a>
       <a routerLink="/admin/financials" routerLinkActive="active"
          class="rounded-md px-2 py-1.5 text-brand-800 transition-colors hover:bg-brand-100"
          (click)="closeMobileNav()">Financials</a>

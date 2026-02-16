@@ -35,12 +35,14 @@ import { handleReservationsAndHoldsRoute } from "./lib/routes-reservations-holds
 import { handleClientsRoute } from "./lib/routes-clients.mjs";
 import { handleSquareWebhookRoute } from "./lib/routes-square-webhooks.mjs";
 import { handleCheckInRoute } from "./lib/routes-checkin.mjs";
+import { handleSettingsRoute } from "./lib/routes-settings.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
 import { createSmsNotificationsService } from "./lib/services-sms-notifications.mjs";
+import { createSettingsService } from "./lib/services-settings.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -63,6 +65,7 @@ const PAYMENT_LINK_TTL_MINUTES = process.env.PAYMENT_LINK_TTL_MINUTES;
 const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
 const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
+const SETTINGS_TABLE = process.env.SETTINGS_TABLE;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
@@ -73,6 +76,9 @@ const cognito = new CognitoIdentityProviderClient({});
 const secretsManager = new SecretsManagerClient({});
 const sns = new SNSClient({});
 const userCache = new Map();
+
+const envAutoSendSquareLinkSmsEnabled =
+  String(AUTO_SEND_SQUARE_LINK_SMS ?? "false").trim().toLowerCase() === "true";
 
 // ---------- helpers ----------
 
@@ -216,6 +222,16 @@ const clientsService = createClientsService({
   getTablePriceForEvent,
 });
 
+const settingsService = createSettingsService({
+  ddb,
+  tableNames: {
+    SETTINGS_TABLE,
+  },
+  env: process.env,
+  nowEpoch,
+  httpError,
+});
+
 const eventsService = createEventsService({
   ddb,
   tableNames: { EVENTS_TABLE },
@@ -292,6 +308,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
   sendCheckInPassSms: smsNotificationsService.sendCheckInPassSms,
   paymentLinkTtlMinutes: PAYMENT_LINK_TTL_MINUTES,
+  getAppSettings: settingsService.getAppSettings,
 });
 
 // ---------- router ----------
@@ -314,6 +331,25 @@ export const handler = async (event) => {
     if (!EVENTS_TABLE) {
       return json(500, { message: "Missing env var EVENTS_TABLE" }, cors);
     }
+
+    const settingsRouteResponse = await handleSettingsRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      getBody,
+      requireAdmin,
+      requireStaffOrAdmin,
+      getUserLabel,
+      getAppSettings: settingsService.getAppSettings,
+      updateAppSettings: settingsService.updateAppSettings,
+      resolveBusinessDate: settingsService.resolveBusinessDate,
+      runtimeSettingsSubset: settingsService.runtimeSettingsSubset,
+      getEventByDate: eventsService.getEventByDate,
+      listEvents: eventsService.listEvents,
+    });
+    if (settingsRouteResponse) return settingsRouteResponse;
 
     const eventsRouteResponse = await handleEventsAndTablesRoute({
       method,
@@ -387,8 +423,10 @@ export const handler = async (event) => {
       getBody,
       getUserLabel,
       getGroupsFromEvent,
-      autoSendSquareLinkSmsEnabled:
-        String(AUTO_SEND_SQUARE_LINK_SMS ?? "false").trim().toLowerCase() === "true",
+      autoSendSquareLinkSmsEnabled: Boolean(
+        (await settingsService.getAppSettings())?.autoSendSquareLinkSms ??
+          envAutoSendSquareLinkSmsEnabled
+      ),
       requireStaffOrAdmin,
       createHold: reservationsHoldsService.createHold,
       listHolds: reservationsHoldsService.listHolds,

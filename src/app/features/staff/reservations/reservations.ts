@@ -80,6 +80,8 @@ export class Reservations implements OnInit, OnDestroy {
   events: EventItem[] = [];
   eventsLoading = false;
   eventsError: string | null = null;
+  businessDate = this.todayString();
+  contextPreferredEventDate: string | null = null;
   detailItem: ReservationItem | null = null;
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
@@ -104,13 +106,31 @@ export class Reservations implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
-    this.loadEvents();
+    this.loadContextAndEvents();
   }
 
   ngOnDestroy(): void {
     this.showDetailsModal = false;
     this.showPaymentModal = false;
     this.syncSidebarModalLock();
+  }
+
+  private loadContextAndEvents(): void {
+    this.eventsApi.getCurrentContext().subscribe({
+      next: (ctx) => {
+        this.businessDate = String(ctx?.businessDate ?? '').trim() || this.todayString();
+        this.contextPreferredEventDate =
+          String(ctx?.event?.eventDate ?? '').trim() ||
+          String(ctx?.nextEvent?.eventDate ?? '').trim() ||
+          null;
+        this.loadEvents();
+      },
+      error: () => {
+        this.businessDate = this.todayString();
+        this.contextPreferredEventDate = null;
+        this.loadEvents();
+      },
+    });
   }
 
   loadEvents(): void {
@@ -132,9 +152,8 @@ export class Reservations implements OnInit, OnDestroy {
   }
 
   upcomingEvents(): EventItem[] {
-    const today = this.todayString();
     return this.events
-      .filter((e) => (e.eventDate || '') >= today)
+      .filter((e) => (e.eventDate || '') >= this.businessDate)
       .slice(0, 6);
   }
 
@@ -174,6 +193,14 @@ export class Reservations implements OnInit, OnDestroy {
 
   private autoSelectCurrentWeekEvent(): void {
     if (this.filterDate.value) return;
+    if (this.contextPreferredEventDate) {
+      const hasPreferred = this.events.some((e) => e.eventDate === this.contextPreferredEventDate);
+      if (hasPreferred) {
+        this.filterDate.setValue(this.contextPreferredEventDate);
+        this.load();
+        return;
+      }
+    }
     const currentWeek = this.events.find((e) => this.isThisWeek(e.eventDate));
     const firstUpcoming = this.upcomingEvents()[0];
     const target = currentWeek?.eventDate || firstUpcoming?.eventDate;

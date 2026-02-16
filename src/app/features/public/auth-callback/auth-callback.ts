@@ -23,12 +23,7 @@ export class AuthCallback implements OnInit {
       this.oidc.getIdToken().subscribe((token) => {
         const groups: string[] = decodeGroups(token);
 
-        if (groups.includes('Admin')) {
-          this.router.navigateByUrl('/admin/dashboard');
-          return;
-        }
-
-        if (groups.includes('Staff')) {
+        if (groups.includes('Admin') || groups.includes('Staff')) {
           this.router.navigateByUrl('/staff/dashboard');
           return;
         }
