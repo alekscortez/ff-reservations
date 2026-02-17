@@ -1,0 +1,12 @@
+### Public Availability (Client-facing)
+### This route should NOT use JWT authorizer.
+### API Gateway route: GET /public/availability
+@baseUrl = https://oxk1adhl3a.execute-api.us-east-1.amazonaws.com
+
+### Default event selection (server chooses active event by business date)
+GET {{baseUrl}}/public/availability
+
+###
+
+### Explicit event date
+GET {{baseUrl}}/public/availability?eventDate=2026-02-21

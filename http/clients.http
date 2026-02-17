@@ -12,6 +12,12 @@ Authorization: Bearer {{accessToken}}
 
 ###
 
+### List reschedule credits by phone (staff/admin)
+GET {{baseUrl}}/clients/credits?phone=+19566161714&phoneCountry=US
+Authorization: Bearer {{accessToken}}
+
+###
+
 ### Update client (by normalized phone key)
 PUT {{baseUrl}}/clients/19561231234
 Authorization: Bearer {{accessToken}}

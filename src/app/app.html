@@ -1,4 +1,4 @@
 <app-topbar *ngIf="isAuthenticated"></app-topbar>
-<main class="app-main">
+<main class="app-main" [class.app-main--with-topbar]="isAuthenticated">
   <router-outlet></router-outlet>
 </main>

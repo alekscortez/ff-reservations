@@ -81,6 +81,26 @@
         />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Reschedule Cutoff Hour
+        <input
+          type="number"
+          min="0"
+          max="23"
+          [formControl]="form.controls.rescheduleCutoffHour"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Reschedule Cutoff Minute
+        <input
+          type="number"
+          min="0"
+          max="59"
+          [formControl]="form.controls.rescheduleCutoffMinute"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Dashboard Polling (seconds)
         <input
           type="number"
@@ -107,6 +127,16 @@
           min="5"
           max="120"
           [formControl]="form.controls.clientAvailabilityPollingSeconds"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Urgent Window (minutes)
+        <input
+          type="number"
+          min="5"
+          max="1440"
+          [formControl]="form.controls.urgentPaymentWindowMinutes"
           class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
         />
       </label>

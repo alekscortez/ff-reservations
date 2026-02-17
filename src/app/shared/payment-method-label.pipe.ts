@@ -12,6 +12,7 @@ export class PaymentMethodLabelPipe implements PipeTransform {
     if (normalized === 'cash') return 'Cash';
     if (normalized === 'cashapp') return 'Cash App';
     if (normalized === 'square') return 'Square';
+    if (normalized === 'credit') return 'Reschedule Credit';
 
     return normalized
       .replace(/[_-]+/g, ' ')

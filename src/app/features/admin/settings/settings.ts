@@ -46,6 +46,14 @@ export class AdminSettings implements OnInit {
       nonNullable: true,
       validators: [Validators.min(0), Validators.max(59)],
     }),
+    rescheduleCutoffHour: new FormControl(22, {
+      nonNullable: true,
+      validators: [Validators.min(0), Validators.max(23)],
+    }),
+    rescheduleCutoffMinute: new FormControl(0, {
+      nonNullable: true,
+      validators: [Validators.min(0), Validators.max(59)],
+    }),
     dashboardPollingSeconds: new FormControl(15, {
       nonNullable: true,
       validators: [Validators.min(5), Validators.max(120)],
@@ -57,6 +65,10 @@ export class AdminSettings implements OnInit {
     clientAvailabilityPollingSeconds: new FormControl(15, {
       nonNullable: true,
       validators: [Validators.min(5), Validators.max(120)],
+    }),
+    urgentPaymentWindowMinutes: new FormControl(360, {
+      nonNullable: true,
+      validators: [Validators.min(5), Validators.max(1440)],
     }),
     checkInPassTtlDays: new FormControl(2, {
       nonNullable: true,
@@ -140,9 +152,12 @@ export class AdminSettings implements OnInit {
       smsEnabled: Boolean(item.smsEnabled),
       defaultPaymentDeadlineHour: Number(item.defaultPaymentDeadlineHour ?? 0),
       defaultPaymentDeadlineMinute: Number(item.defaultPaymentDeadlineMinute ?? 0),
+      rescheduleCutoffHour: Number(item.rescheduleCutoffHour ?? 22),
+      rescheduleCutoffMinute: Number(item.rescheduleCutoffMinute ?? 0),
       dashboardPollingSeconds: Number(item.dashboardPollingSeconds ?? 15),
       tableAvailabilityPollingSeconds: Number(item.tableAvailabilityPollingSeconds ?? 10),
       clientAvailabilityPollingSeconds: Number(item.clientAvailabilityPollingSeconds ?? 15),
+      urgentPaymentWindowMinutes: Number(item.urgentPaymentWindowMinutes ?? 360),
       checkInPassTtlDays: Number(item.checkInPassTtlDays ?? 2),
       sectionColorA: String(item.sectionMapColors?.A ?? '#ec008c').trim().toLowerCase(),
       sectionColorB: String(item.sectionMapColors?.B ?? '#2e3192').trim().toLowerCase(),
@@ -167,9 +182,12 @@ export class AdminSettings implements OnInit {
       smsEnabled: Boolean(this.form.controls.smsEnabled.value),
       defaultPaymentDeadlineHour: Number(this.form.controls.defaultPaymentDeadlineHour.value),
       defaultPaymentDeadlineMinute: Number(this.form.controls.defaultPaymentDeadlineMinute.value),
+      rescheduleCutoffHour: Number(this.form.controls.rescheduleCutoffHour.value),
+      rescheduleCutoffMinute: Number(this.form.controls.rescheduleCutoffMinute.value),
       dashboardPollingSeconds: Number(this.form.controls.dashboardPollingSeconds.value),
       tableAvailabilityPollingSeconds: Number(this.form.controls.tableAvailabilityPollingSeconds.value),
       clientAvailabilityPollingSeconds: Number(this.form.controls.clientAvailabilityPollingSeconds.value),
+      urgentPaymentWindowMinutes: Number(this.form.controls.urgentPaymentWindowMinutes.value),
       checkInPassTtlDays: Number(this.form.controls.checkInPassTtlDays.value),
       sectionMapColors: {
         A: this.form.controls.sectionColorA.value.trim().toLowerCase(),

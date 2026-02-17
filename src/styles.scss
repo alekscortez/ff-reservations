@@ -13,6 +13,21 @@ body {
   overflow-x: hidden;
 }
 
+html.reservations-new-workspace-lock,
+body.reservations-new-workspace-lock {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body.reservations-new-workspace-lock .app-main,
+body.reservations-new-workspace-lock .shell,
+body.reservations-new-workspace-lock .shell-body,
+body.reservations-new-workspace-lock .shell-content {
+  height: 100%;
+  overflow: hidden;
+}
+
 app-root,
 .app-main,
 .shell,
@@ -24,9 +39,10 @@ app-root,
 
 /* Prevent iOS Safari zoom-on-focus for form controls. */
 @media (hover: none) and (pointer: coarse) {
-  input,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
+    line-height: 1.25;
   }
 }

@@ -3,6 +3,22 @@ import { map } from 'rxjs';
 import { ApiClient } from './api-client';
 import { CrmClient } from '../../shared/models/client.model';
 
+export interface RescheduleCredit {
+  creditId: string;
+  status: string;
+  amountTotal: number;
+  amountRemaining: number;
+  expiresAt: string | null;
+  issuedAt: number | null;
+  issuedBy: string | null;
+  sourceReservationId: string | null;
+  sourceEventDate: string | null;
+  customerName: string | null;
+  phone: string | null;
+  phoneCountry?: 'US' | 'MX' | null;
+  reason?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClientsService {
   private api = inject(ApiClient);
@@ -24,6 +40,12 @@ export class ClientsService {
   searchByPhone(phone: string) {
     return this.api
       .get<{ items: CrmClient[] }>('/clients/search', { phone })
+      .pipe(map((res) => res.items ?? []));
+  }
+
+  listRescheduleCredits(phone: string, phoneCountry: 'US' | 'MX' = 'US') {
+    return this.api
+      .get<{ items: RescheduleCredit[] }>('/clients/credits', { phone, phoneCountry })
       .pipe(map((res) => res.items ?? []));
   }
 }

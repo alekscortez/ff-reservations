@@ -19,11 +19,14 @@ export interface AppSettings {
   smsEnabled: boolean;
   defaultPaymentDeadlineHour: number;
   defaultPaymentDeadlineMinute: number;
+  rescheduleCutoffHour: number;
+  rescheduleCutoffMinute: number;
   allowPastEventEdits: boolean;
   allowPastEventPayments: boolean;
   dashboardPollingSeconds: number;
   tableAvailabilityPollingSeconds: number;
   clientAvailabilityPollingSeconds: number;
+  urgentPaymentWindowMinutes: number;
   maxReservationsPerPhonePerEvent: number;
   maxPendingWindowMinutes: number;
   checkInPassTtlDays: number;

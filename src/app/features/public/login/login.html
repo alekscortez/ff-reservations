@@ -1,8 +1,18 @@
-<section class="login">
-  <div class="card">
-    <img class="logo" src="/assets/ff-logo.svg" alt="Famoso Fuego" />
-    <h1>Reservation System</h1>
-    <p>Sign in to manage events and reservations.</p>
-    <button type="button" (click)="login()">Log in</button>
+<section class="grid min-h-[calc(100dvh-24px)] place-items-center bg-brand-50/40 px-4 py-6">
+  <div class="w-full max-w-[420px] rounded-2xl border border-brand-100 bg-white p-7 text-center shadow-[0_10px_25px_rgba(0,0,0,0.06)]">
+    <img
+      class="mx-auto mb-3 h-16 w-16 object-contain"
+      src="/assets/ff-logo.svg"
+      alt="Famoso Fuego"
+    />
+    <h1 class="mb-2 text-2xl font-semibold text-brand-900">Reservation System</h1>
+    <p class="mb-5 text-sm text-brand-600">Sign in to manage events and reservations.</p>
+    <button
+      type="button"
+      (click)="login()"
+      class="inline-flex h-11 items-center justify-center rounded-lg bg-brand-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-800"
+    >
+      Log in
+    </button>
   </div>
 </section>

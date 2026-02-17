@@ -8,9 +8,12 @@ export interface RuntimeAppSettings {
   operatingDayCutoffHour: number;
   defaultPaymentDeadlineHour: number;
   defaultPaymentDeadlineMinute: number;
+  rescheduleCutoffHour: number;
+  rescheduleCutoffMinute: number;
   dashboardPollingSeconds: number;
   tableAvailabilityPollingSeconds: number;
   clientAvailabilityPollingSeconds: number;
+  urgentPaymentWindowMinutes: number;
   showClientFacingMap: boolean;
   sectionMapColors?: {
     A?: string;

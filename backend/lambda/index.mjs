@@ -290,6 +290,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   tableNames: {
     HOLDS_TABLE,
     RES_TABLE,
+    CLIENTS_TABLE,
   },
   requiredEnv,
   httpError,
@@ -374,6 +375,8 @@ export const handler = async (event) => {
       getEventById: eventsService.getEventById,
       updateEvent: eventsService.updateEvent,
       deleteEvent: eventsService.deleteEvent,
+      getAppSettings: settingsService.getAppSettings,
+      resolveBusinessDate: settingsService.resolveBusinessDate,
     });
     if (eventsRouteResponse) return eventsRouteResponse;
 
@@ -386,6 +389,7 @@ export const handler = async (event) => {
       noContent,
       getBody,
       requireAdmin,
+      requireStaffOrAdmin,
       getUserLabel,
       listFrequentClients: clientsService.listFrequentClients,
       createFrequentClient: clientsService.createFrequentClient,
@@ -396,6 +400,7 @@ export const handler = async (event) => {
       updateCrmClient: clientsService.updateCrmClient,
       deleteCrmClient: clientsService.deleteCrmClient,
       searchCrmClients: clientsService.searchCrmClients,
+      listRescheduleCreditsByPhone: clientsService.listRescheduleCreditsByPhone,
     });
     if (clientsRouteResponse) return clientsRouteResponse;
 

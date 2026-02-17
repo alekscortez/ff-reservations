@@ -51,14 +51,8 @@
         [queryParams]="newReservationQueryParams()"
         class="inline-flex h-9 items-center justify-center rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-800"
       >
-        <span *ngIf="urgentPaymentCount > 0; else newReservationCta">
-          <span class="md:hidden">Pay ({{ urgentPaymentCount }})</span>
-          <span class="hidden md:inline">Take Payment ({{ urgentPaymentCount }})</span>
-        </span>
-        <ng-template #newReservationCta>
-          <span class="md:hidden">+ New</span>
-          <span class="hidden md:inline">+ New Reservation</span>
-        </ng-template>
+        <span class="md:hidden">+ New</span>
+        <span class="hidden md:inline">+ New Reservation</span>
       </a>
     </ng-container>
 
@@ -90,6 +84,19 @@
       <p class="font-semibold text-brand-900">{{ contextLabel() }}</p>
       <p>{{ contextDateLabel() }}</p>
     </div>
+
+    <div class="mt-3 grid gap-2">
+      <button
+        type="button"
+        class="inline-flex h-11 items-center justify-center rounded-lg bg-brand-900 px-3 text-sm font-semibold text-white"
+        (click)="sharePublicAvailability()"
+      >
+        Share Availability Link
+      </button>
+    </div>
+
+    <p class="mt-2 text-xs text-success-700" *ngIf="quickAvailabilityNotice">{{ quickAvailabilityNotice }}</p>
+    <p class="mt-2 text-xs text-danger-700" *ngIf="quickAvailabilityError">{{ quickAvailabilityError }}</p>
 
     <div class="mt-3 grid gap-2">
       <a

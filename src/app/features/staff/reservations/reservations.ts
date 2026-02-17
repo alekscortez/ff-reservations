@@ -13,6 +13,7 @@ import { EventItem } from '../../../shared/models/event.model';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
 import { SystemActorLabelPipe } from '../../../shared/system-actor-label.pipe';
+import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 
 interface GeneratedPaymentLink {
   url: string;
@@ -72,6 +73,7 @@ export class Reservations implements OnInit, OnDestroy {
   private reservationsApi = inject(ReservationsService);
   private eventsApi = inject(EventsService);
   private checkInApi = inject(CheckInService);
+  private clientsApi = inject(ClientsService);
 
   filterDate = new FormControl('', { nonNullable: true });
   items: ReservationItem[] = [];
@@ -86,6 +88,9 @@ export class Reservations implements OnInit, OnDestroy {
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
   showPaymentModal = false;
+  paymentCredits: RescheduleCredit[] = [];
+  paymentCreditsLoading = false;
+  paymentCreditsError: string | null = null;
   paymentLinkLoadingId: string | null = null;
   paymentLinkError: string | null = null;
   paymentLinkNotice: string | null = null;
@@ -102,6 +107,10 @@ export class Reservations implements OnInit, OnDestroy {
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
     method: new FormControl<PaymentMethod>('cash', { nonNullable: true }),
+    creditId: new FormControl('', { nonNullable: true }),
+    remainingMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+      nonNullable: true,
+    }),
     note: new FormControl('', { nonNullable: true }),
   });
 
@@ -246,10 +255,22 @@ export class Reservations implements OnInit, OnDestroy {
   cancel(item: ReservationItem): void {
     const reason = window.prompt('Reason for cancellation (required):');
     if (!reason || !reason.trim()) return;
+    const isRescheduleRequest = window.confirm(
+      'Is this a reschedule request (credit, no refund)?'
+    );
+    const resolutionType = isRescheduleRequest
+      ? 'RESCHEDULE_CREDIT'
+      : 'CANCEL_NO_REFUND';
     this.loading = true;
     this.error = null;
     this.reservationsApi
-      .cancel(item.reservationId, item.eventDate, item.tableId, reason.trim())
+      .cancel(
+        item.reservationId,
+        item.eventDate,
+        item.tableId,
+        reason.trim(),
+        resolutionType
+      )
       .subscribe({
       next: () => {
         this.items = this.items.map((x) =>
@@ -486,12 +507,19 @@ export class Reservations implements OnInit, OnDestroy {
     this.paymentForm.setValue({
       amount: balance > 0 ? balance : 0,
       method: 'cash',
+      creditId: '',
+      remainingMethod: 'cash',
       note: '',
     });
+    this.loadRescheduleCreditsForPayment(item);
   }
 
   isSquarePaymentMethodSelected(): boolean {
     return this.paymentForm.controls.method.value === 'square';
+  }
+
+  isCreditPaymentMethodSelected(): boolean {
+    return this.paymentForm.controls.method.value === 'credit';
   }
 
   submitSquarePaymentFromModal(): void {
@@ -512,8 +540,13 @@ export class Reservations implements OnInit, OnDestroy {
     this.paymentForm.reset({
       amount: 0,
       method: 'cash',
+      creditId: '',
+      remainingMethod: 'cash',
       note: '',
     });
+    this.paymentCredits = [];
+    this.paymentCreditsLoading = false;
+    this.paymentCreditsError = null;
   }
 
   canGeneratePaymentLink(item: ReservationItem): boolean {
@@ -707,6 +740,8 @@ export class Reservations implements OnInit, OnDestroy {
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
     if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'Check-In Pass Failed';
+    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'Reschedule Credit Issued';
+    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'Reschedule Credit Applied';
     if (normalized === 'RESERVATION_CANCELLED') return 'Reservation Cancelled';
     if (normalized === 'CHECKIN_PASS_ISSUED') return 'Check-In Pass Issued';
     if (normalized === 'CHECKIN_PASS_REISSUED') return 'Check-In Pass Reissued';
@@ -722,6 +757,8 @@ export class Reservations implements OnInit, OnDestroy {
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
     if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
+    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'bg-success-100 text-success-700 border-success-200';
+    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'bg-success-100 text-success-700 border-success-200';
     if (normalized === 'RESERVATION_CANCELLED') return 'bg-danger-100 text-danger-700 border-danger-200';
     return 'bg-brand-50 text-brand-700 border-brand-200';
   }
@@ -734,6 +771,8 @@ export class Reservations implements OnInit, OnDestroy {
     const paymentStatus = this.historyString(details['paymentStatus']);
     const smsTo = this.historyString(details['to']);
     const smsError = this.historyString(details['errorMessage']);
+    const creditAmount = this.historyNumber(details['amount']);
+    const creditExpiresAt = this.historyString(details['expiresAt']);
 
     if (item.eventType === 'PAYMENT_RECORDED' && amount !== null) {
       const methodText = method ? ` · ${this.paymentMethodLabel(method)}` : '';
@@ -757,6 +796,13 @@ export class Reservations implements OnInit, OnDestroy {
     }
     if (item.eventType === 'CHECKIN_PASS_SMS_FAILED') {
       return smsError || 'SMS send failed';
+    }
+    if (item.eventType === 'RESCHEDULE_CREDIT_ISSUED') {
+      const amountText = creditAmount !== null ? `$${creditAmount.toFixed(2)}` : 'Credit issued';
+      return creditExpiresAt ? `${amountText} · Expires ${creditExpiresAt}` : amountText;
+    }
+    if (item.eventType === 'RESCHEDULE_CREDIT_APPLIED') {
+      return amount !== null ? `$${amount.toFixed(2)}` : 'Credit applied';
     }
     return '';
   }
@@ -840,6 +886,7 @@ export class Reservations implements OnInit, OnDestroy {
     if (normalized === 'cash') return 'Cash';
     if (normalized === 'cashapp') return 'Cash App';
     if (normalized === 'square') return 'Square';
+    if (normalized === 'credit') return 'Reschedule Credit';
     return normalized
       .replace(/[_-]+/g, ' ')
       .split(' ')
@@ -905,14 +952,131 @@ export class Reservations implements OnInit, OnDestroy {
       return;
     }
     if (this.paymentForm.invalid) return;
+    const selectedCredit = this.selectedPaymentCredit();
+    if (method === 'credit' && !selectedCredit) {
+      this.paymentCreditsError = 'Select a valid reschedule credit to apply.';
+      return;
+    }
+    const remainingMethod = this.paymentForm.controls.remainingMethod.value;
     this.loading = true;
     this.error = null;
+    this.paymentCreditsError = null;
     const amount = Number(this.paymentForm.controls.amount.value);
     const note = this.paymentForm.controls.note.value;
+    const reservationId = this.paymentItem.reservationId;
+    const eventDate = this.paymentItem.eventDate;
+
+    if (method === 'credit') {
+      const creditAmount = this.creditAppliedAmount();
+      if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+        this.paymentCreditsError = 'No credit amount can be applied for this reservation.';
+        this.loading = false;
+        return;
+      }
+      this.reservationsApi
+        .addPayment({
+          reservationId,
+          eventDate,
+          amount: creditAmount,
+          method: 'credit',
+          creditId: selectedCredit?.creditId,
+          note,
+        })
+        .subscribe({
+          next: (creditRes) => {
+            const afterCredit = creditRes.item;
+            this.items = this.items.map((x) =>
+              x.reservationId === afterCredit.reservationId ? afterCredit : x
+            );
+            const remaining = this.remainingAmount(afterCredit);
+            if (remaining <= 0) {
+              this.loading = false;
+              this.closePayment();
+              return;
+            }
+
+            if (remainingMethod === 'square') {
+              this.paymentLinkLoadingId = afterCredit.reservationId;
+              this.paymentLinkError = null;
+              this.paymentLinkNotice = null;
+              this.reservationsApi
+                .createSquarePaymentLink({
+                  reservationId: afterCredit.reservationId,
+                  eventDate: afterCredit.eventDate,
+                  amount: remaining,
+                  note: note || `Remaining payment for table ${afterCredit.tableId}`,
+                })
+                .subscribe({
+                  next: (res) => {
+                    const url = String(res?.square?.url ?? '').trim();
+                    if (!url) {
+                      this.error = 'Credit applied, but Square link URL was not returned.';
+                      this.loading = false;
+                      this.paymentLinkLoadingId = null;
+                      return;
+                    }
+                    this.paymentLinksByReservationId[afterCredit.reservationId] = {
+                      url,
+                      amount: Number(res?.reservation?.linkAmount ?? remaining),
+                      createdAtMs: Date.now(),
+                      audit: res?.square?.audit,
+                    };
+                    this.paymentLinkNotice = 'Credit applied. Square payment link is ready.';
+                    this.loading = false;
+                    this.paymentLinkLoadingId = null;
+                    this.closePayment();
+                    this.openDetails(afterCredit);
+                  },
+                  error: (err) => {
+                    this.error =
+                      err?.error?.message ||
+                      err?.message ||
+                      'Credit applied, but failed to generate Square link';
+                    this.loading = false;
+                    this.paymentLinkLoadingId = null;
+                  },
+                });
+              return;
+            }
+
+            this.reservationsApi
+              .addPayment({
+                reservationId: afterCredit.reservationId,
+                eventDate: afterCredit.eventDate,
+                amount: remaining,
+                method: remainingMethod,
+                note: note || 'Remaining balance after credit',
+              })
+              .subscribe({
+                next: (finalRes) => {
+                  const updated = finalRes.item;
+                  this.items = this.items.map((x) =>
+                    x.reservationId === updated.reservationId ? updated : x
+                  );
+                  this.loading = false;
+                  this.closePayment();
+                },
+                error: (err) => {
+                  this.error =
+                    err?.error?.message ||
+                    err?.message ||
+                    'Credit was applied, but failed to process remaining payment';
+                  this.loading = false;
+                },
+              });
+          },
+          error: (err) => {
+            this.error = err?.error?.message || err?.message || 'Failed to apply credit';
+            this.loading = false;
+          },
+        });
+      return;
+    }
+
     this.reservationsApi
       .addPayment({
-        reservationId: this.paymentItem.reservationId,
-        eventDate: this.paymentItem.eventDate,
+        reservationId,
+        eventDate,
         amount,
         method,
         note,
@@ -931,6 +1095,81 @@ export class Reservations implements OnInit, OnDestroy {
           this.loading = false;
         },
       });
+  }
+
+  onPaymentMethodChanged(): void {
+    if (!this.isCreditPaymentMethodSelected()) {
+      this.paymentForm.controls.creditId.setValue('');
+      this.paymentForm.controls.remainingMethod.setValue('cash');
+      this.paymentCreditsError = null;
+      if (this.paymentItem) {
+        this.paymentForm.controls.amount.setValue(this.remainingAmount(this.paymentItem));
+      }
+      return;
+    }
+    if (this.paymentItem && !this.paymentCredits.length && !this.paymentCreditsLoading) {
+      this.loadRescheduleCreditsForPayment(this.paymentItem);
+    }
+    if (!this.paymentForm.controls.creditId.value && this.paymentCredits.length === 1) {
+      this.paymentForm.controls.creditId.setValue(this.paymentCredits[0].creditId);
+    } else if (!this.paymentForm.controls.creditId.value) {
+      this.paymentForm.controls.amount.setValue(0);
+    }
+    this.onPaymentCreditChanged();
+  }
+
+  onPaymentCreditChanged(): void {
+    if (!this.isCreditPaymentMethodSelected()) return;
+    const selected = this.selectedPaymentCredit();
+    const item = this.paymentItem;
+    if (!selected || !item) return;
+    const targetAmount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
+    if (targetAmount > 0) {
+      this.paymentForm.controls.amount.setValue(Number(targetAmount.toFixed(2)));
+    }
+  }
+
+  creditAppliedAmount(): number {
+    if (!this.isCreditPaymentMethodSelected()) return 0;
+    const selected = this.selectedPaymentCredit();
+    const item = this.paymentItem;
+    if (!selected || !item) return 0;
+    const amount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
+    return Number(Math.max(0, amount).toFixed(2));
+  }
+
+  creditRemainingAmount(): number {
+    if (!this.isCreditPaymentMethodSelected()) return 0;
+    const item = this.paymentItem;
+    if (!item) return 0;
+    const remaining = this.remainingAmount(item) - this.creditAppliedAmount();
+    return Number(Math.max(0, remaining).toFixed(2));
+  }
+
+  shouldShowRemainingMethodSelector(): boolean {
+    return this.isCreditPaymentMethodSelected() && this.creditRemainingAmount() > 0;
+  }
+
+  paymentSubmitLabel(): string {
+    if (this.isSquarePaymentMethodSelected()) {
+      return this.paymentLinkLoadingId === this.paymentItem?.reservationId
+        ? 'Generating…'
+        : 'Generate Link';
+    }
+    if (this.loading) return 'Saving…';
+    if (!this.isCreditPaymentMethodSelected()) return 'Submit Payment';
+    if (this.creditRemainingAmount() <= 0) return 'Apply Credit';
+    return this.paymentForm.controls.remainingMethod.value === 'square'
+      ? 'Apply Credit + Generate Link'
+      : 'Apply Credit + Submit Payment';
+  }
+
+  creditOptionLabel(credit: RescheduleCredit): string {
+    const remaining = Number(credit.amountRemaining ?? 0).toFixed(2);
+    const expires = String(credit.expiresAt ?? '').trim();
+    return expires
+      ? `$${remaining} remaining · Expires ${expires}`
+      : `$${remaining} remaining`;
   }
 
   formatDeadline(deadlineAt?: string | null, eventDate?: string): string {
@@ -966,5 +1205,58 @@ export class Reservations implements OnInit, OnDestroy {
     const eventUtc = Date.UTC(Number(e[1]), Number(e[2]) - 1, Number(e[3]));
     const dayMs = 24 * 60 * 60 * 1000;
     return deadlineUtc - eventUtc === dayMs;
+  }
+
+  private selectedPaymentCredit(): RescheduleCredit | null {
+    const selectedId = String(this.paymentForm.controls.creditId.value ?? '').trim();
+    if (!selectedId) return null;
+    return this.paymentCredits.find((credit) => credit.creditId === selectedId) ?? null;
+  }
+
+  private resolvePhoneCountry(item: ReservationItem): 'US' | 'MX' {
+    const explicit = String((item as { phoneCountry?: unknown })?.phoneCountry ?? '')
+      .trim()
+      .toUpperCase();
+    if (explicit === 'MX') return 'MX';
+    if (explicit === 'US') return 'US';
+    const phone = String(item.phone ?? '').trim();
+    if (phone.startsWith('+52')) return 'MX';
+    return 'US';
+  }
+
+  private loadRescheduleCreditsForPayment(item: ReservationItem): void {
+    const phone = String(item.phone ?? '').trim();
+    if (!phone) {
+      this.paymentCredits = [];
+      this.paymentCreditsError = 'Reservation has no phone number to find credits.';
+      return;
+    }
+    this.paymentCreditsLoading = true;
+    this.paymentCreditsError = null;
+    this.paymentCredits = [];
+    this.paymentForm.controls.creditId.setValue('');
+
+    this.clientsApi.listRescheduleCredits(phone, this.resolvePhoneCountry(item)).subscribe({
+      next: (items) => {
+        this.paymentCredits = (items ?? []).filter((credit) => {
+          const status = String(credit.status ?? '').trim().toUpperCase();
+          return status === 'ACTIVE' && Number(credit.amountRemaining ?? 0) > 0;
+        });
+        if (!this.paymentCredits.length) {
+          this.paymentCreditsError = 'No active reschedule credits available for this client.';
+        } else if (this.paymentCredits.length === 1) {
+          this.paymentForm.controls.creditId.setValue(this.paymentCredits[0].creditId);
+        }
+        this.paymentCreditsLoading = false;
+        if (this.isCreditPaymentMethodSelected()) {
+          this.onPaymentCreditChanged();
+        }
+      },
+      error: (err) => {
+        this.paymentCreditsLoading = false;
+        this.paymentCreditsError =
+          err?.error?.message || err?.message || 'Failed to load reschedule credits';
+      },
+    });
   }
 }

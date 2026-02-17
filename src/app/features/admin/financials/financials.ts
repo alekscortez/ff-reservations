@@ -281,6 +281,7 @@ export class Financials implements OnInit, OnDestroy {
     const normalized = String(source ?? '').trim().toLowerCase();
     if (normalized === 'square-webhook') return 'bg-success-100 text-success-700';
     if (normalized === 'square-direct') return 'bg-brand-100 text-brand-700';
+    if (normalized === 'reschedule-credit') return 'bg-accent-100 text-accent-800';
     if (normalized === 'manual') return 'bg-accent-100 text-accent-800';
     return 'bg-brand-50 text-brand-600';
   }
@@ -291,6 +292,7 @@ export class Financials implements OnInit, OnDestroy {
     if (normalized === 'cash') return 'Cash';
     if (normalized === 'cashapp') return 'Cash App';
     if (normalized === 'square') return 'Square';
+    if (normalized === 'credit') return 'Reschedule Credit';
     return normalized
       .replace(/[_-]+/g, ' ')
       .split(' ')
@@ -304,6 +306,7 @@ export class Financials implements OnInit, OnDestroy {
     if (!normalized) return '—';
     if (normalized === 'square-webhook') return 'Square Auto Confirmed';
     if (normalized === 'square-direct') return 'Square Charged by Staff';
+    if (normalized === 'reschedule-credit') return 'Applied Reschedule Credit';
     if (normalized === 'manual') return 'Recorded Manually';
     return normalized
       .replace(/[_-]+/g, ' ')

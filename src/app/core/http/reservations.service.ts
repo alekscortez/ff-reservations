@@ -38,6 +38,7 @@ export interface AddPaymentPayload {
   eventDate: string;
   amount: number;
   method: PaymentMethod;
+  creditId?: string;
   note?: string;
 }
 
@@ -108,6 +109,11 @@ export interface ReservationHistoryItem {
   details?: Record<string, unknown> | null;
 }
 
+export type CancellationResolutionType =
+  | 'CANCEL_NO_REFUND'
+  | 'RESCHEDULE_CREDIT'
+  | 'REFUND';
+
 @Injectable({ providedIn: 'root' })
 export class ReservationsService {
   private api = inject(ApiClient);
@@ -122,11 +128,18 @@ export class ReservationsService {
       .pipe(map((res) => res.items ?? []));
   }
 
-  cancel(reservationId: string, eventDate: string, tableId: string, cancelReason: string) {
+  cancel(
+    reservationId: string,
+    eventDate: string,
+    tableId: string,
+    cancelReason: string,
+    resolutionType: CancellationResolutionType = 'CANCEL_NO_REFUND'
+  ) {
     return this.api.put<void>(`/reservations/${reservationId}/cancel`, {
       eventDate,
       tableId,
       cancelReason,
+      resolutionType,
     });
   }
 
@@ -137,6 +150,7 @@ export class ReservationsService {
         eventDate: payload.eventDate,
         amount: payload.amount,
         method: payload.method,
+        creditId: payload.creditId ?? '',
         note: payload.note ?? '',
       }
     );

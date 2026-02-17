@@ -38,6 +38,20 @@ export const routes: Routes = [
         (m) => m.CheckInPassPage
       ),
   },
+  {
+    path: 'map',
+    loadComponent: () =>
+      import('./features/public/availability/availability').then(
+        (m) => m.PublicAvailability
+      ),
+  },
+  {
+    path: 'availability',
+    loadComponent: () =>
+      import('./features/public/availability/availability').then(
+        (m) => m.PublicAvailability
+      ),
+  },
 
   // ✅ Staff (must be logged in)
   {

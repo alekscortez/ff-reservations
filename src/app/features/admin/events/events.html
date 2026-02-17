@@ -191,7 +191,7 @@
 
 <div class="fixed inset-0 z-50 flex items-center justify-center" *ngIf="showCreateModal">
   <div class="absolute inset-0 bg-black/40" (click)="closeCreateModal()"></div>
-  <section class="relative h-[92dvh] w-[94vw] max-w-3xl overflow-auto rounded-2xl bg-white p-4 md:h-auto md:p-6">
+  <section class="relative h-[92dvh] w-[94vw] max-w-3xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:h-auto md:max-h-[92dvh] md:p-6">
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-lg font-semibold text-brand-900">Create Event</h3>
       <button

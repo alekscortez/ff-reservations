@@ -4,6 +4,45 @@
   align-self: stretch;
 }
 
+@media (max-width: 1023px) {
+  .compact-map-shell {
+    position: sticky;
+    z-index: 10;
+  }
+
+  .compact-map-widget {
+    display: block;
+    height: 100%;
+    min-height: 0;
+  }
+
+  :host ::ng-deep .compact-map-shell .table-map-canvas {
+    min-height: 0 !important;
+    height: 100%;
+  }
+
+  .compact-list-shell {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    z-index: 10;
+  }
+
+  .compact-list-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .compact-list-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
 @media (min-width: 1024px) {
   .desktop-split {
     align-items: stretch;

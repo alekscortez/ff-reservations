@@ -23,14 +23,14 @@ Content-Type: application/json
 ###
 
 ### List reservations by event date
-GET {{baseUrl}}/reservations?eventDate=2026-02-14
+GET {{baseUrl}}/reservations?eventDate=2026-02-21
 Authorization: Bearer {{accessToken}}
 
 ###
 
 ### Add payment to reservation
 # Replace reservationId with returned item.reservationId from create call
-@reservationId = 69f8985f-589f-46f0-a218-3434c157c2a2
+@reservationId = 0ef50da0-7ffa-4695-a917-3430738da03c
 PUT {{baseUrl}}/reservations/{{reservationId}}/payment
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -40,6 +40,22 @@ Content-Type: application/json
   "amount": 250,
   "method": "cash",
   "note": "Paid at door"
+}
+
+###
+
+### Apply reschedule credit to reservation
+### creditId must belong to the same client phone as the reservation.
+PUT {{baseUrl}}/reservations/{{reservationId}}/payment
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "amount": 40,
+  "method": "credit",
+  "creditId": "8624b71c-50fd-4d4b-8be9-903d0a3d9681",
+  "note": "Applied reschedule credit"
 }
 
 ###
@@ -98,5 +114,35 @@ Content-Type: application/json
 {
   "eventDate": "2026-03-21",
   "tableId": "A15",
-  "cancelReason": "Client no-show"
+  "cancelReason": "Client no-show",
+  "resolutionType": "CANCEL_NO_REFUND"
+}
+
+###
+
+### Cancel reservation as reschedule request (issue 30-day credit)
+### Only allowed before configured cutoff on event day (default 10:00 PM operating timezone).
+PUT {{baseUrl}}/reservations/150f0755-3842-42e7-8e96-f96c93c79eb5/cancel
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "tableId": "E113",
+  "cancelReason": "Client requested date change",
+  "resolutionType": "RESCHEDULE_CREDIT"
+}
+
+###
+
+PUT {{baseUrl}}/reservations/498a2d27-62a9-4855-bb7d-0fabec17c271/payment
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "amount": 40,
+  "method": "credit",
+  "creditId": "8624b71c-50fd-4d4b-8be9-903d0a3d9681",
+  "note": "Applied reschedule credit"
 }

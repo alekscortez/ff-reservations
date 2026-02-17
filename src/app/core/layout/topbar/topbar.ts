@@ -27,12 +27,15 @@ export class Topbar implements OnInit, OnDestroy {
   contextMode: 'TODAY' | 'NEXT' | 'NONE' = 'NONE';
   contextEvent: EventItem | null = null;
   urgentPaymentCount = 0;
+  quickAvailabilityNotice: string | null = null;
+  quickAvailabilityError: string | null = null;
 
   private roleSub: Subscription | null = null;
   private routeSub: Subscription | null = null;
   private contextSub: Subscription | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private topbarPollingSeconds = 30;
+  private urgentPaymentWindowMinutes = 360;
 
   ngOnInit(): void {
     this.roleSub = this.auth.groups$().subscribe((groups) => {
@@ -71,10 +74,14 @@ export class Topbar implements OnInit, OnDestroy {
 
   toggleQuickActions(): void {
     this.isQuickActionsOpen = !this.isQuickActionsOpen;
+    if (this.isQuickActionsOpen) {
+      this.resetQuickAvailabilityFeedback();
+    }
   }
 
   closeQuickActions(): void {
     this.isQuickActionsOpen = false;
+    this.resetQuickAvailabilityFeedback();
   }
 
   isOnNewReservationRoute(): boolean {
@@ -113,6 +120,33 @@ export class Topbar implements OnInit, OnDestroy {
     ];
   }
 
+  sharePublicAvailability(): void {
+    const url = this.publicAvailabilityUrl();
+    if (!url) {
+      this.quickAvailabilityError = 'Live availability link is unavailable right now.';
+      this.quickAvailabilityNotice = null;
+      return;
+    }
+    this.quickAvailabilityError = null;
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator
+        .share({
+          title: 'Famoso Fuego Availability',
+          url,
+        })
+        .then(() => {
+          this.quickAvailabilityNotice = 'Availability link shared.';
+        })
+        .catch((err: unknown) => {
+          const name = String((err as { name?: string } | null)?.name ?? '');
+          if (name === 'AbortError') return;
+          this.copyPublicAvailability(url);
+        });
+      return;
+    }
+    this.copyPublicAvailability(url);
+  }
+
   private loadTopbarContext(): void {
     this.contextSub?.unsubscribe();
     this.contextSub = this.eventsApi
@@ -133,6 +167,7 @@ export class Topbar implements OnInit, OnDestroy {
             });
           }
           this.setPollingSeconds(ctx.settings?.clientAvailabilityPollingSeconds);
+          this.setUrgentPaymentWindowMinutes(ctx.settings?.urgentPaymentWindowMinutes);
           const contextEvent = ctx.event ?? ctx.nextEvent ?? null;
           const contextMode = ctx.event ? ('TODAY' as const) : contextEvent ? ('NEXT' as const) : ('NONE' as const);
           if (!contextEvent?.eventDate) {
@@ -167,7 +202,7 @@ export class Topbar implements OnInit, OnDestroy {
 
   private computeUrgentCount(items: ReservationItem[]): number {
     const now = Date.now();
-    const dueSoonWindowMs = 6 * 60 * 60 * 1000;
+    const dueSoonWindowMs = this.urgentPaymentWindowMinutes * 60 * 1000;
     let count = 0;
 
     for (const reservation of items) {
@@ -204,8 +239,67 @@ export class Topbar implements OnInit, OnDestroy {
     this.contextMode = 'NONE';
     this.urgentPaymentCount = 0;
     this.isQuickActionsOpen = false;
+    this.resetQuickAvailabilityFeedback();
     this.contextSub?.unsubscribe();
     this.contextSub = null;
+  }
+
+  private publicAvailabilityUrl(): string | null {
+    if (typeof window === 'undefined') return null;
+    const url = new URL('/map', window.location.origin);
+    const eventDate = String(this.contextEvent?.eventDate ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      url.searchParams.set('eventDate', eventDate);
+    }
+    return url.toString();
+  }
+
+  private copyPublicAvailability(url: string): void {
+    this.writeClipboard(url).then((ok) => {
+      if (ok) {
+        this.quickAvailabilityNotice = 'Availability link copied.';
+        this.quickAvailabilityError = null;
+        return;
+      }
+      this.quickAvailabilityNotice = null;
+      this.quickAvailabilityError = 'Copy failed. Please copy manually.';
+    });
+  }
+
+  private resetQuickAvailabilityFeedback(): void {
+    this.quickAvailabilityNotice = null;
+    this.quickAvailabilityError = null;
+  }
+
+  private async writeClipboard(text: string): Promise<boolean> {
+    const value = String(text ?? '').trim();
+    if (!value) return false;
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        // Fall back to legacy copy.
+      }
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
   }
 
   private setPollingSeconds(value: number | null | undefined): void {
@@ -217,5 +311,11 @@ export class Topbar implements OnInit, OnDestroy {
     if (this.isStaffOrAdmin) {
       this.startPolling();
     }
+  }
+
+  private setUrgentPaymentWindowMinutes(value: number | null | undefined): void {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    this.urgentPaymentWindowMinutes = Math.min(1440, Math.max(5, Math.round(parsed)));
   }
 }

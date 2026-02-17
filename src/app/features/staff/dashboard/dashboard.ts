@@ -17,6 +17,7 @@ import { PaymentMethod, ReservationItem } from '../../../shared/models/reservati
 import { TableForEvent } from '../../../shared/models/table.model';
 import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
 import { SystemActorLabelPipe } from '../../../shared/system-actor-label.pipe';
+import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 
 interface TableKpis {
   total: number;
@@ -33,7 +34,7 @@ interface UrgentPaymentItem {
 }
 
 interface ActivityItem {
-  type: 'RESERVED' | 'PAID' | 'CHECKED_IN' | 'CANCELLED';
+  type: 'RESERVED' | 'PAID' | 'PARTIAL' | 'CHECKED_IN' | 'CANCELLED';
   label: string;
   atEpoch: number;
   reservationId: string;
@@ -101,12 +102,14 @@ export class Dashboard implements OnInit, OnDestroy {
   private tablesApi = inject(TablesService);
   private reservationsApi = inject(ReservationsService);
   private checkInApi = inject(CheckInService);
+  private clientsApi = inject(ClientsService);
 
   contextLabel: 'TODAY EVENT' | 'NEXT EVENT' = 'TODAY EVENT';
   contextEvent: EventItem | null = null;
   nextUpcomingEvent: EventItem | null = null;
   businessDate = '';
   dashboardPollingSeconds = 15;
+  urgentPaymentWindowMinutes = 360;
 
   tables: TableForEvent[] = [];
   reservations: ReservationItem[] = [];
@@ -142,10 +145,17 @@ export class Dashboard implements OnInit, OnDestroy {
   showDetailsModal = false;
   paymentItem: ReservationItem | null = null;
   showPaymentModal = false;
+  paymentCredits: RescheduleCredit[] = [];
+  paymentCreditsLoading = false;
+  paymentCreditsError: string | null = null;
 
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
     method: new FormControl<PaymentMethod>('cash', { nonNullable: true }),
+    creditId: new FormControl('', { nonNullable: true }),
+    remainingMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+      nonNullable: true,
+    }),
     note: new FormControl('', { nonNullable: true }),
   });
 
@@ -171,6 +181,10 @@ export class Dashboard implements OnInit, OnDestroy {
         this.dashboardPollingSeconds = this.normalizePollingSeconds(
           ctx?.settings?.dashboardPollingSeconds,
           15
+        );
+        this.urgentPaymentWindowMinutes = this.normalizeUrgentWindowMinutes(
+          ctx?.settings?.urgentPaymentWindowMinutes,
+          360
         );
         const currentEvent = ctx?.event ?? null;
         const nextEvent = ctx?.nextEvent ?? null;
@@ -277,7 +291,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   private computeUrgentPayments(items: ReservationItem[]): UrgentPaymentItem[] {
     const now = Date.now();
-    const dueSoonWindowMs = 6 * 60 * 60 * 1000;
+    const dueSoonWindowMs = this.urgentPaymentWindowMinutes * 60 * 1000;
 
     return items
       .filter(
@@ -336,8 +350,9 @@ export class Dashboard implements OnInit, OnDestroy {
             : 0;
 
         if (lastPaymentEpoch > 0) {
+          const paymentType = reservation.paymentStatus === 'PAID' ? 'PAID' : 'PARTIAL';
           return {
-            type: 'PAID' as const,
+            type: paymentType as 'PAID' | 'PARTIAL',
             label: reservation.paymentStatus === 'PAID' ? 'Paid in full' : 'Payment recorded',
             atEpoch: lastPaymentEpoch,
             reservationId: reservation.reservationId,
@@ -459,12 +474,19 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentForm.setValue({
       amount: balance > 0 ? balance : 0,
       method: 'cash',
+      creditId: '',
+      remainingMethod: 'cash',
       note: '',
     });
+    this.loadRescheduleCreditsForPayment(item.reservation);
   }
 
   isSquarePaymentMethodSelected(): boolean {
     return this.paymentForm.controls.method.value === 'square';
+  }
+
+  isCreditPaymentMethodSelected(): boolean {
+    return this.paymentForm.controls.method.value === 'credit';
   }
 
   submitSquarePaymentFromModal(): void {
@@ -485,8 +507,13 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentForm.reset({
       amount: 0,
       method: 'cash',
+      creditId: '',
+      remainingMethod: 'cash',
       note: '',
     });
+    this.paymentCredits = [];
+    this.paymentCreditsLoading = false;
+    this.paymentCreditsError = null;
   }
 
   canGeneratePaymentLink(item: ReservationItem): boolean {
@@ -863,14 +890,135 @@ export class Dashboard implements OnInit, OnDestroy {
       return;
     }
     if (this.paymentForm.invalid) return;
+    const selectedCredit = this.selectedPaymentCredit();
+    if (method === 'credit' && !selectedCredit) {
+      this.paymentError = 'Select a valid reschedule credit to apply.';
+      return;
+    }
+    const remainingMethod = this.paymentForm.controls.remainingMethod.value;
 
     this.paymentLoading = true;
     this.paymentError = null;
+    this.paymentCreditsError = null;
 
     const amount = Number(this.paymentForm.controls.amount.value);
     const note = this.paymentForm.controls.note.value;
     const targetReservationId = this.paymentItem.reservationId;
     const targetEventDate = this.paymentItem.eventDate;
+
+    if (method === 'credit') {
+      const creditAmount = this.creditAppliedAmount();
+      if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+        this.paymentCreditsError = 'No credit amount can be applied for this reservation.';
+        this.paymentLoading = false;
+        return;
+      }
+
+      this.reservationsApi
+        .addPayment({
+          reservationId: targetReservationId,
+          eventDate: targetEventDate,
+          amount: creditAmount,
+          method: 'credit',
+          creditId: selectedCredit?.creditId,
+          note,
+        })
+        .subscribe({
+          next: (creditRes) => {
+            const afterCredit = creditRes.item;
+            this.reservations = this.reservations.map((reservation) =>
+              reservation.reservationId === afterCredit.reservationId ? afterCredit : reservation
+            );
+            const remaining = this.remainingAmount(afterCredit);
+            if (remaining <= 0) {
+              this.urgentPayments = this.computeUrgentPayments(this.reservations);
+              this.recentActivity = this.computeRecentActivity(this.reservations);
+              this.paymentLoading = false;
+              this.closeUrgentPayment();
+              return;
+            }
+
+            if (remainingMethod === 'square') {
+              this.paymentLinkLoadingId = afterCredit.reservationId;
+              this.paymentLinkError = null;
+              this.paymentLinkNotice = null;
+              this.reservationsApi
+                .createSquarePaymentLink({
+                  reservationId: afterCredit.reservationId,
+                  eventDate: afterCredit.eventDate,
+                  amount: remaining,
+                  note: note || `Remaining payment for table ${afterCredit.tableId}`,
+                })
+                .subscribe({
+                  next: (res) => {
+                    const url = String(res?.square?.url ?? '').trim();
+                    if (!url) {
+                      this.paymentError = 'Credit applied, but Square link URL was not returned.';
+                      this.paymentLoading = false;
+                      this.paymentLinkLoadingId = null;
+                      return;
+                    }
+                    this.paymentLinksByReservationId[afterCredit.reservationId] = {
+                      url,
+                      amount: Number(res?.reservation?.linkAmount ?? remaining),
+                      createdAtMs: Date.now(),
+                      audit: res?.square?.audit,
+                    };
+                    this.paymentLinkNotice = 'Credit applied. Square payment link is ready.';
+                    this.urgentPayments = this.computeUrgentPayments(this.reservations);
+                    this.recentActivity = this.computeRecentActivity(this.reservations);
+                    this.paymentLoading = false;
+                    this.paymentLinkLoadingId = null;
+                    this.closeUrgentPayment();
+                    this.openReservationDetails(afterCredit);
+                  },
+                  error: (err) => {
+                    this.paymentError =
+                      err?.error?.message ||
+                      err?.message ||
+                      'Credit applied, but failed to generate Square link';
+                    this.paymentLoading = false;
+                    this.paymentLinkLoadingId = null;
+                  },
+                });
+              return;
+            }
+
+            this.reservationsApi
+              .addPayment({
+                reservationId: afterCredit.reservationId,
+                eventDate: afterCredit.eventDate,
+                amount: remaining,
+                method: remainingMethod,
+                note: note || 'Remaining balance after credit',
+              })
+              .subscribe({
+                next: (finalRes) => {
+                  const updated = finalRes.item;
+                  this.reservations = this.reservations.map((reservation) =>
+                    reservation.reservationId === updated.reservationId ? updated : reservation
+                  );
+                  this.urgentPayments = this.computeUrgentPayments(this.reservations);
+                  this.recentActivity = this.computeRecentActivity(this.reservations);
+                  this.paymentLoading = false;
+                  this.closeUrgentPayment();
+                },
+                error: (err) => {
+                  this.paymentError =
+                    err?.error?.message ||
+                    err?.message ||
+                    'Credit was applied, but failed to process remaining payment';
+                  this.paymentLoading = false;
+                },
+              });
+          },
+          error: (err) => {
+            this.paymentError = err?.error?.message || err?.message || 'Failed to apply credit';
+            this.paymentLoading = false;
+          },
+        });
+      return;
+    }
 
     this.reservationsApi
       .addPayment({
@@ -898,10 +1046,86 @@ export class Dashboard implements OnInit, OnDestroy {
       });
   }
 
+  onPaymentMethodChanged(): void {
+    if (!this.isCreditPaymentMethodSelected()) {
+      this.paymentForm.controls.creditId.setValue('');
+      this.paymentForm.controls.remainingMethod.setValue('cash');
+      this.paymentCreditsError = null;
+      if (this.paymentItem) {
+        this.paymentForm.controls.amount.setValue(this.remainingAmount(this.paymentItem));
+      }
+      return;
+    }
+    if (this.paymentItem && !this.paymentCredits.length && !this.paymentCreditsLoading) {
+      this.loadRescheduleCreditsForPayment(this.paymentItem);
+    }
+    if (!this.paymentForm.controls.creditId.value && this.paymentCredits.length === 1) {
+      this.paymentForm.controls.creditId.setValue(this.paymentCredits[0].creditId);
+    } else if (!this.paymentForm.controls.creditId.value) {
+      this.paymentForm.controls.amount.setValue(0);
+    }
+    this.onPaymentCreditChanged();
+  }
+
+  onPaymentCreditChanged(): void {
+    if (!this.isCreditPaymentMethodSelected()) return;
+    const selected = this.selectedPaymentCredit();
+    const item = this.paymentItem;
+    if (!selected || !item) return;
+    const targetAmount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
+    if (targetAmount > 0) {
+      this.paymentForm.controls.amount.setValue(Number(targetAmount.toFixed(2)));
+    }
+  }
+
+  creditAppliedAmount(): number {
+    if (!this.isCreditPaymentMethodSelected()) return 0;
+    const selected = this.selectedPaymentCredit();
+    const item = this.paymentItem;
+    if (!selected || !item) return 0;
+    const amount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
+    return Number(Math.max(0, amount).toFixed(2));
+  }
+
+  creditRemainingAmount(): number {
+    if (!this.isCreditPaymentMethodSelected()) return 0;
+    const item = this.paymentItem;
+    if (!item) return 0;
+    const remaining = this.remainingAmount(item) - this.creditAppliedAmount();
+    return Number(Math.max(0, remaining).toFixed(2));
+  }
+
+  shouldShowRemainingMethodSelector(): boolean {
+    return this.isCreditPaymentMethodSelected() && this.creditRemainingAmount() > 0;
+  }
+
+  paymentSubmitLabel(): string {
+    if (this.isSquarePaymentMethodSelected()) {
+      return this.paymentLinkLoadingId === this.paymentItem?.reservationId
+        ? 'Generating…'
+        : 'Generate Link';
+    }
+    if (this.paymentLoading) return 'Saving…';
+    if (!this.isCreditPaymentMethodSelected()) return 'Submit Payment';
+    if (this.creditRemainingAmount() <= 0) return 'Apply Credit';
+    return this.paymentForm.controls.remainingMethod.value === 'square'
+      ? 'Apply Credit + Generate Link'
+      : 'Apply Credit + Submit Payment';
+  }
+
+  creditOptionLabel(credit: RescheduleCredit): string {
+    const remaining = Number(credit.amountRemaining ?? 0).toFixed(2);
+    const expires = String(credit.expiresAt ?? '').trim();
+    return expires
+      ? `$${remaining} remaining · Expires ${expires}`
+      : `$${remaining} remaining`;
+  }
+
   activityBadgeClass(activity: ActivityItem): string {
     if (activity.type === 'CANCELLED') return 'bg-danger-100 text-danger-700';
     if (activity.type === 'CHECKED_IN') return 'bg-success-100 text-success-700';
     if (activity.type === 'PAID') return 'bg-success-100 text-success-700';
+    if (activity.type === 'PARTIAL') return 'bg-accent-100 text-accent-800';
     return 'bg-brand-100 text-brand-700';
   }
 
@@ -926,6 +1150,8 @@ export class Dashboard implements OnInit, OnDestroy {
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
     if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'Check-In Pass Failed';
+    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'Reschedule Credit Issued';
+    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'Reschedule Credit Applied';
     if (normalized === 'RESERVATION_CANCELLED') return 'Reservation Cancelled';
     if (normalized === 'CHECKIN_PASS_ISSUED') return 'Check-In Pass Issued';
     if (normalized === 'CHECKIN_PASS_REISSUED') return 'Check-In Pass Reissued';
@@ -941,6 +1167,8 @@ export class Dashboard implements OnInit, OnDestroy {
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
     if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
+    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'bg-success-100 text-success-700 border-success-200';
+    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'bg-success-100 text-success-700 border-success-200';
     if (normalized === 'RESERVATION_CANCELLED') return 'bg-danger-100 text-danger-700 border-danger-200';
     return 'bg-brand-50 text-brand-700 border-brand-200';
   }
@@ -953,6 +1181,8 @@ export class Dashboard implements OnInit, OnDestroy {
     const paymentStatus = this.historyString(details['paymentStatus']);
     const smsTo = this.historyString(details['to']);
     const smsError = this.historyString(details['errorMessage']);
+    const creditAmount = this.historyNumber(details['amount']);
+    const creditExpiresAt = this.historyString(details['expiresAt']);
 
     if (item.eventType === 'PAYMENT_RECORDED' && amount !== null) {
       const methodText = method ? ` · ${this.paymentMethodLabel(method)}` : '';
@@ -976,6 +1206,13 @@ export class Dashboard implements OnInit, OnDestroy {
     }
     if (item.eventType === 'CHECKIN_PASS_SMS_FAILED') {
       return smsError || 'SMS send failed';
+    }
+    if (item.eventType === 'RESCHEDULE_CREDIT_ISSUED') {
+      const amountText = creditAmount !== null ? `$${creditAmount.toFixed(2)}` : 'Credit issued';
+      return creditExpiresAt ? `${amountText} · Expires ${creditExpiresAt}` : amountText;
+    }
+    if (item.eventType === 'RESCHEDULE_CREDIT_APPLIED') {
+      return amount !== null ? `$${amount.toFixed(2)}` : 'Credit applied';
     }
     return '';
   }
@@ -1005,10 +1242,69 @@ export class Dashboard implements OnInit, OnDestroy {
     return Math.min(120, Math.max(5, Math.round(parsed)));
   }
 
+  private normalizeUrgentWindowMinutes(value: number | null | undefined, fallback: number): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(1440, Math.max(5, Math.round(parsed)));
+  }
+
   private remainingAmount(item: ReservationItem): number {
     const due = Number(item.amountDue ?? 0);
     const paid = Number(item.depositAmount ?? 0);
     return Math.max(0, Number((due - paid).toFixed(2)));
+  }
+
+  private selectedPaymentCredit(): RescheduleCredit | null {
+    const selectedId = String(this.paymentForm.controls.creditId.value ?? '').trim();
+    if (!selectedId) return null;
+    return this.paymentCredits.find((credit) => credit.creditId === selectedId) ?? null;
+  }
+
+  private resolvePhoneCountry(item: ReservationItem): 'US' | 'MX' {
+    const explicit = String((item as { phoneCountry?: unknown })?.phoneCountry ?? '')
+      .trim()
+      .toUpperCase();
+    if (explicit === 'MX') return 'MX';
+    if (explicit === 'US') return 'US';
+    const phone = String(item.phone ?? '').trim();
+    if (phone.startsWith('+52')) return 'MX';
+    return 'US';
+  }
+
+  private loadRescheduleCreditsForPayment(item: ReservationItem): void {
+    const phone = String(item.phone ?? '').trim();
+    if (!phone) {
+      this.paymentCredits = [];
+      this.paymentCreditsError = 'Reservation has no phone number to find credits.';
+      return;
+    }
+    this.paymentCreditsLoading = true;
+    this.paymentCreditsError = null;
+    this.paymentCredits = [];
+    this.paymentForm.controls.creditId.setValue('');
+
+    this.clientsApi.listRescheduleCredits(phone, this.resolvePhoneCountry(item)).subscribe({
+      next: (items) => {
+        this.paymentCredits = (items ?? []).filter((credit) => {
+          const status = String(credit.status ?? '').trim().toUpperCase();
+          return status === 'ACTIVE' && Number(credit.amountRemaining ?? 0) > 0;
+        });
+        if (!this.paymentCredits.length) {
+          this.paymentCreditsError = 'No active reschedule credits available for this client.';
+        } else if (this.paymentCredits.length === 1) {
+          this.paymentForm.controls.creditId.setValue(this.paymentCredits[0].creditId);
+        }
+        this.paymentCreditsLoading = false;
+        if (this.isCreditPaymentMethodSelected()) {
+          this.onPaymentCreditChanged();
+        }
+      },
+      error: (err) => {
+        this.paymentCreditsLoading = false;
+        this.paymentCreditsError =
+          err?.error?.message || err?.message || 'Failed to load reschedule credits';
+      },
+    });
   }
 
   private buildShareMessage(item: ReservationItem, url: string): string {
@@ -1084,6 +1380,7 @@ export class Dashboard implements OnInit, OnDestroy {
     if (normalized === 'cash') return 'Cash';
     if (normalized === 'cashapp') return 'Cash App';
     if (normalized === 'square') return 'Square';
+    if (normalized === 'credit') return 'Reschedule Credit';
     return normalized
       .replace(/[_-]+/g, ' ')
       .split(' ')
