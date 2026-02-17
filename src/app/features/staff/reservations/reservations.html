@@ -172,7 +172,7 @@
 
 <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showDetailsModal && detailItem">
   <div class="absolute inset-0 bg-black/40" (click)="closeDetails()"></div>
-  <section class="relative h-[92dvh] w-[94vw] max-w-2xl overflow-auto overflow-x-hidden rounded-2xl bg-white p-4 md:h-auto md:p-6">
+  <section class="relative h-[92dvh] w-[94vw] max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:h-auto md:max-h-[92dvh] md:p-6">
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Reservation</p>
@@ -430,7 +430,7 @@
 
 <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showPaymentModal && paymentItem">
   <div class="absolute inset-0 bg-black/40" (click)="closePayment()"></div>
-  <section class="relative w-[92vw] max-w-md rounded-2xl bg-white p-4 md:p-6">
+  <section class="relative max-h-[92dvh] w-[92vw] max-w-md overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:p-6">
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-lg font-semibold text-brand-900">Take Payment</h3>
       <button
@@ -446,11 +446,56 @@
     <form class="mt-4 grid gap-3" [formGroup]="paymentForm" (ngSubmit)="submitPayment()">
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Amount
-        <input type="number" min="0.01" step="0.01" formControlName="amount" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          formControlName="amount"
+          [readonly]="isCreditPaymentMethodSelected()"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900 readonly:bg-brand-50"
+        />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Method
-        <select formControlName="method" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900">
+        <select
+          formControlName="method"
+          (change)="onPaymentMethodChanged()"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        >
+          <option value="cash">Cash</option>
+          <option value="cashapp">Cash App</option>
+          <option value="square">Square</option>
+          <option value="credit">Reschedule Credit</option>
+        </select>
+      </label>
+      <div class="grid gap-2" *ngIf="isCreditPaymentMethodSelected()">
+        <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+          Available Credit
+          <select
+            formControlName="creditId"
+            (change)="onPaymentCreditChanged()"
+            class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900 disabled:bg-brand-50"
+            [disabled]="paymentCreditsLoading || !paymentCredits.length"
+          >
+            <option value="" disabled selected hidden>Select credit</option>
+            <option *ngFor="let credit of paymentCredits" [value]="credit.creditId">
+              {{ creditOptionLabel(credit) }}
+            </option>
+          </select>
+        </label>
+        <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading">Loading credits…</p>
+        <p class="text-xs text-danger-700" *ngIf="paymentCreditsError">{{ paymentCreditsError }}</p>
+        <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading && paymentCredits.length">
+          <p>Credit applied now: ${{ creditAppliedAmount().toFixed(2) }}</p>
+          <p *ngIf="creditRemainingAmount() > 0">Remaining after credit: ${{ creditRemainingAmount().toFixed(2) }}</p>
+        </div>
+      </div>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500" *ngIf="shouldShowRemainingMethodSelector()">
+        Remaining Payment Method
+        <select
+          formControlName="remainingMethod"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        >
           <option value="cash">Cash</option>
           <option value="cashapp">Cash App</option>
           <option value="square">Square</option>
@@ -471,15 +516,16 @@
         class="h-11 rounded-lg bg-brand-900 text-sm font-semibold text-white disabled:opacity-50"
         [disabled]="
           isSquarePaymentMethodSelected()
-            ? paymentLinkLoadingId === paymentItem?.reservationId || !paymentItem || !canGeneratePaymentLink(paymentItem)
-            : loading || paymentForm.invalid
+            ? paymentLinkLoadingId === paymentItem.reservationId || !canGeneratePaymentLink(paymentItem)
+            : loading ||
+              paymentForm.invalid ||
+              (isCreditPaymentMethodSelected() &&
+                (paymentCreditsLoading ||
+                  !paymentForm.controls.creditId.value ||
+                  (shouldShowRemainingMethodSelector() && !paymentForm.controls.remainingMethod.value)))
         "
       >
-        {{
-          isSquarePaymentMethodSelected()
-            ? (paymentLinkLoadingId === paymentItem?.reservationId ? 'Generating…' : 'Generate Link')
-            : 'Submit Payment'
-        }}
+        {{ paymentSubmitLabel() }}
       </button>
     </form>
   </section>

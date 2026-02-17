@@ -17,7 +17,7 @@ import { HoldsService } from '../../../core/http/holds.service';
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { EventItem } from '../../../shared/models/event.model';
-import { ClientsService } from '../../../core/http/clients.service';
+import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
 import { debounceTime, distinctUntilChanged, interval, of, Subscription, switchMap } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
@@ -47,7 +47,14 @@ interface CreatedReservationContext {
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
   private readonly filterStorageKey = 'ff_new_res_filters_v1';
   private readonly sidebarModalLockClass = 'reservations-new-modal-open';
+  private readonly workspaceLockClass = 'reservations-new-workspace-lock';
   private sidebarModalLockActive = false;
+  private workspaceLockActive = false;
+  private visualViewportRef: VisualViewport | null = null;
+  private readonly onVisualViewportChanged = () => {
+    this.scheduleDesktopSplitLayout();
+    this.syncWorkspaceScrollLock();
+  };
   private route = inject(ActivatedRoute);
   private eventsApi = inject(EventsService);
   private tablesApi = inject(TablesService);
@@ -55,6 +62,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private reservationsApi = inject(ReservationsService);
   private clientsApi = inject(ClientsService);
   @ViewChild('desktopSplitPanel') desktopSplitPanel?: ElementRef<HTMLElement>;
+  @ViewChild('compactMapShell') compactMapShell?: ElementRef<HTMLElement>;
+  @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
+  @ViewChild('mobileCtaBar') mobileCtaBar?: ElementRef<HTMLElement>;
 
   eventDate: string | null = null;
   event: EventItem | null = null;
@@ -93,6 +103,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     D: '#f7941d',
     E: '#711411',
   };
+  readonly paymentMethodOptions: Array<{ value: 'cash' | 'cashapp' | 'square'; label: string }> = [
+    { value: 'cash', label: 'Cash' },
+    { value: 'cashapp', label: 'Cash App' },
+    { value: 'square', label: 'Square' },
+  ];
 
   form = new FormGroup({
     customerName: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -103,6 +118,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       nonNullable: true,
     }),
     paymentMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+      nonNullable: true,
+    }),
+    useCredit: new FormControl(false, { nonNullable: true }),
+    creditId: new FormControl('', { nonNullable: true }),
+    remainingMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
       nonNullable: true,
     }),
   });
@@ -123,12 +143,20 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   clientLoading = false;
   noClientMatch = false;
   exactMatchPhone: string | null = null;
+  clientCredits: RescheduleCredit[] = [];
+  clientCreditsLoading = false;
+  clientCreditsError: string | null = null;
+  private creditsLookupKey: string | null = null;
+  private creditsLookupSeq = 0;
   creatingPaymentLink = false;
   paymentLinkError: string | null = null;
   paymentLinkNotice: string | null = null;
   paymentLinkUrl: string | null = null;
   createdReservation: CreatedReservationContext | null = null;
   desktopSplitHeightPx: number | null = null;
+  compactBottomInsetPx = 96;
+  compactPanelHeightPx: number | null = null;
+  compactSectionBottomPaddingPx: number | null = null;
   private desktopLayoutRafId: number | null = null;
 
   ngOnInit(): void {
@@ -159,6 +187,15 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.form.controls.paymentMethod.valueChanges.subscribe(() => {
       this.onPaymentMethodChange();
     });
+    this.form.controls.useCredit.valueChanges.subscribe(() => {
+      this.onUseClientCreditChanged();
+    });
+    this.form.controls.creditId.valueChanges.subscribe(() => {
+      this.onClientCreditChanged();
+    });
+    this.form.controls.remainingMethod.valueChanges.subscribe(() => {
+      this.onClientCreditRemainingMethodChanged();
+    });
 
     this.form.controls.phone.valueChanges
       .pipe(
@@ -170,6 +207,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             this.clientMatches = [];
             this.noClientMatch = false;
             this.exactMatchPhone = null;
+            this.clearClientCreditsState();
             return of([]);
           }
           this.clientLoading = true;
@@ -194,22 +232,27 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             this.clientMatches = [];
             this.noClientMatch = false;
           }
+          this.refreshClientCreditsForCurrentPhone();
         },
         error: () => {
           this.clientMatches = [];
           this.noClientMatch = false;
           this.exactMatchPhone = null;
           this.clientLoading = false;
+          this.refreshClientCreditsForCurrentPhone();
         },
       });
   }
 
   ngAfterViewInit(): void {
+    this.attachVisualViewportListeners();
     this.scheduleDesktopSplitLayout();
   }
 
   ngOnDestroy(): void {
     this.syncSidebarModalLock(true);
+    this.syncWorkspaceScrollLock(true);
+    this.detachVisualViewportListeners();
     this.stopPolling();
     this.clearHoldTimer();
     if (this.desktopLayoutRafId !== null && typeof window !== 'undefined') {
@@ -220,6 +263,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   ngDoCheck(): void {
     this.syncSidebarModalLock();
+    this.syncWorkspaceScrollLock();
+    if (this.eventDate || this.desktopSplitHeightPx !== null || this.compactPanelHeightPx !== null) {
+      this.scheduleDesktopSplitLayout();
+    }
   }
 
   loadTables(date: string, opts: { silent?: boolean } = {}): void {
@@ -305,6 +352,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.showFiltersPanel = false;
     this.stopPolling();
     this.desktopSplitHeightPx = null;
+    this.compactPanelHeightPx = null;
+    this.compactSectionBottomPaddingPx = null;
   }
 
   upcomingEvents(): EventItem[] {
@@ -457,6 +506,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     const amountDue = this.form.controls.amountDue.value;
     const paymentStatus = this.form.controls.paymentStatus.value;
     const paymentMethod = this.form.controls.paymentMethod.value;
+    const usingCredit = this.isUsingClientCredit();
+    const selectedCredit = usingCredit ? this.selectedClientCredit() : null;
+    const creditAppliedAmount = usingCredit ? this.clientCreditAppliedAmount() : 0;
+    const creditRemainingAmount = usingCredit ? this.clientCreditRemainingAmount() : 0;
+    const remainingMethod = this.form.controls.remainingMethod.value;
     const phone = normalizePhoneToE164(
       this.form.controls.phone.value,
       normalizePhoneCountry(this.phoneCountry)
@@ -466,7 +520,23 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.loading = false;
       return;
     }
-    const needsDeadline = paymentStatus === 'PENDING' || paymentStatus === 'PARTIAL';
+    if (usingCredit && !selectedCredit) {
+      this.error = 'Select a reschedule credit to apply.';
+      this.loading = false;
+      return;
+    }
+    if (usingCredit && creditAppliedAmount <= 0) {
+      this.error = 'Selected credit cannot be applied to this reservation.';
+      this.loading = false;
+      return;
+    }
+
+    const createPaymentStatus = usingCredit ? 'PENDING' : paymentStatus;
+    const createPaymentMethod = usingCredit ? null : paymentMethod;
+    const createDepositAmount = usingCredit ? 0 : depositAmount;
+    const needsDeadline = usingCredit
+      ? this.creditNeedsDeadline()
+      : paymentStatus === 'PENDING' || paymentStatus === 'PARTIAL';
     if (needsDeadline && !this.paymentDeadlineEnabled) {
       this.error = 'Payment deadline is required for unpaid or partial reservations.';
       this.loading = false;
@@ -496,10 +566,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         customerName: this.form.controls.customerName.value,
         phone,
         phoneCountry: this.phoneCountry,
-        depositAmount,
+        depositAmount: createDepositAmount,
         amountDue,
-        paymentStatus,
-        paymentMethod,
+        paymentStatus: createPaymentStatus,
+        paymentMethod: createPaymentMethod,
         paymentDeadlineAt,
         paymentDeadlineTz: needsDeadline ? this.paymentDeadlineTz : null,
       })
@@ -507,6 +577,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         next: (created) => {
           const createdItem = created?.item;
           const autoSquareLinkSms = created?.autoSquareLinkSms;
+          const reservationId = String(createdItem?.reservationId ?? '');
           this.holdId = null;
           this.holdExpiresAt = null;
           this.holdCountdown = 0;
@@ -515,6 +586,78 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.showReleaseConfirm = false;
           this.loadTables(this.eventDate!);
 
+          if (!reservationId) {
+            this.error = 'Reservation created but reservation id was missing.';
+            this.loading = false;
+            return;
+          }
+
+          if (usingCredit) {
+            this.createdReservation = {
+              reservationId,
+              eventDate: this.eventDate!,
+              tableId: this.selectedTable!.id,
+              customerName: this.form.controls.customerName.value,
+              phone,
+              amount: creditRemainingAmount > 0 ? creditRemainingAmount : amountDue,
+            };
+
+            this.reservationsApi
+              .addPayment({
+                reservationId,
+                eventDate: this.eventDate!,
+                amount: creditAppliedAmount,
+                method: 'credit',
+                creditId: selectedCredit?.creditId,
+                note: 'Applied reschedule credit',
+              })
+              .subscribe({
+                next: () => {
+                  if (creditRemainingAmount > 0) {
+                    if (remainingMethod === 'square') {
+                      this.loading = false;
+                      this.generateSquarePaymentLink();
+                      return;
+                    }
+
+                    this.reservationsApi
+                      .addPayment({
+                        reservationId,
+                        eventDate: this.eventDate!,
+                        amount: creditRemainingAmount,
+                        method: remainingMethod,
+                        note: 'Remaining balance after credit',
+                      })
+                      .subscribe({
+                        next: () => {
+                          this.loading = false;
+                          this.finishReservationFlow();
+                        },
+                        error: (err) => {
+                          this.error =
+                            err?.error?.message ||
+                            err?.message ||
+                            `Credit applied, but remaining payment failed. Reservation ID: ${reservationId}`;
+                          this.loading = false;
+                        },
+                      });
+                    return;
+                  }
+
+                  this.loading = false;
+                  this.finishReservationFlow();
+                },
+                error: (err) => {
+                  this.error =
+                    err?.error?.message ||
+                    err?.message ||
+                    `Reservation created, but credit apply failed. Reservation ID: ${reservationId}`;
+                  this.loading = false;
+                },
+              });
+            return;
+          }
+
           if (paymentMethod === 'square') {
             if (autoSquareLinkSms?.sent) {
               this.loading = false;
@@ -522,18 +665,13 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               return;
             }
             this.createdReservation = {
-              reservationId: String(createdItem?.reservationId ?? ''),
+              reservationId,
               eventDate: this.eventDate!,
               tableId: this.selectedTable!.id,
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
             };
-            if (!this.createdReservation.reservationId) {
-              this.error = 'Reservation created but reservation id was missing.';
-              this.loading = false;
-              return;
-            }
             this.loading = false;
             this.generateSquarePaymentLink();
             return;
@@ -608,6 +746,98 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.clientMatches = [];
     this.noClientMatch = false;
     this.exactMatchPhone = this.normalizePhone(client.phone);
+    this.refreshClientCreditsForCurrentPhone(true);
+  }
+
+  onPhoneCountryChanged(value: string): void {
+    const normalized = normalizePhoneCountry(value);
+    if (this.phoneCountry === normalized) return;
+    this.phoneCountry = normalized;
+    this.refreshClientCreditsForCurrentPhone(true);
+  }
+
+  clientCreditsTotalRemaining(): number {
+    return Number(
+      this.clientCredits.reduce((sum, credit) => sum + Number(credit.amountRemaining ?? 0), 0).toFixed(2)
+    );
+  }
+
+  clientCreditLabel(credit: RescheduleCredit): string {
+    const amount = Number(credit.amountRemaining ?? 0);
+    const expires = this.formatCreditExpiry(credit.expiresAt);
+    return expires ? `$${amount.toFixed(2)} · Expires ${expires}` : `$${amount.toFixed(2)} · No expiry`;
+  }
+
+  isUsingClientCredit(): boolean {
+    return this.form.controls.useCredit.value && this.clientCredits.length > 0;
+  }
+
+  onUseClientCreditChanged(): void {
+    if (!this.form.controls.useCredit.value) {
+      this.form.controls.creditId.setValue('', { emitEvent: false });
+      this.form.controls.remainingMethod.setValue('cash', { emitEvent: false });
+      return;
+    }
+    if (this.clientCredits.length === 1) {
+      this.form.controls.creditId.setValue(this.clientCredits[0].creditId, { emitEvent: false });
+    }
+    if (!this.form.controls.creditId.value && this.clientCredits.length > 1) {
+      this.form.controls.creditId.setValue(this.clientCredits[0].creditId, { emitEvent: false });
+    }
+    this.onClientCreditChanged();
+  }
+
+  onClientCreditChanged(): void {
+    if (!this.isUsingClientCredit()) return;
+    const selected = this.selectedClientCredit();
+    if (!selected) return;
+    if (this.clientCreditRemainingAmount() <= 0) {
+      this.form.controls.remainingMethod.setValue('cash', { emitEvent: false });
+    }
+    this.onClientCreditRemainingMethodChanged();
+  }
+
+  onClientCreditRemainingMethodChanged(): void {
+    if (!this.isUsingClientCredit()) return;
+    if (this.creditNeedsDeadline()) {
+      this.paymentDeadlineEnabled = true;
+      this.setDefaultPaymentDeadline();
+      return;
+    }
+    this.paymentDeadlineEnabled = false;
+  }
+
+  selectedClientCredit(): RescheduleCredit | null {
+    const selectedId = String(this.form.controls.creditId.value ?? '').trim();
+    if (!selectedId) return null;
+    return this.clientCredits.find((credit) => credit.creditId === selectedId) ?? null;
+  }
+
+  clientCreditAppliedAmount(): number {
+    if (!this.isUsingClientCredit()) return 0;
+    const selected = this.selectedClientCredit();
+    if (!selected) return 0;
+    const amountDue = Number(this.form.controls.amountDue.value ?? 0);
+    const available = Number(selected.amountRemaining ?? 0);
+    return Number(Math.max(0, Math.min(amountDue, available)).toFixed(2));
+  }
+
+  clientCreditRemainingAmount(): number {
+    if (!this.isUsingClientCredit()) return Number(Math.max(0, this.form.controls.amountDue.value).toFixed(2));
+    const remaining = Number(this.form.controls.amountDue.value ?? 0) - this.clientCreditAppliedAmount();
+    return Number(Math.max(0, remaining).toFixed(2));
+  }
+
+  shouldShowCreditRemainingMethod(): boolean {
+    return this.isUsingClientCredit() && this.clientCreditRemainingAmount() > 0;
+  }
+
+  creditNeedsDeadline(): boolean {
+    return (
+      this.isUsingClientCredit() &&
+      this.clientCreditRemainingAmount() > 0 &&
+      this.form.controls.remainingMethod.value === 'square'
+    );
   }
 
   toggleCustomDeposit(): void {
@@ -665,6 +895,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   private normalizePhone(value: string | null | undefined): string {
     return String(value ?? '').replace(/\D/g, '');
+  }
+
+  private formatCreditExpiry(value: string | null | undefined): string {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const date = new Date(`${raw}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return raw;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   private phonesMatch(storedPhone: string | null | undefined, enteredDigits: string): boolean {
@@ -791,20 +1029,20 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.applyPaymentDefaultsForCurrentMethod();
   }
 
-  paymentMethodButtons(): Array<{ value: 'cash' | 'cashapp' | 'square'; label: string }> {
-    return [
-      { value: 'cash', label: 'Cash' },
-      { value: 'cashapp', label: 'Cash App' },
-      { value: 'square', label: 'Square' },
-    ];
+  trackByPaymentMethodOption(_index: number, item: { value: 'cash' | 'cashapp' | 'square' }): string {
+    return item.value;
   }
 
   isPaymentMethod(value: 'cash' | 'cashapp' | 'square'): boolean {
     return this.form.controls.paymentMethod.value === value;
   }
 
-  setPaymentMethod(value: 'cash' | 'cashapp' | 'square'): void {
+  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'cashapp' | 'square'): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.form.controls.paymentMethod.value === value) return;
     this.form.controls.paymentMethod.setValue(value);
+    this.form.controls.paymentMethod.markAsDirty();
   }
 
   isCashMethod(): boolean {
@@ -819,9 +1057,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.form.controls.paymentMethod.value === 'cashapp';
   }
 
+  isSquareCollectionFlow(): boolean {
+    if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
+      return this.form.controls.remainingMethod.value === 'square';
+    }
+    return this.isSquareMethod();
+  }
+
   generateSquarePaymentLink(): void {
     if (!this.createdReservation) return;
-    if (!this.isSquareMethod()) return;
+    if (!this.isSquareCollectionFlow()) return;
     if (this.creatingPaymentLink) return;
 
     this.creatingPaymentLink = true;
@@ -907,12 +1152,18 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   reservationActionLabel(): string {
     if (this.createdReservation) return 'Done';
-    if (this.isSquareMethod()) return 'Confirm & Generate Link';
+    if (this.isSquareCollectionFlow()) return 'Confirm & Generate Link';
     return 'Confirm Reservation';
   }
 
   reservationActionDisabled(): boolean {
     if (this.createdReservation) return this.loading || this.creatingPaymentLink;
+    if (
+      this.isUsingClientCredit() &&
+      (!this.selectedClientCredit() || this.clientCreditAppliedAmount() <= 0)
+    ) {
+      return true;
+    }
     return this.loading;
   }
 
@@ -930,6 +1181,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   setTableViewMode(mode: 'MAP' | 'LIST'): void {
     this.tableViewMode.setValue(mode);
+    if (mode === 'MAP') {
+      this.showFiltersPanel = false;
+    }
+    this.scheduleDesktopSplitLayout();
   }
 
   isTableViewMode(mode: 'MAP' | 'LIST'): boolean {
@@ -1114,8 +1369,79 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       amountDue: 0,
       paymentStatus: 'PAID',
       paymentMethod: 'cash',
+      useCredit: false,
+      creditId: '',
+      remainingMethod: 'cash',
     });
     this.phoneCountry = 'US';
+    this.clearClientCreditsState();
+  }
+
+  private clearClientCreditsState(): void {
+    this.clientCredits = [];
+    this.clientCreditsLoading = false;
+    this.clientCreditsError = null;
+    this.creditsLookupKey = null;
+    this.form.controls.useCredit.setValue(false, { emitEvent: false });
+    this.form.controls.creditId.setValue('', { emitEvent: false });
+    this.form.controls.remainingMethod.setValue('cash', { emitEvent: false });
+  }
+
+  private refreshClientCreditsForCurrentPhone(force = false): void {
+    const country = normalizePhoneCountry(this.phoneCountry);
+    const phone = normalizePhoneToE164(this.form.controls.phone.value, country);
+    if (!phone) {
+      this.clearClientCreditsState();
+      return;
+    }
+
+    const lookupKey = `${country}:${phone}`;
+    if (!force && this.creditsLookupKey === lookupKey) return;
+
+    this.creditsLookupKey = lookupKey;
+    this.clientCreditsLoading = true;
+    this.clientCreditsError = null;
+    this.clientCredits = [];
+    const seq = ++this.creditsLookupSeq;
+
+    this.clientsApi.listRescheduleCredits(phone, country).subscribe({
+      next: (items) => {
+        if (seq !== this.creditsLookupSeq) return;
+        const currentSelectedCreditId = String(this.form.controls.creditId.value ?? '').trim();
+        this.clientCredits = (items ?? []).filter((credit) => {
+          const status = String(credit.status ?? '').trim().toUpperCase();
+          return status === 'ACTIVE' && Number(credit.amountRemaining ?? 0) > 0;
+        });
+        if (!this.clientCredits.length) {
+          this.form.controls.useCredit.setValue(false, { emitEvent: false });
+          this.form.controls.creditId.setValue('', { emitEvent: false });
+          this.form.controls.remainingMethod.setValue('cash', { emitEvent: false });
+        } else if (currentSelectedCreditId) {
+          const stillExists = this.clientCredits.some(
+            (credit) => credit.creditId === currentSelectedCreditId
+          );
+          if (!stillExists) {
+            this.form.controls.creditId.setValue('', { emitEvent: false });
+          }
+        }
+        if (
+          this.form.controls.useCredit.value &&
+          !this.form.controls.creditId.value &&
+          this.clientCredits.length > 0
+        ) {
+          this.form.controls.creditId.setValue(this.clientCredits[0].creditId, { emitEvent: false });
+        }
+        this.clientCreditsLoading = false;
+      },
+      error: (err) => {
+        if (seq !== this.creditsLookupSeq) return;
+        this.clientCredits = [];
+        this.clientCreditsLoading = false;
+        this.creditsLookupKey = null;
+        this.clientCreditsError =
+          err?.error?.message || err?.message || 'Failed to load client credits';
+      },
+    });
   }
 
   tableCounts(): {
@@ -1157,6 +1483,39 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
     document.body.classList.toggle(this.sidebarModalLockClass, shouldLock);
     this.sidebarModalLockActive = shouldLock;
+  }
+
+  private syncWorkspaceScrollLock(forceUnlock = false): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const shouldLock =
+      !forceUnlock &&
+      !!this.eventDate &&
+      !this.showPastModal &&
+      !this.showReservationModal &&
+      !this.showReleaseConfirm;
+
+    if (shouldLock === this.workspaceLockActive) return;
+
+    document.body.classList.toggle(this.workspaceLockClass, shouldLock);
+    document.documentElement.classList.toggle(this.workspaceLockClass, shouldLock);
+    this.workspaceLockActive = shouldLock;
+  }
+
+  private attachVisualViewportListeners(): void {
+    if (typeof window === 'undefined') return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    this.visualViewportRef = viewport;
+    viewport.addEventListener('resize', this.onVisualViewportChanged, { passive: true });
+    viewport.addEventListener('scroll', this.onVisualViewportChanged, { passive: true });
+  }
+
+  private detachVisualViewportListeners(): void {
+    const viewport = this.visualViewportRef;
+    if (!viewport) return;
+    viewport.removeEventListener('resize', this.onVisualViewportChanged);
+    viewport.removeEventListener('scroll', this.onVisualViewportChanged);
+    this.visualViewportRef = null;
   }
 
   private loadRuntimeContext(): void {
@@ -1223,7 +1582,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   @HostListener('window:scroll')
   onWindowScroll(): void {
-    if (this.desktopSplitHeightPx !== null) {
+    if (this.desktopSplitHeightPx !== null || this.compactPanelHeightPx !== null) {
       this.scheduleDesktopSplitLayout();
     }
   }
@@ -1237,6 +1596,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.desktopLayoutRafId = window.requestAnimationFrame(() => {
       this.desktopLayoutRafId = null;
       this.recalculateDesktopSplitHeight();
+      this.recalculateCompactSplitHeight();
     });
   }
 
@@ -1250,11 +1610,50 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     const host = this.desktopSplitPanel?.nativeElement;
     if (!host) return;
     const rect = host.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewportHeight = Math.floor(visualViewport?.height ?? window.innerHeight);
+    const viewportOffsetTop = Math.floor(visualViewport?.offsetTop ?? 0);
     const bottomGapPx = 8;
     const minHeightPx = 320;
     this.desktopSplitHeightPx = Math.max(
       minHeightPx,
-      Math.floor(window.innerHeight - rect.top - bottomGapPx)
+      Math.floor(viewportHeight + viewportOffsetTop - rect.top - bottomGapPx)
     );
+  }
+
+  private recalculateCompactSplitHeight(): void {
+    if (typeof window === 'undefined') return;
+    const isCompact = window.matchMedia('(max-width: 1023px)').matches;
+    if (!isCompact || !this.eventDate || this.showReservationModal || this.showPastModal || this.showReleaseConfirm) {
+      this.compactPanelHeightPx = null;
+      this.compactSectionBottomPaddingPx = null;
+      return;
+    }
+
+    const visualViewport = window.visualViewport;
+    const viewportHeight = Math.floor(visualViewport?.height ?? window.innerHeight);
+    const viewportOffsetTop = Math.floor(visualViewport?.offsetTop ?? 0);
+
+    const ctaHeight = Math.ceil(
+      this.mobileCtaBar?.nativeElement?.getBoundingClientRect().height ?? 72
+    );
+    const bottomGapPx = 8;
+    this.compactBottomInsetPx = Math.max(72, ctaHeight + bottomGapPx);
+    this.compactSectionBottomPaddingPx = this.compactBottomInsetPx + 12;
+
+    const activeShell = this.isTableViewMode('MAP')
+      ? this.compactMapShell?.nativeElement
+      : this.compactListShell?.nativeElement;
+    if (!activeShell) {
+      this.compactPanelHeightPx = null;
+      return;
+    }
+
+    const rect = activeShell.getBoundingClientRect();
+    const minHeightPx = 240;
+    const available = Math.floor(
+      viewportHeight + viewportOffsetTop - rect.top - this.compactBottomInsetPx - 4
+    );
+    this.compactPanelHeightPx = Math.max(minHeightPx, available);
   }
 }

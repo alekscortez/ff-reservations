@@ -55,7 +55,7 @@
 
   <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showPastModal">
     <div class="absolute inset-0 bg-black/50" (click)="showPastModal = false"></div>
-    <div class="relative w-[92vw] max-w-2xl rounded-2xl bg-white p-4 md:p-6">
+    <div class="relative max-h-[92dvh] w-[92vw] max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:p-6">
       <div class="flex items-center justify-between gap-4">
         <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
         <button
@@ -96,64 +96,19 @@
     </div>
   </div>
 
-  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 pb-24 md:p-6 md:pb-6" *ngIf="eventDate">
+  <section
+    class="w-full pb-24 lg:pb-6"
+    *ngIf="eventDate"
+    [style.padding-bottom.px]="compactSectionBottomPaddingPx ?? null"
+  >
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="grid gap-1">
         <span *ngIf="loading" class="text-sm text-brand-500">Loading tables…</span>
         <span class="text-sm text-danger-700" *ngIf="error && !showReservationModal">{{ error }}</span>
-        <span class="text-sm text-brand-500" *ngIf="!loading && !error">
-          Total {{ tableCounts().total }} · Available {{ tableCounts().available }} · Hold
-          {{ tableCounts().hold }} · Pending payment {{ tableCounts().pendingPayment }} · Reserved
-          {{ tableCounts().reserved }} · Disabled
-          {{ tableCounts().disabled }}
-        </span>
       </div>
     </div>
 
     <div class="mt-4 grid gap-2 lg:hidden">
-      <div class="flex items-end gap-2">
-        <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
-          Search table
-          <input
-            type="text"
-            class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-            [formControl]="filterQuery"
-            placeholder="A01, B38..."
-            inputmode="numeric"
-            pattern="[0-9]*"
-          />
-        </label>
-        <div class="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            class="inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border border-brand-200 px-2.5 text-brand-800"
-            [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
-            (click)="toggleFiltersPanel()"
-            aria-label="Open filters"
-            title="Filters"
-          >
-            <svg
-              class="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
-            </svg>
-            <span
-              class="min-w-5 rounded-full bg-brand-900 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
-              *ngIf="activeFiltersCount() > 0"
-            >
-              {{ activeFiltersCount() }}
-            </span>
-            <span class="text-[10px]">{{ showFiltersPanel ? '▲' : '▼' }}</span>
-          </button>
-        </div>
-      </div>
       <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
         <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
           <button
@@ -177,9 +132,51 @@
           Tap a green table to start reservation
         </p>
       </div>
+      <div class="flex min-w-0 items-end gap-2" *ngIf="isTableViewMode('LIST')">
+        <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
+          Search table
+          <input
+            type="text"
+            class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+            [formControl]="filterQuery"
+            placeholder="A01, B38..."
+            inputmode="numeric"
+            pattern="[0-9]*"
+          />
+        </label>
+        <div class="flex shrink-0 items-center">
+          <button
+            type="button"
+            class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-800"
+            [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
+            (click)="toggleFiltersPanel()"
+            aria-label="Open filters"
+            title="Filters"
+          >
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+            </svg>
+            <span
+              class="absolute right-0 top-0 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-900 px-1 text-center text-[9px] font-semibold leading-none text-white"
+              *ngIf="activeFiltersCount() > 0"
+            >
+              {{ activeFiltersCount() }}
+            </span>
+          </button>
+        </div>
+      </div>
       <div
         class="grid w-full gap-3 rounded-xl border border-brand-100 bg-white p-3 shadow-sm"
-        *ngIf="showFiltersPanel"
+        *ngIf="showFiltersPanel && isTableViewMode('LIST')"
       >
         <div class="grid gap-2">
           <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
@@ -270,8 +267,15 @@
       </div>
     </div>
 
-    <div class="mt-4 lg:hidden" *ngIf="isTableViewMode('MAP')">
+    <div
+      #compactMapShell
+      class="mt-4 lg:hidden compact-map-shell"
+      *ngIf="isTableViewMode('MAP')"
+      [style.bottom.px]="compactBottomInsetPx"
+      [style.height.px]="compactPanelHeightPx ?? null"
+    >
       <app-table-map
+        class="compact-map-widget"
         [tables]="tables"
         [sectionColors]="tableSectionColors"
         [selectedTableId]="selectedTable?.id ?? null"
@@ -280,9 +284,17 @@
     </div>
 
     <div
-      class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:hidden"
+      #compactListShell
+      class="compact-list-shell mt-4 overflow-hidden rounded-xl border border-brand-100 bg-white shadow-sm lg:hidden"
       *ngIf="isTableViewMode('LIST')"
+      [style.bottom.px]="compactBottomInsetPx"
+      [style.max-height.px]="compactPanelHeightPx ?? null"
     >
+      <div class="compact-list-header flex items-center justify-between gap-2 px-3 py-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
+        <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+      </div>
+      <div class="compact-list-body grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 md:grid-cols-4">
       <button
         class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
         [ngClass]="{
@@ -327,11 +339,12 @@
           }}
         </div>
       </button>
+      </div>
     </div>
 
     <div
       #desktopSplitPanel
-      class="desktop-split mt-4 hidden lg:grid lg:grid-cols-12 lg:gap-4"
+      class="desktop-split mt-4 hidden lg:sticky lg:top-16 lg:grid lg:grid-cols-12 lg:gap-4"
       [style.height.px]="desktopSplitHeightPx ?? null"
     >
       <div class="desktop-map-col lg:col-span-8">
@@ -349,7 +362,7 @@
       <div class="desktop-table-panel lg:col-span-4">
         <div class="desktop-table-panel-card rounded-xl border border-brand-100 bg-white p-3 shadow-sm">
           <div class="mb-3 grid gap-2">
-            <div class="flex items-end gap-2">
+            <div class="flex min-w-0 items-end gap-2">
               <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
                 Search table
                 <input
@@ -361,10 +374,10 @@
                   pattern="[0-9]*"
                 />
               </label>
-              <div class="flex shrink-0 items-center gap-2">
+              <div class="flex shrink-0 items-center">
                 <button
                   type="button"
-                  class="inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-full border border-brand-200 px-2.5 text-brand-800"
+                  class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-800"
                   [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
                   (click)="toggleFiltersPanel()"
                   aria-label="Open filters"
@@ -383,12 +396,11 @@
                     <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
                   </svg>
                   <span
-                    class="min-w-5 rounded-full bg-brand-900 px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white"
+                    class="absolute right-0 top-0 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-900 px-1 text-center text-[9px] font-semibold leading-none text-white"
                     *ngIf="activeFiltersCount() > 0"
                   >
                     {{ activeFiltersCount() }}
                   </span>
-                  <span class="text-[10px]">{{ showFiltersPanel ? '▲' : '▼' }}</span>
                 </button>
               </div>
             </div>
@@ -572,7 +584,7 @@
 
   <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
     <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
-    <div class="relative h-full w-full max-w-3xl overflow-auto bg-white p-4 pb-28 md:h-auto md:rounded-2xl md:p-6">
+    <div class="relative h-full w-full max-w-3xl overflow-y-auto overflow-x-hidden bg-white p-4 pb-28 md:h-auto md:max-h-[92dvh] md:rounded-2xl md:p-6">
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -605,7 +617,7 @@
                   <select
                     class="rounded-lg border border-brand-200 px-2 py-2 text-sm"
                     [value]="phoneCountry"
-                    (change)="phoneCountry = $any($event.target).value"
+                    (change)="onPhoneCountryChanged($any($event.target).value)"
                   >
                     <option value="US">🇺🇸 +1</option>
                     <option value="MX">🇲🇽 +52</option>
@@ -646,15 +658,78 @@
               </button>
             </div>
 
-            <div class="grid gap-2 md:col-span-2">
+            <div
+              class="md:col-span-2 rounded-xl border border-accent-200 bg-accent-50/70 p-3"
+              *ngIf="clientCreditsLoading || clientCredits.length > 0 || clientCreditsError"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-accent-800">
+                  Reschedule Credits
+                </p>
+                <p class="text-xs font-semibold text-accent-800" *ngIf="!clientCreditsLoading && clientCredits.length">
+                  Total ${{ clientCreditsTotalRemaining().toFixed(2) }}
+                </p>
+              </div>
+              <p class="mt-1 text-xs text-brand-600" *ngIf="clientCreditsLoading">Loading credits…</p>
+              <p class="mt-1 text-xs text-danger-700" *ngIf="clientCreditsError">{{ clientCreditsError }}</p>
+              <div class="mt-2 grid gap-2" *ngIf="!clientCreditsLoading && clientCredits.length">
+                <label class="flex items-center gap-2 text-sm text-brand-800">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4"
+                    [checked]="isUsingClientCredit()"
+                    (change)="form.controls.useCredit.setValue($any($event.target).checked)"
+                  />
+                  Apply reschedule credit
+                </label>
+
+                <ng-container *ngIf="isUsingClientCredit()">
+                  <label class="grid gap-1 text-xs text-brand-600">
+                    Select Credit
+                    <select
+                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      formControlName="creditId"
+                    >
+                      <option value="" disabled>Select credit</option>
+                      <option *ngFor="let credit of clientCredits" [value]="credit.creditId">
+                        {{ clientCreditLabel(credit) }}
+                      </option>
+                    </select>
+                  </label>
+                  <div class="rounded-lg border border-accent-200 bg-white p-2 text-xs text-brand-700">
+                    <p>Credit applied now: ${{ clientCreditAppliedAmount().toFixed(2) }}</p>
+                    <p *ngIf="clientCreditRemainingAmount() > 0">
+                      Remaining after credit: ${{ clientCreditRemainingAmount().toFixed(2) }}
+                    </p>
+                    <p *ngIf="clientCreditRemainingAmount() <= 0">
+                      Credit fully covers this reservation amount.
+                    </p>
+                  </div>
+                  <label class="grid gap-1 text-xs text-brand-600" *ngIf="shouldShowCreditRemainingMethod()">
+                    Remaining Payment Method
+                    <select
+                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      formControlName="remainingMethod"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="cashapp">Cash App</option>
+                      <option value="square">Square</option>
+                    </select>
+                  </label>
+                </ng-container>
+              </div>
+            </div>
+
+            <div class="grid gap-2 md:col-span-2" *ngIf="!isUsingClientCredit()">
               <p class="text-xs text-brand-600">Payment Method</p>
-              <div class="grid grid-cols-3 gap-2">
+              <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
                 <button
                   type="button"
-                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold"
-                  *ngFor="let method of paymentMethodButtons()"
+                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold touch-manipulation"
+                  *ngFor="let method of paymentMethodOptions; trackBy: trackByPaymentMethodOption"
                   [ngClass]="isPaymentMethod(method.value) ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-brand-800'"
-                  (click)="setPaymentMethod(method.value)"
+                  (mousedown)="onPaymentMethodButtonClick($event, method.value)"
+                  (click)="onPaymentMethodButtonClick($event, method.value)"
                 >
                   {{ method.label }}
                 </button>
@@ -671,7 +746,7 @@
               />
             </label>
 
-            <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isCashMethod()">
+            <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isUsingClientCredit() && !isCashMethod()">
               <p class="font-semibold text-brand-800">
                 {{ isSquareMethod() ? 'Square payment flow' : 'Cash App payment flow' }}
               </p>
@@ -680,7 +755,7 @@
               </p>
             </div>
 
-            <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="isCashMethod()">
+            <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="!isUsingClientCredit() && isCashMethod()">
               <label class="grid gap-1 text-xs text-brand-600">
                 Payment Status
                 <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="paymentStatus" (change)="onPaymentStatusChange()">
@@ -710,7 +785,7 @@
             </div>
 
             <div class="grid gap-2 md:col-span-2">
-              <label class="flex items-center gap-2 text-sm text-brand-700" *ngIf="isCashMethod()">
+              <label class="flex items-center gap-2 text-sm text-brand-700" *ngIf="!isUsingClientCredit() && isCashMethod()">
                 <input
                   type="checkbox"
                   class="h-4 w-4"
@@ -719,10 +794,13 @@
                 />
                 Set payment deadline (required if not fully paid)
               </label>
-              <p class="text-xs text-brand-600" *ngIf="!isCashMethod()">
+              <p class="text-xs text-brand-600" *ngIf="!isUsingClientCredit() && !isCashMethod()">
                 Payment deadline is required for digital payment methods.
               </p>
-              <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || !isCashMethod()">
+              <p class="text-xs text-brand-600" *ngIf="isUsingClientCredit() && shouldShowCreditRemainingMethod()">
+                Remaining balance will be collected by {{ form.controls.remainingMethod.value === 'square' ? 'Square link' : (form.controls.remainingMethod.value === 'cashapp' ? 'Cash App' : 'Cash') }} after credit is applied.
+              </p>
+              <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
                 <label class="grid gap-1 text-xs text-brand-600">
                   Deadline Date
                   <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineDate" />
@@ -747,7 +825,7 @@
               Table {{ createdReservation?.tableId }}.
             </p>
 
-            <ng-container *ngIf="isSquareMethod(); else nonSquareSummary">
+            <ng-container *ngIf="isSquareCollectionFlow(); else nonSquareSummary">
               <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
                 <div class="flex items-center justify-between gap-3">
                   <p class="text-xs uppercase tracking-[0.12em] text-brand-500">Square Payment Link</p>
@@ -823,6 +901,7 @@
 </section>
 
 <div
+  #mobileCtaBar
   class="fixed bottom-0 left-0 right-0 z-[220] w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden"
   *ngIf="(eventDate || (showReservationModal && selectedTable)) && !showReleaseConfirm"
 >
