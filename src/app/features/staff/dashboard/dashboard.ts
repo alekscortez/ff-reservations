@@ -153,7 +153,7 @@ export class Dashboard implements OnInit, OnDestroy {
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
     method: new FormControl<PaymentMethod>('cash', { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
-    remainingMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+    remainingMethod: new FormControl<'cash' | 'square'>('cash', {
       nonNullable: true,
     }),
     note: new FormControl('', { nonNullable: true }),
@@ -1378,7 +1378,7 @@ export class Dashboard implements OnInit, OnDestroy {
   private paymentMethodLabel(value: string): string {
     const normalized = String(value ?? '').trim().toLowerCase();
     if (normalized === 'cash') return 'Cash';
-    if (normalized === 'cashapp') return 'Cash App';
+    if (normalized === 'cashapp') return 'Square';
     if (normalized === 'square') return 'Square';
     if (normalized === 'credit') return 'Reschedule Credit';
     return normalized

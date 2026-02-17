@@ -10,7 +10,7 @@ export class PaymentMethodLabelPipe implements PipeTransform {
     if (!raw) return '—';
     const normalized = raw.toLowerCase();
     if (normalized === 'cash') return 'Cash';
-    if (normalized === 'cashapp') return 'Cash App';
+    if (normalized === 'cashapp') return 'Square';
     if (normalized === 'square') return 'Square';
     if (normalized === 'credit') return 'Reschedule Credit';
 

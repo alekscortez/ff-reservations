@@ -712,7 +712,6 @@
                       formControlName="remainingMethod"
                     >
                       <option value="cash">Cash</option>
-                      <option value="cashapp">Cash App</option>
                       <option value="square">Square</option>
                     </select>
                   </label>
@@ -722,7 +721,7 @@
 
             <div class="grid gap-2 md:col-span-2" *ngIf="!isUsingClientCredit()">
               <p class="text-xs text-brand-600">Payment Method</p>
-              <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
+              <div class="relative z-30 grid grid-cols-2 gap-2 pointer-events-auto">
                 <button
                   type="button"
                   class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold touch-manipulation"
@@ -748,7 +747,7 @@
 
             <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isUsingClientCredit() && !isCashMethod()">
               <p class="font-semibold text-brand-800">
-                {{ isSquareMethod() ? 'Square payment flow' : 'Cash App payment flow' }}
+                Square payment flow
               </p>
               <p class="mt-1">
                 Reservation is created as pending until payment is confirmed. Full amount due is used for digital collection.
@@ -798,7 +797,7 @@
                 Payment deadline is required for digital payment methods.
               </p>
               <p class="text-xs text-brand-600" *ngIf="isUsingClientCredit() && shouldShowCreditRemainingMethod()">
-                Remaining balance will be collected by {{ form.controls.remainingMethod.value === 'square' ? 'Square link' : (form.controls.remainingMethod.value === 'cashapp' ? 'Cash App' : 'Cash') }} after credit is applied.
+                Remaining balance will be collected by {{ form.controls.remainingMethod.value === 'square' ? 'Square link' : 'Cash' }} after credit is applied.
               </p>
               <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
                 <label class="grid gap-1 text-xs text-brand-600">
@@ -869,9 +868,6 @@
             </ng-container>
 
             <ng-template #nonSquareSummary>
-              <p class="text-sm text-brand-700" *ngIf="isCashAppMethod()">
-                Cash App selected. Collect full payment manually and update payment status from reservations.
-              </p>
               <p class="text-sm text-brand-700" *ngIf="isCashMethod()">
                 Payment was captured as cash flow.
               </p>

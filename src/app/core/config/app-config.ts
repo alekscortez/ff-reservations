@@ -1,5 +1,5 @@
 export const APP_CONFIG = {
-  apiBaseUrl: 'https://oxk1adhl3a.execute-api.us-east-1.amazonaws.com',
+  apiBaseUrl: 'https://api.famosofuego.com',
   cognito: {
     authority: 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Upsi9Q2Tc',
     hostedUiDomain: 'https://us-east-1upsi9q2tc.auth.us-east-1.amazoncognito.com',

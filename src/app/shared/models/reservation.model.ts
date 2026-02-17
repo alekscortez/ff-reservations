@@ -1,6 +1,6 @@
 export type ReservationStatus = 'CONFIRMED' | 'CANCELLED';
 export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
-export type PaymentMethod = 'cash' | 'cashapp' | 'square' | 'credit';
+export type PaymentMethod = 'cash' | 'square' | 'credit';
 export type PaymentSource = 'manual' | 'square-direct' | 'square-webhook' | 'reschedule-credit';
 
 export interface ReservationPayment {

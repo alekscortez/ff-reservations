@@ -103,9 +103,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     D: '#f7941d',
     E: '#711411',
   };
-  readonly paymentMethodOptions: Array<{ value: 'cash' | 'cashapp' | 'square'; label: string }> = [
+  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square'; label: string }> = [
     { value: 'cash', label: 'Cash' },
-    { value: 'cashapp', label: 'Cash App' },
     { value: 'square', label: 'Square' },
   ];
 
@@ -117,12 +116,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     paymentStatus: new FormControl<'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY'>('PAID', {
       nonNullable: true,
     }),
-    paymentMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+    paymentMethod: new FormControl<'cash' | 'square'>('cash', {
       nonNullable: true,
     }),
     useCredit: new FormControl(false, { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
-    remainingMethod: new FormControl<'cash' | 'cashapp' | 'square'>('cash', {
+    remainingMethod: new FormControl<'cash' | 'square'>('cash', {
       nonNullable: true,
     }),
   });
@@ -1029,15 +1028,15 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.applyPaymentDefaultsForCurrentMethod();
   }
 
-  trackByPaymentMethodOption(_index: number, item: { value: 'cash' | 'cashapp' | 'square' }): string {
+  trackByPaymentMethodOption(_index: number, item: { value: 'cash' | 'square' }): string {
     return item.value;
   }
 
-  isPaymentMethod(value: 'cash' | 'cashapp' | 'square'): boolean {
+  isPaymentMethod(value: 'cash' | 'square'): boolean {
     return this.form.controls.paymentMethod.value === value;
   }
 
-  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'cashapp' | 'square'): void {
+  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square'): void {
     event.preventDefault();
     event.stopPropagation();
     if (this.form.controls.paymentMethod.value === value) return;
@@ -1051,10 +1050,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   isSquareMethod(): boolean {
     return this.form.controls.paymentMethod.value === 'square';
-  }
-
-  isCashAppMethod(): boolean {
-    return this.form.controls.paymentMethod.value === 'cashapp';
   }
 
   isSquareCollectionFlow(): boolean {

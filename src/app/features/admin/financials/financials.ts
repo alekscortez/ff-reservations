@@ -68,7 +68,6 @@ interface EventReservationsSnapshot {
 
 interface MethodTotals {
   cash: number;
-  cashapp: number;
   square: number;
 }
 
@@ -109,7 +108,7 @@ export class Financials implements OnInit, OnDestroy {
   receivables: FinancialRow[] = [];
   ledgerRows: PaymentLedgerRow[] = [];
   eventSummaries: EventFinancialSummary[] = [];
-  methodTotals: MethodTotals = { cash: 0, cashapp: 0, square: 0 };
+  methodTotals: MethodTotals = { cash: 0, square: 0 };
 
   rangeFrom = new FormControl('', { nonNullable: true });
   rangeTo = new FormControl('', { nonNullable: true });
@@ -290,7 +289,7 @@ export class Financials implements OnInit, OnDestroy {
     const normalized = String(method ?? '').trim().toLowerCase();
     if (!normalized) return '—';
     if (normalized === 'cash') return 'Cash';
-    if (normalized === 'cashapp') return 'Cash App';
+    if (normalized === 'cashapp') return 'Square';
     if (normalized === 'square') return 'Square';
     if (normalized === 'credit') return 'Reschedule Credit';
     return normalized
@@ -550,7 +549,7 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private buildMethodTotals(snapshots: EventReservationsSnapshot[]): MethodTotals {
-    const totals: MethodTotals = { cash: 0, cashapp: 0, square: 0 };
+    const totals: MethodTotals = { cash: 0, square: 0 };
 
     for (const { reservations } of snapshots) {
       for (const reservation of reservations) {
@@ -559,22 +558,31 @@ export class Financials implements OnInit, OnDestroy {
         const payments = reservation.payments ?? [];
         if (payments.length > 0) {
           for (const payment of payments) {
-            const method = payment.method;
+            const method = String((payment as { method?: unknown } | null | undefined)?.method ?? '')
+              .trim()
+              .toLowerCase();
             const amount = Number(payment.amount ?? 0);
-            if (method === 'cash' || method === 'cashapp' || method === 'square') {
-              totals[method] += amount;
+            if (method === 'cash') {
+              totals.cash += amount;
+            } else if (method === 'square' || method === 'cashapp') {
+              totals.square += amount;
             }
           }
           continue;
         }
 
-        const fallbackMethod = reservation.paymentMethod;
+        const fallbackMethod = String(
+          (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
+        )
+          .trim()
+          .toLowerCase();
         const fallbackAmount = Number(reservation.depositAmount ?? 0);
         if (
           fallbackAmount > 0 &&
-          (fallbackMethod === 'cash' || fallbackMethod === 'cashapp' || fallbackMethod === 'square')
+          (fallbackMethod === 'cash' || fallbackMethod === 'square' || fallbackMethod === 'cashapp')
         ) {
-          totals[fallbackMethod] += fallbackAmount;
+          if (fallbackMethod === 'cash') totals.cash += fallbackAmount;
+          else totals.square += fallbackAmount;
         }
       }
     }
@@ -611,11 +619,17 @@ export class Financials implements OnInit, OnDestroy {
         }
 
         const fallbackAmount = Number(reservation.depositAmount ?? 0);
-        const fallbackMethod = reservation.paymentMethod;
+        const fallbackMethod = String(
+          (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
+        )
+          .trim()
+          .toLowerCase();
         if (
           fallbackAmount > 0 &&
-          (fallbackMethod === 'cash' || fallbackMethod === 'cashapp' || fallbackMethod === 'square')
+          (fallbackMethod === 'cash' || fallbackMethod === 'square' || fallbackMethod === 'cashapp')
         ) {
+          const normalizedFallbackMethod: PaymentMethod =
+            fallbackMethod === 'cash' ? 'cash' : 'square';
           rows.push({
             paymentId: `fallback-${reservationId}`,
             eventDate,
@@ -624,7 +638,7 @@ export class Financials implements OnInit, OnDestroy {
             tableId,
             customerName,
             amount: fallbackAmount,
-            method: fallbackMethod,
+            method: normalizedFallbackMethod,
             source: 'manual',
             createdAt: Number(reservation.createdAt ?? 0),
             createdBy: String(reservation.createdBy ?? '').trim() || null,
@@ -660,8 +674,9 @@ export class Financials implements OnInit, OnDestroy {
     payment: ReservationPayment;
   }): PaymentLedgerRow | null {
     const { eventDate, eventName, reservationId, tableId, customerName, reservation, payment } = input;
-    const method = payment?.method;
-    if (method !== 'cash' && method !== 'cashapp' && method !== 'square') return null;
+    const rawMethod = String(payment?.method ?? '').trim().toLowerCase();
+    if (rawMethod !== 'cash' && rawMethod !== 'cashapp' && rawMethod !== 'square') return null;
+    const method: PaymentMethod = rawMethod === 'cash' ? 'cash' : 'square';
 
     const provider = payment?.provider && typeof payment.provider === 'object' ? payment.provider : null;
     const source = String(payment?.source ?? '').trim().toLowerCase();
@@ -692,7 +707,7 @@ export class Financials implements OnInit, OnDestroy {
     this.receivables = [];
     this.ledgerRows = [];
     this.eventSummaries = [];
-    this.methodTotals = { cash: 0, cashapp: 0, square: 0 };
+    this.methodTotals = { cash: 0, square: 0 };
     this.overview = {
       eventsInRange: 0,
       reservations: 0,

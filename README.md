@@ -22,7 +22,7 @@ Nightclub reservations platform with role-aware staff/admin web app, serverless 
 ## Core flows implemented
 - Event management with one active event per date lock.
 - Table hold lifecycle (short hold), reservation creation, cancellation, payment updates.
-- Staff payment collection with `cash`, `cashapp`, `square`, and reschedule credit usage.
+- Staff payment collection with `cash`, `square`, and reschedule credit usage.
 - Square payment links + webhook reconciliation.
 - SMS send for payment links and check-in communications.
 - Check-in pass issue/reissue + one-time QR validation.
