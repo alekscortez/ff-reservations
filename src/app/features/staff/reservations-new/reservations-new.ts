@@ -13,7 +13,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { TablesService } from '../../../core/http/tables.service';
-import { HoldsService } from '../../../core/http/holds.service';
+import { HoldLockItem, HoldsService } from '../../../core/http/holds.service';
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { EventItem } from '../../../shared/models/event.model';
@@ -38,6 +38,27 @@ interface CreatedReservationContext {
   amount: number;
 }
 
+interface ActiveHoldSession {
+  eventDate: string;
+  tableId: string;
+  holdId: string;
+  holdExpiresAt: number | null;
+  holdCreatedByMe: boolean;
+  showReservationModal: boolean;
+  customerName: string;
+  phone: string;
+  phoneCountry: 'US' | 'MX';
+  amountDue: number;
+  depositAmount: number;
+  paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY';
+  paymentMethod: 'cash' | 'square';
+  allowCustomDeposit: boolean;
+  paymentDeadlineEnabled: boolean;
+  paymentDeadlineDate: string;
+  paymentDeadlineTime: string;
+  savedAt: number;
+}
+
 @Component({
   selector: 'app-reservations-new',
   imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap],
@@ -46,10 +67,13 @@ interface CreatedReservationContext {
 })
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
   private readonly filterStorageKey = 'ff_new_res_filters_v1';
+  private readonly holdSessionStorageKey = 'ff_new_res_active_hold_v1';
   private readonly sidebarModalLockClass = 'reservations-new-modal-open';
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
   private sidebarModalLockActive = false;
   private workspaceLockActive = false;
+  private activeHoldSession: ActiveHoldSession | null = null;
+  private holdRestoreInFlight = false;
   private visualViewportRef: VisualViewport | null = null;
   private readonly onVisualViewportChanged = () => {
     this.scheduleDesktopSplitLayout();
@@ -160,12 +184,17 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   ngOnInit(): void {
     this.restoreSavedFilters();
+    this.activeHoldSession = this.readActiveHoldSession();
     this.loadRuntimeContext();
     this.route.queryParamMap.subscribe((params) => {
       this.eventDate = params.get('date');
       if (this.eventDate) {
         this.loadTables(this.eventDate);
         this.startPolling();
+        return;
+      }
+      if (this.activeHoldSession?.eventDate) {
+        this.selectEvent(this.activeHoldSession.eventDate);
       }
     });
     this.loadEvents();
@@ -194,6 +223,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     });
     this.form.controls.remainingMethod.valueChanges.subscribe(() => {
       this.onClientCreditRemainingMethodChanged();
+    });
+    this.form.valueChanges.subscribe(() => {
+      this.saveActiveHoldSessionIfNeeded();
     });
 
     this.form.controls.phone.valueChanges
@@ -288,6 +320,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         } else {
           this.selectedTable = null;
         }
+        this.tryRestoreActiveHoldSession();
         if (!silent) this.loading = false;
         this.scheduleDesktopSplitLayout();
       },
@@ -341,11 +374,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   clearEventSelection(): void {
+    this.clearActiveHoldSession();
     this.eventDate = null;
     this.event = null;
     this.tables = [];
     this.selectedTable = null;
+    this.selectedTableId = null;
     this.holdId = null;
+    this.holdExpiresAt = null;
+    this.holdCountdown = 0;
+    this.clearHoldTimer();
     this.showPastModal = false;
     this.showReservationModal = false;
     this.showFiltersPanel = false;
@@ -407,6 +445,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   selectTable(t: TableForEvent): void {
     if (t.status !== 'AVAILABLE') return;
+    this.clearActiveHoldSession();
     this.selectedTable = t;
     this.selectedTableId = t.id;
     this.resetCreatedReservationState();
@@ -414,6 +453,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.holdExpiresAt = null;
     this.holdCountdown = 0;
     this.clearHoldTimer();
+    this.holdCreatedByMe = false;
+    this.showReleaseConfirm = false;
     this.allowCustomDeposit = false;
     const price = t.price ?? 0;
     this.form.controls.amountDue.setValue(price);
@@ -446,7 +487,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         next: (item) => {
           this.holdId = item.holdId;
           this.holdExpiresAt = item.expiresAt ?? null;
+          this.holdCreatedByMe = true;
           this.startHoldTimer();
+          this.saveActiveHoldSessionIfNeeded();
           this.loading = false;
           this.loadTables(this.eventDate!);
           if (openModal) this.openReservationModal();
@@ -471,6 +514,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         this.holdCreatedByMe = false;
         this.showReleaseConfirm = false;
         this.showReservationModal = false;
+        this.clearActiveHoldSession();
         this.loadTables(this.eventDate!);
         this.loading = false;
       },
@@ -583,6 +627,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.clearHoldTimer();
           this.holdCreatedByMe = false;
           this.showReleaseConfirm = false;
+          this.clearActiveHoldSession();
           this.loadTables(this.eventDate!);
 
           if (!reservationId) {
@@ -691,6 +736,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (!this.selectedTable) return;
     this.resetCreatedReservationState();
     this.showReservationModal = true;
+    this.saveActiveHoldSessionIfNeeded();
   }
 
   closeReservationModal(): void {
@@ -700,9 +746,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     }
     if (this.holdId && this.holdCreatedByMe) {
       this.showReleaseConfirm = true;
+      this.saveActiveHoldSessionIfNeeded();
       return;
     }
     this.showReservationModal = false;
+    this.saveActiveHoldSessionIfNeeded();
   }
 
   cancelReleasePrompt(): void {
@@ -717,6 +765,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.holdCountdown = Math.max(0, this.holdExpiresAt! - now);
       if (this.holdCountdown <= 0) {
         this.clearHoldTimer();
+        this.clearActiveHoldSession();
       }
     };
     update();
@@ -753,6 +802,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (this.phoneCountry === normalized) return;
     this.phoneCountry = normalized;
     this.refreshClientCreditsForCurrentPhone(true);
+    this.saveActiveHoldSessionIfNeeded();
   }
 
   clientCreditsTotalRemaining(): number {
@@ -1351,6 +1401,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   finishReservationFlow(): void {
+    this.clearActiveHoldSession();
     this.resetCreatedReservationState();
     this.selectedTable = null;
     this.selectedTableId = null;
@@ -1536,6 +1587,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.startPolling();
           return;
         }
+        if (this.activeHoldSession?.eventDate) {
+          this.selectEvent(this.activeHoldSession.eventDate);
+          return;
+        }
         const preferredEventDate =
           String(ctx?.event?.eventDate ?? '').trim() ||
           String(ctx?.nextEvent?.eventDate ?? '').trim();
@@ -1650,5 +1705,169 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       viewportHeight + viewportOffsetTop - rect.top - this.compactBottomInsetPx - 4
     );
     this.compactPanelHeightPx = Math.max(minHeightPx, available);
+  }
+
+  private tryRestoreActiveHoldSession(): void {
+    if (!this.eventDate || this.holdId || this.holdRestoreInFlight) return;
+    if (!this.activeHoldSession || this.activeHoldSession.eventDate !== this.eventDate) return;
+    this.holdRestoreInFlight = true;
+    const session = this.activeHoldSession;
+    this.holdsApi.listLocks(this.eventDate).subscribe({
+      next: (items) => {
+        this.holdRestoreInFlight = false;
+        const lock = this.findActiveHoldLock(items, session);
+        if (!lock) {
+          this.clearActiveHoldSession();
+          return;
+        }
+        this.selectedTableId = session.tableId;
+        this.selectedTable = this.tables.find((t) => t.id === session.tableId) ?? null;
+        if (!this.selectedTable) return;
+        this.form.patchValue(
+          {
+            customerName: session.customerName,
+            phone: session.phone,
+            amountDue: session.amountDue,
+            depositAmount: session.depositAmount,
+            paymentStatus: session.paymentStatus,
+            paymentMethod: session.paymentMethod,
+          },
+          { emitEvent: false }
+        );
+        this.phoneCountry = normalizePhoneCountry(session.phoneCountry);
+        this.allowCustomDeposit = session.allowCustomDeposit;
+        this.paymentDeadlineEnabled = session.paymentDeadlineEnabled;
+        this.paymentDeadlineDate.setValue(session.paymentDeadlineDate, { emitEvent: false });
+        this.paymentDeadlineTime.setValue(session.paymentDeadlineTime, { emitEvent: false });
+        this.holdId = session.holdId;
+        this.holdExpiresAt = lock.expiresAt ?? session.holdExpiresAt ?? null;
+        this.holdCreatedByMe = session.holdCreatedByMe !== false;
+        this.showReservationModal = session.showReservationModal !== false;
+        this.showReleaseConfirm = false;
+        this.startHoldTimer();
+        this.saveActiveHoldSessionIfNeeded();
+      },
+      error: () => {
+        this.holdRestoreInFlight = false;
+      },
+    });
+  }
+
+  private findActiveHoldLock(
+    items: HoldLockItem[],
+    session: ActiveHoldSession
+  ): { expiresAt: number | null } | null {
+    const now = Math.floor(Date.now() / 1000);
+    for (const item of items ?? []) {
+      const lockType = String(item.lockType ?? '').toUpperCase();
+      if (lockType !== 'HOLD') continue;
+      const holdId = String(item.holdId ?? '').trim();
+      if (!holdId || holdId !== session.holdId) continue;
+      const tableId = this.extractTableIdFromHoldLock(item);
+      if (tableId && tableId !== session.tableId) continue;
+      const expiresRaw = Number(item.expiresAt ?? 0);
+      const expiresAt =
+        Number.isFinite(expiresRaw) && expiresRaw > 0 ? Math.floor(expiresRaw) : null;
+      if (expiresAt !== null && expiresAt <= now) continue;
+      return { expiresAt };
+    }
+    return null;
+  }
+
+  private extractTableIdFromHoldLock(item: HoldLockItem): string | null {
+    const sk = String(item?.SK ?? '').trim();
+    if (!sk.startsWith('TABLE#')) return null;
+    const tableId = sk.slice('TABLE#'.length).trim();
+    return tableId || null;
+  }
+
+  private saveActiveHoldSessionIfNeeded(): void {
+    if (!this.eventDate || !this.selectedTable?.id || !this.holdId) return;
+    const session: ActiveHoldSession = {
+      eventDate: this.eventDate,
+      tableId: this.selectedTable.id,
+      holdId: this.holdId,
+      holdExpiresAt: this.holdExpiresAt ?? null,
+      holdCreatedByMe: this.holdCreatedByMe,
+      showReservationModal: this.showReservationModal,
+      customerName: this.form.controls.customerName.value,
+      phone: this.form.controls.phone.value,
+      phoneCountry: normalizePhoneCountry(this.phoneCountry),
+      amountDue: Number(this.form.controls.amountDue.value ?? 0),
+      depositAmount: Number(this.form.controls.depositAmount.value ?? 0),
+      paymentStatus: this.form.controls.paymentStatus.value,
+      paymentMethod: this.form.controls.paymentMethod.value,
+      allowCustomDeposit: this.allowCustomDeposit,
+      paymentDeadlineEnabled: this.paymentDeadlineEnabled,
+      paymentDeadlineDate: this.paymentDeadlineDate.value,
+      paymentDeadlineTime: this.paymentDeadlineTime.value,
+      savedAt: Date.now(),
+    };
+    this.activeHoldSession = session;
+    this.writeActiveHoldSession(session);
+  }
+
+  private clearActiveHoldSession(): void {
+    this.activeHoldSession = null;
+    try {
+      localStorage.removeItem(this.holdSessionStorageKey);
+    } catch {
+      // Ignore local storage failures in restricted environments.
+    }
+  }
+
+  private readActiveHoldSession(): ActiveHoldSession | null {
+    try {
+      const raw = localStorage.getItem(this.holdSessionStorageKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<ActiveHoldSession>;
+      const eventDate = String(parsed.eventDate ?? '').trim();
+      const tableId = String(parsed.tableId ?? '').trim();
+      const holdId = String(parsed.holdId ?? '').trim();
+      if (!eventDate || !tableId || !holdId) return null;
+      const phoneCountry = normalizePhoneCountry(parsed.phoneCountry);
+      const paymentStatus = String(parsed.paymentStatus ?? '').trim().toUpperCase();
+      const paymentMethod = String(parsed.paymentMethod ?? '').trim().toLowerCase();
+      const validStatuses = ['PAID', 'PARTIAL', 'PENDING', 'COURTESY'];
+      const validMethods = ['cash', 'square'];
+      return {
+        eventDate,
+        tableId,
+        holdId,
+        holdExpiresAt: Number.isFinite(Number(parsed.holdExpiresAt))
+          ? Number(parsed.holdExpiresAt)
+          : null,
+        holdCreatedByMe: parsed.holdCreatedByMe !== false,
+        showReservationModal: parsed.showReservationModal !== false,
+        customerName: String(parsed.customerName ?? ''),
+        phone: String(parsed.phone ?? ''),
+        phoneCountry,
+        amountDue: Number.isFinite(Number(parsed.amountDue)) ? Number(parsed.amountDue) : 0,
+        depositAmount: Number.isFinite(Number(parsed.depositAmount))
+          ? Number(parsed.depositAmount)
+          : 0,
+        paymentStatus: (
+          validStatuses.includes(paymentStatus) ? paymentStatus : 'PAID'
+        ) as 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY',
+        paymentMethod: (
+          validMethods.includes(paymentMethod) ? paymentMethod : 'cash'
+        ) as 'cash' | 'square',
+        allowCustomDeposit: parsed.allowCustomDeposit === true,
+        paymentDeadlineEnabled: parsed.paymentDeadlineEnabled === true,
+        paymentDeadlineDate: String(parsed.paymentDeadlineDate ?? ''),
+        paymentDeadlineTime: String(parsed.paymentDeadlineTime ?? '00:00'),
+        savedAt: Number.isFinite(Number(parsed.savedAt)) ? Number(parsed.savedAt) : Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private writeActiveHoldSession(session: ActiveHoldSession): void {
+    try {
+      localStorage.setItem(this.holdSessionStorageKey, JSON.stringify(session));
+    } catch {
+      // Ignore local storage failures in restricted environments.
+    }
   }
 }

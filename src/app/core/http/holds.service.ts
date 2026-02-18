@@ -9,6 +9,16 @@ export interface HoldItem {
   expiresAt: number;
 }
 
+export interface HoldLockItem {
+  PK?: string;
+  SK?: string;
+  lockType?: string;
+  holdId?: string;
+  expiresAt?: number;
+  customerName?: string;
+  phone?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class HoldsService {
   private api = inject(ApiClient);
@@ -25,5 +35,11 @@ export class HoldsService {
 
   releaseHold(eventDate: string, tableId: string) {
     return this.api.delete<void>(`/holds/${eventDate}/${tableId}`);
+  }
+
+  listLocks(eventDate: string) {
+    return this.api
+      .get<{ items: HoldLockItem[] }>('/holds', { eventDate })
+      .pipe(map((res) => res.items ?? []));
   }
 }
