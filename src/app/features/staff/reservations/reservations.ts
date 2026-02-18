@@ -243,6 +243,7 @@ export class Reservations implements OnInit, OnDestroy {
             sensitivity: 'base',
           })
         );
+        this.hydrateStoredPaymentLinks(this.items);
         this.loading = false;
       },
       error: (err) => {
@@ -811,6 +812,32 @@ export class Reservations implements OnInit, OnDestroy {
     const due = Number(item.amountDue ?? 0);
     const paid = Number(item.depositAmount ?? 0);
     return Math.max(0, Number((due - paid).toFixed(2)));
+  }
+
+  private hydrateStoredPaymentLinks(items: ReservationItem[]): void {
+    const next: Record<string, GeneratedPaymentLink> = { ...this.paymentLinksByReservationId };
+    for (const item of items) {
+      const reservationId = String(item?.reservationId ?? '').trim();
+      if (!reservationId) continue;
+      const url = String(item?.paymentLinkUrl ?? '').trim();
+      const linkStatus = String(item?.paymentLinkStatus ?? '').trim().toUpperCase();
+      const isActive = !linkStatus || linkStatus === 'ACTIVE';
+
+      if (url && isActive) {
+        const createdAt = Number(item?.paymentLinkCreatedAt ?? 0);
+        const remaining = this.remainingAmount(item);
+        const fallbackAmount = Number(item?.amountDue ?? item?.tablePrice ?? 0);
+        next[reservationId] = {
+          url,
+          amount: Number((remaining > 0 ? remaining : fallbackAmount).toFixed(2)),
+          createdAtMs: createdAt > 0 ? createdAt * 1000 : Date.now(),
+          audit: next[reservationId]?.audit,
+        };
+      } else if (linkStatus && linkStatus !== 'ACTIVE') {
+        delete next[reservationId];
+      }
+    }
+    this.paymentLinksByReservationId = next;
   }
 
   private buildShareMessage(item: ReservationItem, url: string): string {

@@ -15,6 +15,7 @@ export interface AppSettings {
   operatingDayCutoffHour: number;
   holdTtlSeconds: number;
   paymentLinkTtlMinutes: number;
+  frequentPaymentLinkTtlMinutes: number;
   autoSendSquareLinkSms: boolean;
   smsEnabled: boolean;
   defaultPaymentDeadlineHour: number;

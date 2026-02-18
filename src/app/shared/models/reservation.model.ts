@@ -40,6 +40,13 @@ export interface ReservationItem {
   paymentDeadlineTz?: string | null;
   paymentMethod?: PaymentMethod | null;
   payments?: ReservationPayment[];
+  paymentLinkProvider?: string | null;
+  paymentLinkId?: string | null;
+  paymentLinkUrl?: string | null;
+  paymentLinkStatus?: string | null;
+  paymentLinkCreatedAt?: number | null;
+  paymentLinkExpiresAt?: string | null;
+  paymentLinkUpdatedAt?: number | null;
   status: ReservationStatus;
   createdAt?: number;
   createdBy?: string;

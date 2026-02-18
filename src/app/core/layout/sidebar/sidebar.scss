@@ -23,3 +23,7 @@
 :host-context(.reservations-new-modal-open) .sidebar {
   pointer-events: none;
 }
+
+:host-context(.events-modal-open) .sidebar {
+  pointer-events: none;
+}

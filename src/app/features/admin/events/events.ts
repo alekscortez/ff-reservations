@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { EventsService } from '../../../core/http/events.service';
@@ -14,7 +14,7 @@ import { FrequentClient } from '../../../shared/models/frequent-client.model';
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
-export class Events implements OnInit {
+export class Events implements OnInit, OnDestroy {
   private eventsApi = inject(EventsService);
   private tablesApi = inject(TablesService);
   private frequentApi = inject(FrequentClientsService);
@@ -70,6 +70,10 @@ export class Events implements OnInit {
     this.loadEvents();
     this.loadTemplate();
     this.loadFrequentClients();
+  }
+
+  ngOnDestroy(): void {
+    this.syncSidebarModalLock(true);
   }
 
   loadEvents(): void {
@@ -145,6 +149,7 @@ export class Events implements OnInit {
         this.createDisabled.clear();
         this.createDisabledClients.clear();
         this.showCreateModal = false;
+        this.syncSidebarModalLock();
         this.loading = false;
       },
       error: (err) => {
@@ -183,10 +188,12 @@ export class Events implements OnInit {
     this.showCreateModal = true;
     this.error = null;
     this.conflictDate = null;
+    this.syncSidebarModalLock();
   }
 
   closeCreateModal(): void {
     this.showCreateModal = false;
+    this.syncSidebarModalLock();
   }
 
   saveEdit(): void {
@@ -306,6 +313,12 @@ export class Events implements OnInit {
       if (Number.isFinite(num)) out[k] = num;
     }
     return out;
+  }
+
+  private syncSidebarModalLock(forceClear = false): void {
+    if (typeof document === 'undefined') return;
+    const isLocked = forceClear ? false : this.showCreateModal;
+    document.body.classList.toggle('events-modal-open', isLocked);
   }
 
   getSectionControl(

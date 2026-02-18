@@ -62,6 +62,7 @@ const SMS_TYPE = process.env.SMS_TYPE;
 const SMS_MAX_PRICE_USD = process.env.SMS_MAX_PRICE_USD;
 const AUTO_SEND_SQUARE_LINK_SMS = process.env.AUTO_SEND_SQUARE_LINK_SMS;
 const PAYMENT_LINK_TTL_MINUTES = process.env.PAYMENT_LINK_TTL_MINUTES;
+const FREQUENT_PAYMENT_LINK_TTL_MINUTES = process.env.FREQUENT_PAYMENT_LINK_TTL_MINUTES;
 const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
 const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
@@ -169,6 +170,8 @@ function corsHeaders(event) {
   const allowed = new Set([
     "http://localhost:4200",
     "https://main.d1gxn3rvy5gfn4.amplifyapp.com",
+    "https://famosofuego.com",
+    "https://www.famosofuego.com",
   ]);
   return allowed.has(origin)
     ? { "access-control-allow-origin": origin, "vary": "Origin" }
@@ -309,6 +312,8 @@ const reservationsHoldsService = createReservationsHoldsService({
   sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
   sendCheckInPassSms: smsNotificationsService.sendCheckInPassSms,
   paymentLinkTtlMinutes: PAYMENT_LINK_TTL_MINUTES,
+  frequentPaymentLinkTtlMinutes: FREQUENT_PAYMENT_LINK_TTL_MINUTES,
+  isFrequentReservationByPhoneAndTable: clientsService.isFrequentReservationByPhoneAndTable,
   getAppSettings: settingsService.getAppSettings,
 });
 

@@ -15,6 +15,7 @@ import {
   normalizePhoneToE164,
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+import { SettingsService } from '../../../core/http/settings.service';
 
 @Component({
   selector: 'app-frequent-clients',
@@ -25,6 +26,7 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 export class FrequentClients implements OnInit {
   private clientsApi = inject(FrequentClientsService);
   private tablesApi = inject(TablesService);
+  private settingsApi = inject(SettingsService);
 
   items: FrequentClient[] = [];
   loading = false;
@@ -66,6 +68,7 @@ export class FrequentClients implements OnInit {
   ngOnInit(): void {
     this.load();
     this.loadTemplate();
+    this.loadGlobalTimezone();
   }
 
   load(): void {
@@ -119,6 +122,39 @@ export class FrequentClients implements OnInit {
         this.activeSection = '';
       },
     });
+  }
+
+  private loadGlobalTimezone(): void {
+    this.settingsApi.getAdminSettings().subscribe({
+      next: (settings) => this.applyGlobalDeadlineTimezone(settings.operatingTz),
+      error: () => {
+        // Keep current default timezone if settings load fails.
+      },
+    });
+  }
+
+  private applyGlobalDeadlineTimezone(timezone: string | null | undefined): void {
+    const normalized = String(timezone ?? '').trim();
+    if (!normalized) return;
+    this.defaultDeadlineTz = normalized;
+
+    for (const tableId of Object.keys(this.createTableSettings)) {
+      this.createTableSettings[tableId] = {
+        ...this.createTableSettings[tableId],
+        paymentDeadlineTz: normalized,
+      };
+    }
+
+    for (const tableId of Object.keys(this.editTableSettings)) {
+      this.editTableSettings[tableId] = {
+        ...this.editTableSettings[tableId],
+        paymentDeadlineTz: normalized,
+      };
+    }
+
+    for (const group of this.editSettings.controls) {
+      group.controls['paymentDeadlineTz'].setValue(normalized, { emitEvent: false });
+    }
   }
 
   create(): void {
@@ -514,14 +550,14 @@ export class FrequentClients implements OnInit {
     if (next.paymentStatus === 'PENDING') {
       next.amountPaid = 0;
       if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime;
-      if (!next.paymentDeadlineTz) next.paymentDeadlineTz = this.defaultDeadlineTz;
+      next.paymentDeadlineTz = this.defaultDeadlineTz;
       return next;
     }
     if (next.paymentStatus === 'PARTIAL') {
       const paid = Number(next.amountPaid ?? 0);
       next.amountPaid = Number.isFinite(paid) ? Math.max(0, paid) : 0;
       if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime;
-      if (!next.paymentDeadlineTz) next.paymentDeadlineTz = this.defaultDeadlineTz;
+      next.paymentDeadlineTz = this.defaultDeadlineTz;
       return next;
     }
     return next;

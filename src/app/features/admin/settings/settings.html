@@ -51,12 +51,22 @@
         />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Payment Link TTL (minutes)
+        Standard Link TTL (minutes)
         <input
           type="number"
           min="1"
           max="120"
           [formControl]="form.controls.paymentLinkTtlMinutes"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Frequent Link TTL (minutes)
+        <input
+          type="number"
+          min="10"
+          max="10080"
+          [formControl]="form.controls.frequentPaymentLinkTtlMinutes"
           class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
         />
       </label>

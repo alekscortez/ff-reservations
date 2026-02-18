@@ -4,186 +4,7 @@
     <p class="text-sm text-brand-600">Manage recurring guests and their default tables</p>
   </header>
 
-  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6" *ngIf="showCreateForm">
-    <div class="flex items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold text-brand-900">Add Frequent Client</h2>
-      <button
-        type="button"
-        class="h-10 rounded-lg border border-brand-200 px-3 text-sm text-brand-700"
-        (click)="toggleCreateForm()"
-      >
-        Close
-      </button>
-    </div>
-
-    <form class="mt-4 grid min-w-0 gap-4" [formGroup]="form" (ngSubmit)="create()">
-      <div class="grid min-w-0 gap-3 lg:grid-cols-3">
-        <label class="grid min-w-0 gap-1 text-xs text-brand-600">
-          Name
-          <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
-        </label>
-        <label class="grid min-w-0 gap-1 text-xs text-brand-600">
-          Phone
-          <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] gap-2">
-            <input
-              type="tel"
-              formControlName="phone"
-              class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-              inputmode="tel"
-              placeholder="+1..."
-            />
-            <select
-              class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
-              [value]="createPhoneCountry"
-              (change)="createPhoneCountry = $any($event.target).value"
-            >
-              <option value="US">US</option>
-              <option value="MX">MX</option>
-            </select>
-          </div>
-        </label>
-        <label class="grid min-w-0 gap-1 text-xs text-brand-600 lg:col-span-2">
-          Reserved Tables
-          <div class="flex flex-wrap items-center gap-2">
-            <span
-              class="cursor-pointer rounded-full border border-brand-200 px-2 py-1 text-xs text-brand-700"
-              *ngFor="let t of createSelectedTables"
-              (click)="removeCreateTable(t)"
-            >
-              {{ t }}
-            </span>
-          </div>
-        </label>
-      </div>
-
-      <div class="rounded-xl border border-brand-100 p-3">
-        <div class="mb-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            *ngFor="let s of templateSections"
-            class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-            [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': activeSection === s }"
-            (click)="toggleSection(s)"
-          >
-            Section {{ s }}
-          </button>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-            *ngFor="let t of templateTablesBySection[activeSection]"
-            [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': isCreateSelected(t.id) }"
-            (click)="toggleCreateTable(t.id)"
-          >
-            {{ t.id }}
-          </button>
-        </div>
-      </div>
-
-      <div class="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/40 p-3" *ngIf="createSelectedList.length > 0">
-        <div class="hidden grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] gap-2 text-[11px] uppercase tracking-[0.12em] text-brand-500 lg:grid">
-          <span>Table</span>
-          <span>Payment Status</span>
-          <span>Amount Due</span>
-          <span>Amount Paid</span>
-          <span>Deadline</span>
-        </div>
-
-        <div
-          class="grid min-w-0 gap-2 rounded-lg border border-brand-100 bg-white p-3 lg:grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] lg:items-center"
-          *ngFor="let tableId of createSelectedList"
-        >
-          <ng-container *ngIf="getCreateSetting(tableId) as setting">
-            <div class="grid min-w-0 gap-1">
-              <strong class="text-sm text-brand-900">{{ tableId }}</strong>
-              <small class="text-xs text-brand-500" *ngIf="getTableInfo(tableId) as info">Section {{ info.section }} · ${{ info.price }}</small>
-            </div>
-            <select
-              class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-              [value]="setting.paymentStatus"
-              (change)="updateCreateSetting(tableId, { paymentStatus: $any($event.target).value })"
-            >
-              <option
-                *ngFor="let status of paymentStatuses"
-                [value]="status"
-                [selected]="status === setting.paymentStatus"
-              >
-                {{ status }}
-              </option>
-            </select>
-
-            <ng-container *ngIf="setting.paymentStatus !== 'COURTESY'; else courtesyCreate">
-              <input
-                type="number"
-                min="0"
-                class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-                [value]="setting.amountDue"
-                (input)="updateCreateSetting(tableId, { amountDue: toNumber($any($event.target).value) })"
-              />
-              <input
-                type="number"
-                min="0"
-                class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-                [value]="setting.amountPaid ?? 0"
-                [disabled]="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PAID'"
-                (input)="updateCreateSetting(tableId, { amountPaid: toNumber($any($event.target).value) })"
-              />
-            </ng-container>
-
-            <ng-template #courtesyCreate>
-              <div class="rounded-lg border border-dashed border-brand-200 bg-white px-3 py-2 text-xs text-brand-700">Courtesy table</div>
-              <div class="rounded-lg border border-dashed border-brand-200 bg-white px-3 py-2 text-xs text-brand-500">$0 due</div>
-            </ng-template>
-
-            <div class="grid min-w-0 gap-2 sm:grid-cols-2" *ngIf="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PARTIAL'">
-              <input
-                type="time"
-                class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-                [value]="setting.paymentDeadlineTime"
-                (input)="updateCreateSetting(tableId, { paymentDeadlineTime: $any($event.target).value })"
-              />
-              <select
-                class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
-                [value]="setting.paymentDeadlineTz"
-                (change)="updateCreateSetting(tableId, { paymentDeadlineTz: $any($event.target).value })"
-              >
-                <option value="America/Chicago">America/Chicago</option>
-                <option value="UTC">UTC</option>
-              </select>
-            </div>
-          </ng-container>
-        </div>
-      </div>
-
-      <label class="grid min-w-0 gap-1 text-xs text-brand-600">
-        Notes
-        <input type="text" formControlName="notes" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
-      </label>
-
-      <div class="flex flex-wrap gap-2">
-        <button
-          type="submit"
-          class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
-          [disabled]="form.invalid || loading"
-        >
-          Create
-        </button>
-        <button
-          type="button"
-          class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700"
-          (click)="toggleCreateForm()"
-          [disabled]="loading"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-
-    <p class="mt-3 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
-  </section>
-
-  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6" *ngIf="!showCreateForm">
+  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
     <div class="flex items-center gap-2">
       <input
         type="text"
@@ -219,14 +40,18 @@
       </div>
 
       <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="mt-4 grid min-w-0 gap-4">
-        <div class="grid min-w-0 gap-3 lg:grid-cols-3">
-          <label class="grid min-w-0 gap-1 text-xs text-brand-600">
-            Name
-            <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
-          </label>
+        <div class="grid min-w-0 gap-3 md:grid-cols-[1.2fr_1fr]">
           <label class="grid min-w-0 gap-1 text-xs text-brand-600">
             Phone
-            <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_88px] gap-2">
+            <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
+              <select
+                class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
+                [value]="editPhoneCountry"
+                (change)="editPhoneCountry = $any($event.target).value"
+              >
+                <option value="US">🇺🇸 +1</option>
+                <option value="MX">🇲🇽 +52</option>
+              </select>
               <input
                 type="tel"
                 formControlName="phone"
@@ -234,17 +59,13 @@
                 inputmode="tel"
                 placeholder="+1..."
               />
-              <select
-                class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
-                [value]="editPhoneCountry"
-                (change)="editPhoneCountry = $any($event.target).value"
-              >
-                <option value="US">US</option>
-                <option value="MX">MX</option>
-              </select>
             </div>
           </label>
-          <label class="grid min-w-0 gap-1 text-xs text-brand-600 lg:col-span-2">
+          <label class="grid min-w-0 gap-1 text-xs text-brand-600">
+            Name
+            <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          </label>
+          <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
             Reserved Tables
             <div class="flex flex-wrap items-center gap-2">
               <span
@@ -321,13 +142,10 @@
               <div class="rounded-lg border border-dashed border-brand-200 bg-white px-3 py-2 text-xs text-brand-500">$0 due</div>
             </ng-template>
 
-            <div class="grid min-w-0 gap-2 sm:grid-cols-2" *ngIf="isEditPendingOrPartial(i)">
-              <input type="time" formControlName="paymentDeadlineTime" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
-              <select formControlName="paymentDeadlineTz" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm">
-                <option value="America/Chicago">America/Chicago</option>
-                <option value="UTC">UTC</option>
-              </select>
-            </div>
+                <div class="grid min-w-0 gap-1" *ngIf="isEditPendingOrPartial(i)">
+                  <input type="time" formControlName="paymentDeadlineTime" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz }} (global setting)</p>
+                </div>
           </div>
         </div>
 
@@ -433,4 +251,187 @@
       </article>
     </div>
   </section>
+
+  <div class="fixed inset-0 z-[220] flex items-center justify-center" *ngIf="showCreateForm">
+    <div class="absolute inset-0 bg-black/50" (click)="toggleCreateForm()"></div>
+    <div class="relative h-full w-full overflow-y-auto overflow-x-hidden bg-white p-4 pb-24 md:h-auto md:max-h-[92dvh] md:max-w-5xl md:rounded-2xl md:p-6">
+      <div class="grid gap-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-semibold text-brand-900">Add Frequent Client</h2>
+            <p class="text-sm text-brand-600">Create defaults for recurring guests</p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+            (click)="toggleCreateForm()"
+            aria-label="Close add frequent client modal"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form class="grid min-w-0 gap-4" [formGroup]="form" (ngSubmit)="create()">
+          <div class="grid min-w-0 gap-3 rounded-xl border border-brand-100 bg-white p-3 md:grid-cols-[1.2fr_1fr]">
+            <label class="grid min-w-0 gap-1 text-xs text-brand-600">
+              Phone
+              <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
+                <select
+                  class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
+                  [value]="createPhoneCountry"
+                  (change)="createPhoneCountry = $any($event.target).value"
+                >
+                  <option value="US">🇺🇸 +1</option>
+                  <option value="MX">🇲🇽 +52</option>
+                </select>
+                <input
+                  type="tel"
+                  formControlName="phone"
+                  class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                  inputmode="tel"
+                  placeholder="+1..."
+                />
+              </div>
+            </label>
+            <label class="grid min-w-0 gap-1 text-xs text-brand-600">
+              Name
+              <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            </label>
+            <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
+              Reserved Tables
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  class="cursor-pointer rounded-full border border-brand-200 px-2 py-1 text-xs text-brand-700"
+                  *ngFor="let t of createSelectedTables"
+                  (click)="removeCreateTable(t)"
+                >
+                  {{ t }}
+                </span>
+              </div>
+            </label>
+          </div>
+
+          <div class="rounded-xl border border-brand-100 bg-white p-3">
+            <div class="mb-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                *ngFor="let s of templateSections"
+                class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': activeSection === s }"
+                (click)="toggleSection(s)"
+              >
+                Section {{ s }}
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                *ngFor="let t of templateTablesBySection[activeSection]"
+                [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': isCreateSelected(t.id) }"
+                (click)="toggleCreateTable(t.id)"
+              >
+                {{ t.id }}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/40 p-3" *ngIf="createSelectedList.length > 0">
+            <div class="hidden grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] gap-2 text-[11px] uppercase tracking-[0.12em] text-brand-500 lg:grid">
+              <span>Table</span>
+              <span>Payment Status</span>
+              <span>Amount Due</span>
+              <span>Amount Paid</span>
+              <span>Deadline</span>
+            </div>
+
+            <div
+              class="grid min-w-0 gap-2 rounded-lg border border-brand-100 bg-white p-3 lg:grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] lg:items-center"
+              *ngFor="let tableId of createSelectedList"
+            >
+              <ng-container *ngIf="getCreateSetting(tableId) as setting">
+                <div class="grid min-w-0 gap-1">
+                  <strong class="text-sm text-brand-900">{{ tableId }}</strong>
+                  <small class="text-xs text-brand-500" *ngIf="getTableInfo(tableId) as info">Section {{ info.section }} · ${{ info.price }}</small>
+                </div>
+                <select
+                  class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                  [value]="setting.paymentStatus"
+                  (change)="updateCreateSetting(tableId, { paymentStatus: $any($event.target).value })"
+                >
+                  <option
+                    *ngFor="let status of paymentStatuses"
+                    [value]="status"
+                    [selected]="status === setting.paymentStatus"
+                  >
+                    {{ status }}
+                  </option>
+                </select>
+
+                <ng-container *ngIf="setting.paymentStatus !== 'COURTESY'; else courtesyCreate">
+                  <input
+                    type="number"
+                    min="0"
+                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    [value]="setting.amountDue"
+                    (input)="updateCreateSetting(tableId, { amountDue: toNumber($any($event.target).value) })"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    [value]="setting.amountPaid ?? 0"
+                    [disabled]="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PAID'"
+                    (input)="updateCreateSetting(tableId, { amountPaid: toNumber($any($event.target).value) })"
+                  />
+                </ng-container>
+
+                <ng-template #courtesyCreate>
+                  <div class="rounded-lg border border-dashed border-brand-200 bg-white px-3 py-2 text-xs text-brand-700">Courtesy table</div>
+                  <div class="rounded-lg border border-dashed border-brand-200 bg-white px-3 py-2 text-xs text-brand-500">$0 due</div>
+                </ng-template>
+
+                <div class="grid min-w-0 gap-1" *ngIf="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PARTIAL'">
+                  <input
+                    type="time"
+                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    [value]="setting.paymentDeadlineTime"
+                    (input)="updateCreateSetting(tableId, { paymentDeadlineTime: $any($event.target).value })"
+                  />
+                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz }} (global setting)</p>
+                </div>
+              </ng-container>
+            </div>
+          </div>
+
+          <label class="grid min-w-0 gap-1 text-xs text-brand-600">
+            Notes
+            <input type="text" formControlName="notes" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          </label>
+
+          <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+
+          <div class="sticky bottom-0 -mx-4 border-t border-brand-100 bg-white px-4 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
+            <div class="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
+              <button
+                type="button"
+                class="h-11 rounded-lg border border-brand-200 px-4 text-sm font-semibold text-brand-700"
+                (click)="toggleCreateForm()"
+                [disabled]="loading"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                [disabled]="form.invalid || loading"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </section>

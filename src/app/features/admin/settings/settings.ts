@@ -36,6 +36,10 @@ export class AdminSettings implements OnInit {
       nonNullable: true,
       validators: [Validators.min(1), Validators.max(120)],
     }),
+    frequentPaymentLinkTtlMinutes: new FormControl(1440, {
+      nonNullable: true,
+      validators: [Validators.min(10), Validators.max(10080)],
+    }),
     autoSendSquareLinkSms: new FormControl(false, { nonNullable: true }),
     smsEnabled: new FormControl(true, { nonNullable: true }),
     defaultPaymentDeadlineHour: new FormControl(0, {
@@ -148,6 +152,7 @@ export class AdminSettings implements OnInit {
       operatingDayCutoffHour: Number(item.operatingDayCutoffHour ?? 5),
       holdTtlSeconds: Number(item.holdTtlSeconds ?? 300),
       paymentLinkTtlMinutes: Number(item.paymentLinkTtlMinutes ?? 10),
+      frequentPaymentLinkTtlMinutes: Number(item.frequentPaymentLinkTtlMinutes ?? 1440),
       autoSendSquareLinkSms: Boolean(item.autoSendSquareLinkSms),
       smsEnabled: Boolean(item.smsEnabled),
       defaultPaymentDeadlineHour: Number(item.defaultPaymentDeadlineHour ?? 0),
@@ -178,6 +183,7 @@ export class AdminSettings implements OnInit {
       operatingDayCutoffHour: Number(this.form.controls.operatingDayCutoffHour.value),
       holdTtlSeconds: Number(this.form.controls.holdTtlSeconds.value),
       paymentLinkTtlMinutes: Number(this.form.controls.paymentLinkTtlMinutes.value),
+      frequentPaymentLinkTtlMinutes: Number(this.form.controls.frequentPaymentLinkTtlMinutes.value),
       autoSendSquareLinkSms: Boolean(this.form.controls.autoSendSquareLinkSms.value),
       smsEnabled: Boolean(this.form.controls.smsEnabled.value),
       defaultPaymentDeadlineHour: Number(this.form.controls.defaultPaymentDeadlineHour.value),
