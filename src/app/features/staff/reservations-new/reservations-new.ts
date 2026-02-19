@@ -36,6 +36,7 @@ interface CreatedReservationContext {
   customerName: string;
   phone: string;
   amount: number;
+  linkMode: 'square' | 'client' | null;
 }
 
 interface ActiveHoldSession {
@@ -51,7 +52,7 @@ interface ActiveHoldSession {
   amountDue: number;
   depositAmount: number;
   paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY';
-  paymentMethod: 'cash' | 'square';
+  paymentMethod: 'cash' | 'square' | 'client';
   allowCustomDeposit: boolean;
   paymentDeadlineEnabled: boolean;
   paymentDeadlineDate: string;
@@ -127,9 +128,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     D: '#f7941d',
     E: '#711411',
   };
-  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square'; label: string }> = [
-    { value: 'cash', label: 'Cash' },
+  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square' | 'client'; label: string }> = [
     { value: 'square', label: 'Square' },
+    { value: 'client', label: 'Client Pay Link' },
+    { value: 'cash', label: 'Cash' },
   ];
 
   form = new FormGroup({
@@ -140,12 +142,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     paymentStatus: new FormControl<'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY'>('PAID', {
       nonNullable: true,
     }),
-    paymentMethod: new FormControl<'cash' | 'square'>('cash', {
+    paymentMethod: new FormControl<'cash' | 'square' | 'client'>('square', {
       nonNullable: true,
     }),
     useCredit: new FormControl(false, { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
-    remainingMethod: new FormControl<'cash' | 'square'>('cash', {
+    remainingMethod: new FormControl<'cash' | 'square' | 'client'>('cash', {
       nonNullable: true,
     }),
   });
@@ -564,7 +566,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       return;
     }
     if (usingCredit && !selectedCredit) {
-      this.error = 'Select a reschedule credit to apply.';
+      this.error = 'Select a reservation credit to apply.';
       this.loading = false;
       return;
     }
@@ -575,7 +577,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     }
 
     const createPaymentStatus = usingCredit ? 'PENDING' : paymentStatus;
-    const createPaymentMethod = usingCredit ? null : paymentMethod;
+    const createPaymentMethod = usingCredit
+      ? null
+      : this.toCreatePaymentMethod(paymentMethod);
     const createDepositAmount = usingCredit ? 0 : depositAmount;
     const needsDeadline = usingCredit
       ? this.creditNeedsDeadline()
@@ -644,6 +648,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               customerName: this.form.controls.customerName.value,
               phone,
               amount: creditRemainingAmount > 0 ? creditRemainingAmount : amountDue,
+              linkMode: creditRemainingAmount > 0 ? this.toLinkMode(remainingMethod) : null,
             };
 
             this.reservationsApi
@@ -653,14 +658,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                 amount: creditAppliedAmount,
                 method: 'credit',
                 creditId: selectedCredit?.creditId,
-                note: 'Applied reschedule credit',
+                note: 'Applied reservation credit',
               })
               .subscribe({
                 next: () => {
                   if (creditRemainingAmount > 0) {
-                    if (remainingMethod === 'square') {
+                    if (remainingMethod === 'square' || remainingMethod === 'client') {
                       this.loading = false;
-                      this.generateSquarePaymentLink();
+                      this.generatePaymentLinkForCurrentFlow();
                       return;
                     }
 
@@ -715,9 +720,25 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
+              linkMode: 'square',
             };
             this.loading = false;
-            this.generateSquarePaymentLink();
+            this.generatePaymentLinkForCurrentFlow();
+            return;
+          }
+
+          if (paymentMethod === 'client') {
+            this.createdReservation = {
+              reservationId,
+              eventDate: this.eventDate!,
+              tableId: this.selectedTable!.id,
+              customerName: this.form.controls.customerName.value,
+              phone,
+              amount: amountDue,
+              linkMode: 'client',
+            };
+            this.loading = false;
+            this.generatePaymentLinkForCurrentFlow();
             return;
           }
 
@@ -885,7 +906,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return (
       this.isUsingClientCredit() &&
       this.clientCreditRemainingAmount() > 0 &&
-      this.form.controls.remainingMethod.value === 'square'
+      this.form.controls.remainingMethod.value !== 'cash'
     );
   }
 
@@ -1078,15 +1099,18 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.applyPaymentDefaultsForCurrentMethod();
   }
 
-  trackByPaymentMethodOption(_index: number, item: { value: 'cash' | 'square' }): string {
+  trackByPaymentMethodOption(
+    _index: number,
+    item: { value: 'cash' | 'square' | 'client' }
+  ): string {
     return item.value;
   }
 
-  isPaymentMethod(value: 'cash' | 'square'): boolean {
+  isPaymentMethod(value: 'cash' | 'square' | 'client'): boolean {
     return this.form.controls.paymentMethod.value === value;
   }
 
-  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square'): void {
+  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square' | 'client'): void {
     event.preventDefault();
     event.stopPropagation();
     if (this.form.controls.paymentMethod.value === value) return;
@@ -1102,21 +1126,90 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.form.controls.paymentMethod.value === 'square';
   }
 
-  isSquareCollectionFlow(): boolean {
-    if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
-      return this.form.controls.remainingMethod.value === 'square';
-    }
-    return this.isSquareMethod();
+  isClientPayMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'client';
   }
 
-  generateSquarePaymentLink(): void {
+  isLinkCollectionFlow(): boolean {
+    if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
+      const remainingMethod = this.form.controls.remainingMethod.value;
+      return remainingMethod === 'square' || remainingMethod === 'client';
+    }
+    return this.isSquareMethod() || this.isClientPayMethod();
+  }
+
+  private toCreatePaymentMethod(
+    method: 'cash' | 'square' | 'client'
+  ): 'cash' | 'square' | null {
+    if (method === 'cash') return 'cash';
+    if (method === 'square') return 'square';
+    return null;
+  }
+
+  private toLinkMode(
+    method: 'cash' | 'square' | 'client'
+  ): 'square' | 'client' | null {
+    if (method === 'square' || method === 'client') return method;
+    return null;
+  }
+
+  private currentLinkModeFromForm(): 'square' | 'client' | null {
+    if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
+      const remainingMethod = this.form.controls.remainingMethod.value;
+      return remainingMethod === 'square' || remainingMethod === 'client'
+        ? remainingMethod
+        : null;
+    }
+    const method = this.form.controls.paymentMethod.value;
+    return method === 'square' || method === 'client' ? method : null;
+  }
+
+  private currentLinkMode(): 'square' | 'client' | null {
+    return this.createdReservation?.linkMode ?? this.currentLinkModeFromForm();
+  }
+
+  generatePaymentLinkForCurrentFlow(): void {
     if (!this.createdReservation) return;
-    if (!this.isSquareCollectionFlow()) return;
+    const linkMode = this.currentLinkMode();
+    if (!linkMode) return;
     if (this.creatingPaymentLink) return;
 
     this.creatingPaymentLink = true;
     this.paymentLinkError = null;
     this.paymentLinkNotice = null;
+
+    if (linkMode === 'client') {
+      this.reservationsApi
+        .createPublicPayLink({
+          reservationId: this.createdReservation.reservationId,
+          eventDate: this.createdReservation.eventDate,
+          amount: this.createdReservation.amount,
+        })
+        .subscribe({
+          next: (res) => {
+            const url = String(res?.publicPay?.url ?? '').trim();
+            if (!url) {
+              this.paymentLinkError =
+                'Payment link generation succeeded but no URL was returned.';
+              this.creatingPaymentLink = false;
+              return;
+            }
+            this.paymentLinkUrl = url;
+            const ttlMinutes = Number(res?.publicPay?.ttlMinutes ?? 0);
+            this.paymentLinkNotice =
+              Number.isFinite(ttlMinutes) && ttlMinutes > 0
+                ? `Client pay link generated (expires in ${Math.round(ttlMinutes)} min).`
+                : 'Client pay link generated. Share it with the customer.';
+            this.creatingPaymentLink = false;
+          },
+          error: (err: any) => {
+            this.paymentLinkError =
+              err?.error?.message || err?.message || 'Failed to generate payment link';
+            this.creatingPaymentLink = false;
+          },
+        });
+      return;
+    }
 
     this.reservationsApi
       .createSquarePaymentLink({
@@ -1137,7 +1230,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.paymentLinkNotice = 'Payment link generated. Share it with the customer.';
           this.creatingPaymentLink = false;
         },
-        error: (err) => {
+        error: (err: any) => {
           this.paymentLinkError =
             err?.error?.message || err?.message || 'Failed to generate payment link';
           this.creatingPaymentLink = false;
@@ -1195,9 +1288,18 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
   }
 
+  linkCollectionTitle(): string {
+    const mode = this.currentLinkMode();
+    return mode === 'client' ? 'Client Pay Link' : 'Square Payment Link';
+  }
+
   reservationActionLabel(): string {
     if (this.createdReservation) return 'Done';
-    if (this.isSquareCollectionFlow()) return 'Confirm & Generate Link';
+    if (this.isLinkCollectionFlow()) {
+      return this.currentLinkModeFromForm() === 'client'
+        ? 'Confirm & Generate Client Link'
+        : 'Confirm & Generate Link';
+    }
     return 'Confirm Reservation';
   }
 
@@ -1414,7 +1516,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       depositAmount: 0,
       amountDue: 0,
       paymentStatus: 'PAID',
-      paymentMethod: 'cash',
+      paymentMethod: 'square',
       useCredit: false,
       creditId: '',
       remainingMethod: 'cash',
@@ -1829,7 +1931,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       const paymentStatus = String(parsed.paymentStatus ?? '').trim().toUpperCase();
       const paymentMethod = String(parsed.paymentMethod ?? '').trim().toLowerCase();
       const validStatuses = ['PAID', 'PARTIAL', 'PENDING', 'COURTESY'];
-      const validMethods = ['cash', 'square'];
+      const validMethods = ['cash', 'square', 'client'];
       return {
         eventDate,
         tableId,
@@ -1850,8 +1952,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           validStatuses.includes(paymentStatus) ? paymentStatus : 'PAID'
         ) as 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY',
         paymentMethod: (
-          validMethods.includes(paymentMethod) ? paymentMethod : 'cash'
-        ) as 'cash' | 'square',
+          validMethods.includes(paymentMethod) ? paymentMethod : 'square'
+        ) as 'cash' | 'square' | 'client',
         allowCustomDeposit: parsed.allowCustomDeposit === true,
         paymentDeadlineEnabled: parsed.paymentDeadlineEnabled === true,
         paymentDeadlineDate: String(parsed.paymentDeadlineDate ?? ''),

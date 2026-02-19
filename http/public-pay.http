@@ -1,0 +1,25 @@
+### Public Pay Link (Staff: create session link)
+POST {{baseUrl}}/reservations/{{reservationId}}/public-pay-link/square
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "ttlMinutes": 20
+}
+
+###
+### Public Pay Session (Client page bootstrap)
+GET {{baseUrl}}/public/pay-session?eventDate={{eventDate}}&reservationId={{reservationId}}&token={{publicPayToken}}
+
+###
+### Public Pay Charge (Client completes payment)
+POST {{baseUrl}}/public/pay-session/charge
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "reservationId": "{{reservationId}}",
+  "token": "{{publicPayToken}}",
+  "sourceId": "{{squareSourceId}}"
+}

@@ -664,13 +664,13 @@
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-xs font-semibold uppercase tracking-[0.12em] text-accent-800">
-                  Reschedule Credits
+                  Reservation Credits
                 </p>
                 <p class="text-xs font-semibold text-accent-800" *ngIf="!clientCreditsLoading && clientCredits.length">
                   Total ${{ clientCreditsTotalRemaining().toFixed(2) }}
                 </p>
               </div>
-              <p class="mt-1 text-xs text-brand-600" *ngIf="clientCreditsLoading">Loading credits…</p>
+              <p class="mt-1 text-xs text-brand-600" *ngIf="clientCreditsLoading">Loading reservation credits…</p>
               <p class="mt-1 text-xs text-danger-700" *ngIf="clientCreditsError">{{ clientCreditsError }}</p>
               <div class="mt-2 grid gap-2" *ngIf="!clientCreditsLoading && clientCredits.length">
                 <label class="flex items-center gap-2 text-sm text-brand-800">
@@ -680,7 +680,7 @@
                     [checked]="isUsingClientCredit()"
                     (change)="form.controls.useCredit.setValue($any($event.target).checked)"
                   />
-                  Apply reschedule credit
+                  Apply reservation credit
                 </label>
 
                 <ng-container *ngIf="isUsingClientCredit()">
@@ -690,7 +690,7 @@
                       class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
                       formControlName="creditId"
                     >
-                      <option value="" disabled>Select credit</option>
+                      <option value="" disabled>Select reservation credit</option>
                       <option *ngFor="let credit of clientCredits" [value]="credit.creditId">
                         {{ clientCreditLabel(credit) }}
                       </option>
@@ -713,6 +713,7 @@
                     >
                       <option value="cash">Cash</option>
                       <option value="square">Square</option>
+                      <option value="client">Client Pay Link</option>
                     </select>
                   </label>
                 </ng-container>
@@ -721,7 +722,7 @@
 
             <div class="grid gap-2 md:col-span-2" *ngIf="!isUsingClientCredit()">
               <p class="text-xs text-brand-600">Payment Method</p>
-              <div class="relative z-30 grid grid-cols-2 gap-2 pointer-events-auto">
+              <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
                 <button
                   type="button"
                   class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold touch-manipulation"
@@ -747,10 +748,11 @@
 
             <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isUsingClientCredit() && !isCashMethod()">
               <p class="font-semibold text-brand-800">
-                Square payment flow
+                Digital payment flow
               </p>
               <p class="mt-1">
-                Reservation is created as pending until payment is confirmed. Full amount due is used for digital collection.
+                Reservation is created as pending until payment is confirmed. Full amount due is collected using
+                {{ isClientPayMethod() ? 'client pay link' : 'Square payment link' }}.
               </p>
             </div>
 
@@ -797,7 +799,13 @@
                 Payment deadline is required for digital payment methods.
               </p>
               <p class="text-xs text-brand-600" *ngIf="isUsingClientCredit() && shouldShowCreditRemainingMethod()">
-                Remaining balance will be collected by {{ form.controls.remainingMethod.value === 'square' ? 'Square link' : 'Cash' }} after credit is applied.
+                Remaining balance will be collected by
+                {{
+                  form.controls.remainingMethod.value === 'cash'
+                    ? 'Cash'
+                    : (form.controls.remainingMethod.value === 'client' ? 'Client pay link' : 'Square link')
+                }}
+                after credit is applied.
               </p>
               <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
                 <label class="grid gap-1 text-xs text-brand-600">
@@ -824,14 +832,14 @@
               Table {{ createdReservation?.tableId }}.
             </p>
 
-            <ng-container *ngIf="isSquareCollectionFlow(); else nonSquareSummary">
+            <ng-container *ngIf="isLinkCollectionFlow(); else nonSquareSummary">
               <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-xs uppercase tracking-[0.12em] text-brand-500">Square Payment Link</p>
+                  <p class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ linkCollectionTitle() }}</p>
                   <button
                     type="button"
                     class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:opacity-60"
-                    (click)="generateSquarePaymentLink()"
+                    (click)="generatePaymentLinkForCurrentFlow()"
                     [disabled]="creatingPaymentLink"
                   >
                     {{ creatingPaymentLink ? 'Generating…' : (paymentLinkUrl ? 'Regenerate' : 'Generate Link') }}

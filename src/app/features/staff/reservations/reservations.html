@@ -79,49 +79,52 @@
       <table class="w-full border-collapse text-left text-sm text-brand-900">
         <thead class="border-b border-brand-100 text-xs uppercase tracking-[0.16em] text-brand-500">
           <tr>
-            <th class="py-3 pr-3">Table</th>
-            <th class="py-3 pr-3">Customer</th>
-            <th class="py-3 pr-3">Status</th>
+            <th class="py-3 pr-3">Reservation</th>
             <th class="py-3 pr-3">Payment</th>
-            <th class="py-3 pr-3">Amount Due</th>
+            <th class="py-3 pr-3">Remaining</th>
             <th class="py-3 pr-3">Deadline</th>
+            <th class="py-3 pr-3">Updated</th>
             <th class="py-3 pr-3">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let r of items" class="border-b border-brand-100 last:border-0">
-            <td class="py-3 pr-3 font-semibold">{{ r.tableId }}</td>
-            <td class="py-3 pr-3">{{ r.customerName }}</td>
-            <td class="py-3 pr-3">{{ r.status }}</td>
-            <td class="py-3 pr-3">{{ r.paymentStatus || '—' }}</td>
-            <td class="py-3 pr-3">${{ r.amountDue ?? 0 }}</td>
-            <td class="py-3 pr-3">{{ formatDeadline(r.paymentDeadlineAt, r.eventDate) }}</td>
+          <tr
+            *ngFor="let r of items"
+            class="cursor-pointer border-b border-brand-100 transition-colors hover:bg-brand-50 last:border-0 focus-within:bg-brand-50"
+            tabindex="0"
+            role="button"
+            (click)="onReservationRowClick(r)"
+            (keydown)="onReservationRowKeydown($event, r)"
+          >
             <td class="py-3 pr-3">
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  class="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800"
-                  (click)="openDetails(r)"
-                >
-                  Details
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  (click)="openPayment(r)"
-                  [disabled]="r.status !== 'CONFIRMED' || r.paymentStatus === 'PAID' || r.paymentStatus === 'COURTESY'"
-                >
-                  Take Payment
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-brand-200 px-3 py-1.5 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  (click)="cancel(r)"
-                  [disabled]="r.status !== 'CONFIRMED'"
-                >
-                  Cancel
-                </button>
-              </div>
+              <p class="font-semibold text-brand-900">Table {{ r.tableId }} · {{ r.customerName }}</p>
+              <p class="text-xs text-brand-500">{{ reservationListMeta(r) }}</p>
+            </td>
+            <td class="py-3 pr-3">
+              <span
+                class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                [ngClass]="paymentStatusBadgeClass(r)"
+              >
+                {{ paymentStatusLabel(r) }}
+              </span>
+            </td>
+            <td class="py-3 pr-3 font-semibold text-brand-900">${{ remainingDisplayAmount(r) | number:'1.2-2' }}</td>
+            <td class="py-3 pr-3">{{ formatDeadline(r.paymentDeadlineAt, r.eventDate) }}</td>
+            <td class="py-3 pr-3 text-xs text-brand-500">
+              <ng-container *ngIf="(r.updatedAt || r.createdAt) as rowEpoch; else noRowEpoch">
+                {{ rowEpoch * 1000 | date:'MMM d, h:mm a' }}
+              </ng-container>
+              <ng-template #noRowEpoch>—</ng-template>
+            </td>
+            <td class="py-3 pr-3" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                class="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                (click)="onTakePaymentFromList($event, r)"
+                [disabled]="!canTakePayment(r)"
+              >
+                Take Payment
+              </button>
             </td>
           </tr>
         </tbody>
@@ -129,40 +132,42 @@
     </div>
 
     <div class="mt-4 grid gap-3 lg:hidden" *ngIf="items.length > 0">
-      <article class="rounded-xl border border-brand-100 bg-white p-4 shadow-sm" *ngFor="let r of items">
+      <article
+        class="cursor-pointer rounded-xl border border-brand-100 bg-white p-4 shadow-sm transition-colors hover:bg-brand-50"
+        *ngFor="let r of items"
+        tabindex="0"
+        role="button"
+        (click)="onReservationRowClick(r)"
+        (keydown)="onReservationRowKeydown($event, r)"
+      >
         <div class="flex items-center justify-between gap-3">
-          <div class="text-lg font-semibold text-brand-900">{{ r.tableId }}</div>
-          <div class="text-xs font-semibold uppercase tracking-[0.15em] text-brand-500">{{ r.status }}</div>
-        </div>
-        <div class="mt-2 text-sm text-brand-800">{{ r.customerName }} · {{ r.phone | phoneDisplay }}</div>
-        <div class="mt-3 grid gap-1 text-sm text-brand-700">
-          <div class="flex justify-between"><span class="text-brand-500">Payment</span><span>{{ r.paymentStatus || '—' }}</span></div>
-          <div class="flex justify-between"><span class="text-brand-500">Amount Due</span><span>${{ r.amountDue ?? 0 }}</span></div>
-          <div class="flex justify-between"><span class="text-brand-500">Deadline</span><span>{{ formatDeadline(r.paymentDeadlineAt, r.eventDate) }}</span></div>
-        </div>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800"
-            (click)="openDetails(r)"
+          <p class="text-base font-semibold text-brand-900">Table {{ r.tableId }} · {{ r.customerName }}</p>
+          <span
+            class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+            [ngClass]="paymentStatusBadgeClass(r)"
           >
-            Details
-          </button>
+            {{ paymentStatusLabel(r) }}
+          </span>
+        </div>
+        <div class="mt-2 grid gap-1 text-sm text-brand-700">
+          <div class="flex justify-between">
+            <span class="text-brand-500">Remaining</span>
+            <span class="font-semibold">${{ remainingDisplayAmount(r) | number:'1.2-2' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-brand-500">Deadline</span>
+            <span>{{ formatDeadline(r.paymentDeadlineAt, r.eventDate) }}</span>
+          </div>
+          <p class="text-xs text-brand-500">{{ reservationListMeta(r) }}</p>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2" (click)="$event.stopPropagation()">
           <button
             type="button"
             class="h-10 rounded-lg bg-brand-900 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-            (click)="openPayment(r)"
-            [disabled]="r.status !== 'CONFIRMED' || r.paymentStatus === 'PAID' || r.paymentStatus === 'COURTESY'"
+            (click)="onTakePaymentFromList($event, r)"
+            [disabled]="!canTakePayment(r)"
           >
             Take Payment
-          </button>
-          <button
-            type="button"
-            class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
-            (click)="cancel(r)"
-            [disabled]="r.status !== 'CONFIRMED'"
-          >
-            Cancel
           </button>
         </div>
       </article>
@@ -210,6 +215,33 @@
 
     <div class="mt-4 grid gap-3">
       <article class="rounded-xl border border-brand-100 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Actions</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="!canTakePayment(detailItem)"
+              (click)="openPaymentFromDetails(detailItem)"
+            >
+              Take Payment
+            </button>
+            <button
+              type="button"
+              class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="!canCancelReservation(detailItem)"
+              (click)="cancel(detailItem)"
+            >
+              Cancel Reservation
+            </button>
+          </div>
+        </div>
+        <p class="mt-2 text-xs text-brand-500" *ngIf="isPastEvent(detailItem)">
+          Past event reservation: payments and cancellation are disabled.
+        </p>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 p-3">
         <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Info</p>
         <dl class="mt-2 grid gap-2 text-sm text-brand-800">
           <div class="flex items-center justify-between gap-3">
@@ -230,18 +262,26 @@
             <button
               type="button"
               class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
-              [disabled]="paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
+              [disabled]="paymentLinkLoadingId === detailItem.reservationId || publicPayLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
               (click)="sendPaymentLinkSms(detailItem)"
             >
               {{ paymentLinkLoadingId === detailItem.reservationId ? 'Sending…' : 'Send SMS' }}
             </button>
             <button
               type="button"
-              class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              [disabled]="paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
+              class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="paymentLinkLoadingId === detailItem.reservationId || publicPayLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
               (click)="generatePaymentLink(detailItem)"
             >
-              {{ paymentLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Link' }}
+              {{ paymentLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Square Link' }}
+            </button>
+            <button
+              type="button"
+              class="h-8 rounded-lg bg-brand-900 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              [disabled]="publicPayLinkLoadingId === detailItem.reservationId || paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
+              (click)="generateClientPayLink(detailItem)"
+            >
+              {{ publicPayLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Client Link' }}
             </button>
           </div>
         </div>
@@ -462,9 +502,10 @@
           (change)="onPaymentMethodChanged()"
           class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
         >
-          <option value="cash">Cash</option>
           <option value="square">Square</option>
-          <option value="credit">Reschedule Credit</option>
+          <option value="cashapp">Cash App Pay</option>
+          <option value="cash">Cash</option>
+          <option value="credit">Reservation Credit</option>
         </select>
       </label>
       <div class="grid gap-2" *ngIf="isCreditPaymentMethodSelected()">
@@ -476,13 +517,13 @@
             class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900 disabled:bg-brand-50"
             [disabled]="paymentCreditsLoading || !paymentCredits.length"
           >
-            <option value="" disabled selected hidden>Select credit</option>
+            <option value="" disabled selected hidden>Select reservation credit</option>
             <option *ngFor="let credit of paymentCredits" [value]="credit.creditId">
               {{ creditOptionLabel(credit) }}
             </option>
           </select>
         </label>
-        <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading">Loading credits…</p>
+        <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading">Loading reservation credits…</p>
         <p class="text-xs text-danger-700" *ngIf="paymentCreditsError">{{ paymentCreditsError }}</p>
         <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading && paymentCredits.length">
           <p>Credit applied now: ${{ creditAppliedAmount().toFixed(2) }}</p>
@@ -493,12 +534,33 @@
         Remaining Payment Method
         <select
           formControlName="remainingMethod"
+          (change)="onRemainingMethodChanged()"
           class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
         >
           <option value="cash">Cash</option>
           <option value="square">Square</option>
         </select>
       </label>
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500" *ngIf="shouldShowCashReceiptField()">
+        {{ cashReceiptLabel() }}
+        <input
+          type="text"
+          formControlName="receiptNumber"
+          (input)="onReceiptNumberInput()"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          enterkeyhint="done"
+          autocapitalize="off"
+          spellcheck="false"
+          maxlength="64"
+          autocomplete="off"
+          placeholder="Enter receipt number"
+          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+        />
+      </label>
+      <p class="text-xs text-danger-700" *ngIf="shouldShowCashReceiptError()">
+        Receipt number is required for cash payments.
+      </p>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Note
         <input type="text" formControlName="note" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
@@ -507,7 +569,20 @@
       <p class="text-xs text-brand-600" *ngIf="isSquarePaymentMethodSelected()">
         Square in this modal generates a payment link. Reader charge can be added later.
       </p>
+      <p class="text-xs text-brand-600" *ngIf="isCashAppPaymentMethodSelected()">
+        Tap "Show Cash App QR", then have the client scan and approve on their own phone.
+      </p>
+      <div class="rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="isCashAppPaymentMethodSelected()">
+        <div #cashAppPayHost class="min-h-[140px]"></div>
+        <p class="mt-2 text-xs text-brand-600" *ngIf="cashAppPayReady">
+          QR ready. Waiting for client approval.
+        </p>
+      </div>
+      <p class="text-xs text-danger-700" *ngIf="isCashAppPaymentMethodSelected() && !canUseCashAppPay()">
+        Cash App Pay is not configured. Set Square application id and location id in Lambda env vars.
+      </p>
       <p class="text-xs text-danger-700" *ngIf="paymentLinkError && isSquarePaymentMethodSelected()">{{ paymentLinkError }}</p>
+      <p class="text-xs text-danger-700" *ngIf="paymentLinkError && isCashAppPaymentMethodSelected()">{{ paymentLinkError }}</p>
 
       <button
         type="submit"
@@ -516,7 +591,9 @@
           isSquarePaymentMethodSelected()
             ? paymentLinkLoadingId === paymentItem.reservationId || !canGeneratePaymentLink(paymentItem)
             : loading ||
+              cashAppPayPreparing ||
               paymentForm.invalid ||
+              (isCashAppPaymentMethodSelected() && !canUseCashAppPay()) ||
               (isCreditPaymentMethodSelected() &&
                 (paymentCreditsLoading ||
                   !paymentForm.controls.creditId.value ||

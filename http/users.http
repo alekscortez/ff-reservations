@@ -1,0 +1,57 @@
+### Admin Users API
+
+### List users
+GET {{baseUrl}}/admin/users?limit=50
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Create user (invite by email)
+POST {{baseUrl}}/admin/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "New Staff User",
+  "email": "staff@example.com",
+  "role": "Staff"
+}
+
+###
+
+### Promote / demote role
+PUT {{baseUrl}}/admin/users/staff%40example.com/role
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "role": "Admin"
+}
+
+###
+
+### Disable user
+PUT {{baseUrl}}/admin/users/staff%40example.com/status
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "enabled": false
+}
+
+###
+
+### Enable user
+PUT {{baseUrl}}/admin/users/staff%40example.com/status
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+
+###
+
+### Send password reset
+POST {{baseUrl}}/admin/users/staff%40example.com/reset-password
+Authorization: Bearer {{accessToken}}

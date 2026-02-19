@@ -2,6 +2,14 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   CognitoIdentityProviderClient,
   AdminGetUserCommand,
+  AdminCreateUserCommand,
+  AdminAddUserToGroupCommand,
+  AdminRemoveUserFromGroupCommand,
+  AdminEnableUserCommand,
+  AdminDisableUserCommand,
+  AdminResetUserPasswordCommand,
+  AdminListGroupsForUserCommand,
+  ListUsersCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
   SecretsManagerClient,
@@ -36,6 +44,7 @@ import { handleClientsRoute } from "./lib/routes-clients.mjs";
 import { handleSquareWebhookRoute } from "./lib/routes-square-webhooks.mjs";
 import { handleCheckInRoute } from "./lib/routes-checkin.mjs";
 import { handleSettingsRoute } from "./lib/routes-settings.mjs";
+import { handleUsersRoute } from "./lib/routes-users.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -43,6 +52,7 @@ import { createSquarePaymentsService } from "./lib/services-square-payments.mjs"
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
 import { createSmsNotificationsService } from "./lib/services-sms-notifications.mjs";
 import { createSettingsService } from "./lib/services-settings.mjs";
+import { createUsersService } from "./lib/services-users.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -66,6 +76,7 @@ const FREQUENT_PAYMENT_LINK_TTL_MINUTES = process.env.FREQUENT_PAYMENT_LINK_TTL_
 const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
 const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
+const PUBLIC_PAY_BASE_URL = process.env.PUBLIC_PAY_BASE_URL;
 const SETTINGS_TABLE = process.env.SETTINGS_TABLE;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -235,6 +246,24 @@ const settingsService = createSettingsService({
   httpError,
 });
 
+const usersService = createUsersService({
+  cognito,
+  userPoolId: USER_POOL_ID,
+  requiredEnv,
+  httpError,
+  commands: {
+    AdminCreateUserCommand,
+    AdminAddUserToGroupCommand,
+    AdminRemoveUserFromGroupCommand,
+    AdminEnableUserCommand,
+    AdminDisableUserCommand,
+    AdminResetUserPasswordCommand,
+    AdminListGroupsForUserCommand,
+    ListUsersCommand,
+    AdminGetUserCommand,
+  },
+});
+
 const eventsService = createEventsService({
   ddb,
   tableNames: { EVENTS_TABLE },
@@ -357,6 +386,22 @@ export const handler = async (event) => {
     });
     if (settingsRouteResponse) return settingsRouteResponse;
 
+    const usersRouteResponse = await handleUsersRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      getBody,
+      requireAdmin,
+      listUsers: usersService.listUsers,
+      createUser: usersService.createUser,
+      updateUserRole: usersService.updateUserRole,
+      updateUserStatus: usersService.updateUserStatus,
+      resetUserPassword: usersService.resetUserPassword,
+    });
+    if (usersRouteResponse) return usersRouteResponse;
+
     const eventsRouteResponse = await handleEventsAndTablesRoute({
       method,
       path,
@@ -430,6 +475,7 @@ export const handler = async (event) => {
       cors,
       json,
       noContent,
+      httpError,
       getBody,
       getUserLabel,
       getGroupsFromEvent,
@@ -451,11 +497,20 @@ export const handler = async (event) => {
       addReservationPayment: reservationsHoldsService.addReservationPayment,
       setReservationPaymentLinkWindow:
         reservationsHoldsService.setReservationPaymentLinkWindow,
+      setReservationPublicPaymentSession:
+        reservationsHoldsService.setReservationPublicPaymentSession,
+      markReservationPublicPaymentSessionUsed:
+        reservationsHoldsService.markReservationPublicPaymentSessionUsed,
       appendReservationHistory: reservationsHoldsService.appendReservationHistory,
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,
       sendPaymentLinkSms: smsNotificationsService.sendPaymentLinkSms,
       cancelReservation: reservationsHoldsService.cancelReservation,
+      getRuntimeSettingsSubset: async () =>
+        settingsService.runtimeSettingsSubset(await settingsService.getAppSettings()),
+      getEventByDate: eventsService.getEventByDate,
+      publicPayBaseUrl: PUBLIC_PAY_BASE_URL,
+      checkInPassBaseUrl: CHECKIN_PASS_BASE_URL,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;
 

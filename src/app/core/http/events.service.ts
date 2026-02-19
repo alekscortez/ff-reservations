@@ -6,6 +6,7 @@ import { CreateEventPayload, EventItem } from '../../shared/models/event.model';
 export interface RuntimeAppSettings {
   operatingTz: string;
   operatingDayCutoffHour: number;
+  cashReceiptNumberRequired?: boolean;
   defaultPaymentDeadlineHour: number;
   defaultPaymentDeadlineMinute: number;
   rescheduleCutoffHour: number;
@@ -15,6 +16,10 @@ export interface RuntimeAppSettings {
   clientAvailabilityPollingSeconds: number;
   urgentPaymentWindowMinutes: number;
   showClientFacingMap: boolean;
+  squareEnvMode?: 'sandbox' | 'production';
+  squareApplicationId?: string;
+  squareLocationId?: string;
+  squareWebPaymentsEnabled?: boolean;
   sectionMapColors?: {
     A?: string;
     B?: string;

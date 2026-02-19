@@ -14,6 +14,7 @@ export interface AppSettings {
   operatingTz: string;
   operatingDayCutoffHour: number;
   holdTtlSeconds: number;
+  cashReceiptNumberRequired: boolean;
   paymentLinkTtlMinutes: number;
   frequentPaymentLinkTtlMinutes: number;
   autoSendSquareLinkSms: boolean;

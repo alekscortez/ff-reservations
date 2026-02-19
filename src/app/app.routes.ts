@@ -52,6 +52,16 @@ export const routes: Routes = [
         (m) => m.PublicAvailability
       ),
   },
+  {
+    path: 'pay',
+    loadComponent: () =>
+      import('./features/public/pay/pay').then((m) => m.PublicPayPage),
+  },
+  {
+    path: 'public/pay',
+    loadComponent: () =>
+      import('./features/public/pay/pay').then((m) => m.PublicPayPage),
+  },
 
   // ✅ Staff (must be logged in)
   {

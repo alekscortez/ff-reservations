@@ -5,7 +5,7 @@
         <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">Admin</p>
         <h1 class="text-2xl font-semibold text-brand-900">App Settings</h1>
         <p class="text-sm text-brand-600">
-          Configure operational cutoff, deadlines, polling, and notification defaults.
+          Configure operational rules, payments, live behavior, and client-facing defaults.
         </p>
       </div>
       <button
@@ -21,236 +21,280 @@
 
   <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
     <div *ngIf="loading" class="text-sm text-brand-500">Loading settings…</div>
-    <div *ngIf="!loading" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Operating Timezone
-        <input
-          type="text"
-          [formControl]="form.controls.operatingTz"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Day Cutoff Hour
-        <input
-          type="number"
-          min="0"
-          max="23"
-          [formControl]="form.controls.operatingDayCutoffHour"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Hold TTL (seconds)
-        <input
-          type="number"
-          min="60"
-          max="1800"
-          [formControl]="form.controls.holdTtlSeconds"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Standard Link TTL (minutes)
-        <input
-          type="number"
-          min="1"
-          max="120"
-          [formControl]="form.controls.paymentLinkTtlMinutes"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Frequent Link TTL (minutes)
-        <input
-          type="number"
-          min="10"
-          max="10080"
-          [formControl]="form.controls.frequentPaymentLinkTtlMinutes"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Default Deadline Hour
-        <input
-          type="number"
-          min="0"
-          max="23"
-          [formControl]="form.controls.defaultPaymentDeadlineHour"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Default Deadline Minute
-        <input
-          type="number"
-          min="0"
-          max="59"
-          [formControl]="form.controls.defaultPaymentDeadlineMinute"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Reschedule Cutoff Hour
-        <input
-          type="number"
-          min="0"
-          max="23"
-          [formControl]="form.controls.rescheduleCutoffHour"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Reschedule Cutoff Minute
-        <input
-          type="number"
-          min="0"
-          max="59"
-          [formControl]="form.controls.rescheduleCutoffMinute"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Dashboard Polling (seconds)
-        <input
-          type="number"
-          min="5"
-          max="120"
-          [formControl]="form.controls.dashboardPollingSeconds"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Table Polling (seconds)
-        <input
-          type="number"
-          min="5"
-          max="120"
-          [formControl]="form.controls.tableAvailabilityPollingSeconds"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Topbar Polling (seconds)
-        <input
-          type="number"
-          min="5"
-          max="120"
-          [formControl]="form.controls.clientAvailabilityPollingSeconds"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Urgent Window (minutes)
-        <input
-          type="number"
-          min="5"
-          max="1440"
-          [formControl]="form.controls.urgentPaymentWindowMinutes"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        Check-In Pass TTL (days)
-        <input
-          type="number"
-          min="1"
-          max="30"
-          [formControl]="form.controls.checkInPassTtlDays"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
-      </label>
-      <div class="grid gap-2 rounded-xl border border-brand-100 bg-brand-50 p-3 text-brand-800 md:col-span-2 xl:col-span-3">
-        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">Map Section Colors</p>
-        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Section A
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [formControl]="form.controls.sectionColorA"
-                class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-              />
-              <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorA.value"></span>
-            </div>
+
+    <div *ngIf="!loading" class="grid gap-4 xl:grid-cols-2">
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Operations</h2>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
+            Operating Timezone
+            <input
+              type="text"
+              [formControl]="form.controls.operatingTz"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Section B
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [formControl]="form.controls.sectionColorB"
-                class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-              />
-              <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorB.value"></span>
-            </div>
+            Day Cutoff Hour
+            <input
+              type="number"
+              min="0"
+              max="23"
+              [formControl]="form.controls.operatingDayCutoffHour"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Section C
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [formControl]="form.controls.sectionColorC"
-                class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-              />
-              <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorC.value"></span>
-            </div>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Section D
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [formControl]="form.controls.sectionColorD"
-                class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-              />
-              <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorD.value"></span>
-            </div>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Section E
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [formControl]="form.controls.sectionColorE"
-                class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-              />
-              <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorE.value"></span>
-            </div>
+            Hold TTL (seconds)
+            <input
+              type="number"
+              min="60"
+              max="1800"
+              [formControl]="form.controls.holdTtlSeconds"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
           </label>
         </div>
-      </div>
+      </article>
 
-      <div class="flex flex-col gap-2 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-800 md:col-span-2 xl:col-span-3">
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.autoSendSquareLinkSms" />
-          <span>Auto-send Square payment link SMS after reservation create</span>
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.smsEnabled" />
-          <span>SMS sending enabled</span>
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.showClientFacingMap" />
-          <span>Enable client-facing table map</span>
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.allowPastEventEdits" />
-          <span>Allow editing past events</span>
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.allowPastEventPayments" />
-          <span>Allow payments on past events</span>
-        </label>
-        <label class="inline-flex items-center gap-2">
-          <input type="checkbox" [formControl]="form.controls.auditVerboseLogging" />
-          <span>Enable verbose audit logging</span>
-        </label>
-      </div>
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Payments</h2>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Standard Link TTL (minutes)
+            <input
+              type="number"
+              min="1"
+              max="120"
+              [formControl]="form.controls.paymentLinkTtlMinutes"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Frequent Link TTL (minutes)
+            <input
+              type="number"
+              min="10"
+              max="10080"
+              [formControl]="form.controls.frequentPaymentLinkTtlMinutes"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Default Deadline Hour
+            <input
+              type="number"
+              min="0"
+              max="23"
+              [formControl]="form.controls.defaultPaymentDeadlineHour"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Default Deadline Minute
+            <input
+              type="number"
+              min="0"
+              max="59"
+              [formControl]="form.controls.defaultPaymentDeadlineMinute"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Reschedule Cutoff Hour
+            <input
+              type="number"
+              min="0"
+              max="23"
+              [formControl]="form.controls.rescheduleCutoffHour"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Reschedule Cutoff Minute
+            <input
+              type="number"
+              min="0"
+              max="59"
+              [formControl]="form.controls.rescheduleCutoffMinute"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+        </div>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.cashReceiptNumberRequired" />
+            <span>Require receipt number for cash payments</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.autoSendSquareLinkSms" />
+            <span>Auto-send Square payment link SMS after reservation create</span>
+          </label>
+        </div>
+      </article>
 
-      <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-brand-700 md:col-span-2 xl:col-span-3">
-        Square environment: <span class="font-semibold text-brand-900">{{ squareEnvMode || 'unknown' }}</span>
-      </div>
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Live Updates</h2>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Dashboard Polling (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.dashboardPollingSeconds"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Table Polling (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.tableAvailabilityPollingSeconds"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Topbar Polling (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.clientAvailabilityPollingSeconds"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Urgent Window (minutes)
+            <input
+              type="number"
+              min="5"
+              max="1440"
+              [formControl]="form.controls.urgentPaymentWindowMinutes"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Check-In</h2>
+        <div class="mt-3 grid gap-3">
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Check-In Pass TTL (days)
+            <input
+              type="number"
+              min="1"
+              max="30"
+              [formControl]="form.controls.checkInPassTtlDays"
+              class="h-11 rounded-lg border border-brand-200 bg-white px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+            />
+          </label>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Client Map</h2>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.showClientFacingMap" />
+            <span>Enable client-facing table map</span>
+          </label>
+        </div>
+
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-brand-800">
+          <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">Section Colors</p>
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+              Section A
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  [formControl]="form.controls.sectionColorA"
+                  class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+                />
+                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorA.value"></span>
+              </div>
+            </label>
+            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+              Section B
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  [formControl]="form.controls.sectionColorB"
+                  class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+                />
+                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorB.value"></span>
+              </div>
+            </label>
+            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+              Section C
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  [formControl]="form.controls.sectionColorC"
+                  class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+                />
+                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorC.value"></span>
+              </div>
+            </label>
+            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+              Section D
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  [formControl]="form.controls.sectionColorD"
+                  class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+                />
+                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorD.value"></span>
+              </div>
+            </label>
+            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+              Section E
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  [formControl]="form.controls.sectionColorE"
+                  class="h-11 w-full rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+                />
+                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorE.value"></span>
+              </div>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Access & Audit</h2>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.smsEnabled" />
+            <span>SMS sending enabled</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.allowPastEventEdits" />
+            <span>Allow editing past events</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.allowPastEventPayments" />
+            <span>Allow payments on past events</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input type="checkbox" [formControl]="form.controls.auditVerboseLogging" />
+            <span>Enable verbose audit logging</span>
+          </label>
+        </div>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Integrations</h2>
+        <div class="mt-3 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-700">
+          Square environment:
+          <span class="font-semibold text-brand-900">{{ squareEnvMode || 'unknown' }}</span>
+        </div>
+      </article>
     </div>
 
     <p *ngIf="error" class="mt-3 text-sm text-danger-700">{{ error }}</p>

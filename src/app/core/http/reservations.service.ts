@@ -39,6 +39,7 @@ export interface AddPaymentPayload {
   amount: number;
   method: PaymentMethod;
   creditId?: string;
+  receiptNumber?: string;
   note?: string;
 }
 
@@ -93,6 +94,33 @@ export interface CreateSquarePaymentLinkSmsResponse extends CreateSquarePaymentL
     messageId?: string | null;
     to?: string | null;
     sentAt?: number | null;
+  };
+}
+
+export interface CreatePublicPayLinkPayload {
+  reservationId: string;
+  eventDate: string;
+  amount?: number;
+  ttlMinutes?: number;
+}
+
+export interface CreatePublicPayLinkResponse {
+  reservation: {
+    reservationId: string;
+    eventDate: string;
+    tableId?: string | null;
+    customerName?: string | null;
+    phone?: string | null;
+    paymentStatus?: string | null;
+    amountDue: number;
+    paid: number;
+    remainingAmount: number;
+    linkAmount: number;
+  };
+  publicPay: {
+    url: string;
+    expiresAt: number;
+    ttlMinutes: number;
   };
 }
 
@@ -151,6 +179,7 @@ export class ReservationsService {
         amount: payload.amount,
         method: payload.method,
         creditId: payload.creditId ?? '',
+        receiptNumber: payload.receiptNumber ?? '',
         note: payload.note ?? '',
       }
     );
@@ -160,6 +189,7 @@ export class ReservationsService {
     return this.api.post<{
       item: ReservationItem;
       square: {
+        method?: PaymentMethod;
         paymentId: string;
         status: string;
         receiptUrl?: string | null;
@@ -197,6 +227,17 @@ export class ReservationsService {
         amount: payload.amount,
         note: payload.note ?? '',
         idempotencyKey: payload.idempotencyKey ?? '',
+      }
+    );
+  }
+
+  createPublicPayLink(payload: CreatePublicPayLinkPayload) {
+    return this.api.post<CreatePublicPayLinkResponse>(
+      `/reservations/${payload.reservationId}/public-pay-link/square`,
+      {
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        ttlMinutes: payload.ttlMinutes,
       }
     );
   }
