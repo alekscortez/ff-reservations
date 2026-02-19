@@ -9,7 +9,7 @@ Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
 {
-  "eventDate": "2026-02-14",
+  "eventDate": "2026-02-21",
   "tableId": "C108",
   "holdId": "d9dfa735-3be2-40c8-8fbd-e5224d5d1998",
   "customerName": "John Doe",
@@ -146,3 +146,7 @@ Content-Type: application/json
   "creditId": "8624b71c-50fd-4d4b-8be9-903d0a3d9681",
   "note": "Applied reschedule credit"
 }
+
+###
+GET {{baseUrl}}/reservations/8b6fbbb5-82dc-42a7-853b-f335cbfe4409/history?eventDate=2026-02-21
+Authorization: Bearer {{accessToken}}

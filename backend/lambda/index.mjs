@@ -530,6 +530,7 @@ export const handler = async (event) => {
         checkInPassesService.getActivePassForReservation,
       getLatestCheckInPassForReservation:
         checkInPassesService.getLatestPassForReservation,
+      getPassPreviewByToken: checkInPassesService.getPassPreviewByToken,
       verifyAndConsumeCheckInPass: checkInPassesService.verifyAndConsumePass,
     });
     if (checkInRouteResponse) return checkInRouteResponse;
