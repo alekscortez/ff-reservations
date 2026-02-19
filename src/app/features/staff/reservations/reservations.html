@@ -281,7 +281,7 @@
               [disabled]="publicPayLinkLoadingId === detailItem.reservationId || paymentLinkLoadingId === detailItem.reservationId || !canGeneratePaymentLink(detailItem)"
               (click)="generateClientPayLink(detailItem)"
             >
-              {{ publicPayLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Client Link' }}
+              {{ publicPayLinkLoadingId === detailItem.reservationId ? 'Generating…' : 'Generate Cash App Link' }}
             </button>
           </div>
         </div>

@@ -713,7 +713,7 @@
                     >
                       <option value="cash">Cash</option>
                       <option value="square">Square</option>
-                      <option value="client">Client Pay Link</option>
+                      <option value="client">Cash App</option>
                     </select>
                   </label>
                 </ng-container>
@@ -752,7 +752,7 @@
               </p>
               <p class="mt-1">
                 Reservation is created as pending until payment is confirmed. Full amount due is collected using
-                {{ isClientPayMethod() ? 'client pay link' : 'Square payment link' }}.
+                {{ isClientPayMethod() ? 'Cash App link' : 'Square payment link' }}.
               </p>
             </div>
 
@@ -803,7 +803,7 @@
                 {{
                   form.controls.remainingMethod.value === 'cash'
                     ? 'Cash'
-                    : (form.controls.remainingMethod.value === 'client' ? 'Client pay link' : 'Square link')
+                    : (form.controls.remainingMethod.value === 'client' ? 'Cash App link' : 'Square link')
                 }}
                 after credit is applied.
               </p>

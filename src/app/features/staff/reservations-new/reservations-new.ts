@@ -130,7 +130,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   };
   readonly paymentMethodOptions: Array<{ value: 'cash' | 'square' | 'client'; label: string }> = [
     { value: 'square', label: 'Square' },
-    { value: 'client', label: 'Client Pay Link' },
+    { value: 'client', label: 'Cash App' },
     { value: 'cash', label: 'Cash' },
   ];
 
@@ -1198,8 +1198,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             const ttlMinutes = Number(res?.publicPay?.ttlMinutes ?? 0);
             this.paymentLinkNotice =
               Number.isFinite(ttlMinutes) && ttlMinutes > 0
-                ? `Client pay link generated (expires in ${Math.round(ttlMinutes)} min).`
-                : 'Client pay link generated. Share it with the customer.';
+                ? `Cash App link generated (expires in ${Math.round(ttlMinutes)} min).`
+                : 'Cash App link generated. Share it with the customer.';
             this.creatingPaymentLink = false;
           },
           error: (err: any) => {
@@ -1290,14 +1290,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   linkCollectionTitle(): string {
     const mode = this.currentLinkMode();
-    return mode === 'client' ? 'Client Pay Link' : 'Square Payment Link';
+    return mode === 'client' ? 'Cash App Link' : 'Square Payment Link';
   }
 
   reservationActionLabel(): string {
     if (this.createdReservation) return 'Done';
     if (this.isLinkCollectionFlow()) {
       return this.currentLinkModeFromForm() === 'client'
-        ? 'Confirm & Generate Client Link'
+        ? 'Confirm & Generate Cash App Link'
         : 'Confirm & Generate Link';
     }
     return 'Confirm Reservation';

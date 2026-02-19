@@ -806,13 +806,13 @@ export class Reservations implements OnInit, OnDestroy {
           const ttlMinutes = Number(res?.publicPay?.ttlMinutes ?? 0);
           this.paymentLinkNotice =
             Number.isFinite(ttlMinutes) && ttlMinutes > 0
-              ? `Client pay link ready to share (expires in ${Math.round(ttlMinutes)} min).`
-              : 'Client pay link ready to share.';
+              ? `Cash App link ready to share (expires in ${Math.round(ttlMinutes)} min).`
+              : 'Cash App link ready to share.';
           this.publicPayLinkLoadingId = null;
         },
         error: (err) => {
           this.paymentLinkError =
-            err?.error?.message || err?.message || 'Failed to generate client pay link';
+            err?.error?.message || err?.message || 'Failed to generate Cash App link';
           this.publicPayLinkLoadingId = null;
         },
       });
