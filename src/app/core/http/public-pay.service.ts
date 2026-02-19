@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiClient } from './api-client';
 import { PaymentMethod } from '../../shared/models/reservation.model';
 
-export interface PublicPaySessionResponse {
+export interface CashAppSessionResponse {
   reservation: {
     reservationId: string;
     eventDate: string;
@@ -25,7 +25,7 @@ export interface PublicPaySessionResponse {
   };
 }
 
-export interface PublicPayChargeResponse {
+export interface CashAppChargeResponse {
   ok: boolean;
   reservation: {
     reservationId: string;
@@ -53,7 +53,7 @@ export class PublicPayService {
   private api = inject(ApiClient);
 
   getSession(eventDate: string, reservationId: string, token: string) {
-    return this.api.get<PublicPaySessionResponse>('/public/pay-session', {
+    return this.api.get<CashAppSessionResponse>('/cashapp/session', {
       eventDate,
       reservationId,
       token,
@@ -67,7 +67,7 @@ export class PublicPayService {
     sourceId: string;
     idempotencyKey?: string;
   }) {
-    return this.api.post<PublicPayChargeResponse>('/public/pay-session/charge', {
+    return this.api.post<CashAppChargeResponse>('/cashapp/session/charge', {
       eventDate: payload.eventDate,
       reservationId: payload.reservationId,
       token: payload.token,

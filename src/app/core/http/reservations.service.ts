@@ -25,6 +25,8 @@ export interface CreateReservationResponse {
   autoSquareLinkSms?: {
     attempted?: boolean;
     sent?: boolean;
+    paymentMethod?: 'square' | 'cashapp' | null;
+    linkType?: 'square' | 'cashapp-link' | null;
     linkAmount?: number;
     paymentLinkId?: string | null;
     to?: string | null;
@@ -97,14 +99,14 @@ export interface CreateSquarePaymentLinkSmsResponse extends CreateSquarePaymentL
   };
 }
 
-export interface CreatePublicPayLinkPayload {
+export interface CreateCashAppLinkPayload {
   reservationId: string;
   eventDate: string;
   amount?: number;
   ttlMinutes?: number;
 }
 
-export interface CreatePublicPayLinkResponse {
+export interface CreateCashAppLinkResponse {
   reservation: {
     reservationId: string;
     eventDate: string;
@@ -117,14 +119,14 @@ export interface CreatePublicPayLinkResponse {
     remainingAmount: number;
     linkAmount: number;
   };
-  publicPay: {
+  cashAppLink: {
     url: string;
     expiresAt: number;
     ttlMinutes: number;
   };
 }
 
-export interface CreatePublicPayLinkSmsResponse extends CreatePublicPayLinkResponse {
+export interface CreateCashAppLinkSmsResponse extends CreateCashAppLinkResponse {
   sms: {
     sent: boolean;
     provider?: string | null;
@@ -241,9 +243,9 @@ export class ReservationsService {
     );
   }
 
-  createPublicPayLink(payload: CreatePublicPayLinkPayload) {
-    return this.api.post<CreatePublicPayLinkResponse>(
-      `/reservations/${payload.reservationId}/public-pay-link/square`,
+  createCashAppLink(payload: CreateCashAppLinkPayload) {
+    return this.api.post<CreateCashAppLinkResponse>(
+      `/reservations/${payload.reservationId}/cashapp-link/square`,
       {
         eventDate: payload.eventDate,
         amount: payload.amount,
@@ -252,9 +254,9 @@ export class ReservationsService {
     );
   }
 
-  createPublicPayLinkSms(payload: CreatePublicPayLinkPayload) {
-    return this.api.post<CreatePublicPayLinkSmsResponse>(
-      `/reservations/${payload.reservationId}/public-pay-link/square/sms`,
+  createCashAppLinkSms(payload: CreateCashAppLinkPayload) {
+    return this.api.post<CreateCashAppLinkSmsResponse>(
+      `/reservations/${payload.reservationId}/cashapp-link/square/sms`,
       {
         eventDate: payload.eventDate,
         amount: payload.amount,

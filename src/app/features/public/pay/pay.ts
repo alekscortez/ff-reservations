@@ -3,9 +3,9 @@ import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@an
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import {
-  PublicPayChargeResponse,
+  CashAppChargeResponse,
+  CashAppSessionResponse,
   PublicPayService,
-  PublicPaySessionResponse,
 } from '../../../core/http/public-pay.service';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
@@ -25,8 +25,8 @@ export class PublicPayPage implements OnInit, OnDestroy {
   processing = false;
   error: string | null = null;
   notice: string | null = null;
-  session: PublicPaySessionResponse | null = null;
-  result: PublicPayChargeResponse | null = null;
+  session: CashAppSessionResponse | null = null;
+  result: CashAppChargeResponse | null = null;
 
   eventDate = '';
   reservationId = '';

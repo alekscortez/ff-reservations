@@ -846,16 +846,16 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentLinkNotice = null;
 
     this.reservationsApi
-      .createPublicPayLink({
+      .createCashAppLink({
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
       })
       .subscribe({
         next: (res) => {
-          const url = String(res?.publicPay?.url ?? '').trim();
+          const url = String(res?.cashAppLink?.url ?? '').trim();
           if (!url) {
-            this.paymentLinkError = 'Client pay link generation succeeded but no URL was returned.';
+            this.paymentLinkError = 'Cash App link generation succeeded but no URL was returned.';
             this.publicPayLinkLoadingId = null;
             return;
           }
@@ -944,14 +944,14 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentLinkNotice = null;
 
     this.reservationsApi
-      .createPublicPayLinkSms({
+      .createCashAppLinkSms({
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
       })
       .subscribe({
         next: (res) => {
-          const url = String(res?.publicPay?.url ?? '').trim();
+          const url = String(res?.cashAppLink?.url ?? '').trim();
           if (!url) {
             this.paymentLinkError = 'SMS sent flow succeeded but no Cash App URL was returned.';
             this.publicPayLinkLoadingId = null;
@@ -1496,7 +1496,8 @@ export class Dashboard implements OnInit, OnDestroy {
     if (normalized === 'RESERVATION_CREATED') return 'Reservation Created';
     if (normalized === 'PAYMENT_RECORDED') return 'Payment Recorded';
     if (normalized === 'PAYMENT_LINK_ISSUED') return 'Square Link';
-    if (normalized === 'PUBLIC_PAY_LINK_ISSUED') return 'Cash App Link';
+    if (normalized === 'CASH_APP_LINK_COMPLETED') return 'Cash App Payment Completed';
+    if (normalized === 'CASH_APP_LINK_ISSUED') return 'Cash App Link';
     if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'Payment Request Sent';
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
@@ -1557,7 +1558,10 @@ export class Dashboard implements OnInit, OnDestroy {
     if (item.eventType === 'PAYMENT_LINK_ISSUED') {
       return 'Square link generated';
     }
-    if (item.eventType === 'PUBLIC_PAY_LINK_ISSUED') {
+    if (item.eventType === 'CASH_APP_LINK_COMPLETED') {
+      return 'Cash App payment completed';
+    }
+    if (item.eventType === 'CASH_APP_LINK_ISSUED') {
       return 'Cash App link generated';
     }
     if (item.eventType === 'CHECKIN_PASS_SMS_SENT') {

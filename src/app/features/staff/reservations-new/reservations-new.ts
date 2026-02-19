@@ -728,6 +728,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           }
 
           if (paymentMethod === 'client') {
+            if (autoSquareLinkSms?.sent) {
+              this.loading = false;
+              this.finishReservationFlow();
+              return;
+            }
             this.createdReservation = {
               reservationId,
               eventDate: this.eventDate!,
@@ -1180,14 +1185,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
     if (linkMode === 'client') {
       this.reservationsApi
-        .createPublicPayLink({
+        .createCashAppLink({
           reservationId: this.createdReservation.reservationId,
           eventDate: this.createdReservation.eventDate,
           amount: this.createdReservation.amount,
         })
         .subscribe({
           next: (res) => {
-            const url = String(res?.publicPay?.url ?? '').trim();
+            const url = String(res?.cashAppLink?.url ?? '').trim();
             if (!url) {
               this.paymentLinkError =
                 'Cash App link generation succeeded but no URL was returned.';

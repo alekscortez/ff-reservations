@@ -1,5 +1,5 @@
-### Public Pay Link (Staff: create session link)
-POST {{baseUrl}}/reservations/{{reservationId}}/public-pay-link/square
+### Cash App Link (Staff: create session link)
+POST {{baseUrl}}/reservations/{{reservationId}}/cashapp-link/square
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
 
@@ -9,17 +9,17 @@ Content-Type: application/json
 }
 
 ###
-### Public Pay Session (Client page bootstrap)
-GET {{baseUrl}}/public/pay-session?eventDate={{eventDate}}&reservationId={{reservationId}}&token={{publicPayToken}}
+### Cash App Session (Client page bootstrap)
+GET {{baseUrl}}/cashapp/session?eventDate={{eventDate}}&reservationId={{reservationId}}&token={{cashAppToken}}
 
 ###
-### Public Pay Charge (Client completes payment)
-POST {{baseUrl}}/public/pay-session/charge
+### Cash App Charge (Client completes payment)
+POST {{baseUrl}}/cashapp/session/charge
 Content-Type: application/json
 
 {
   "eventDate": "{{eventDate}}",
   "reservationId": "{{reservationId}}",
-  "token": "{{publicPayToken}}",
+  "token": "{{cashAppToken}}",
   "sourceId": "{{squareSourceId}}"
 }
