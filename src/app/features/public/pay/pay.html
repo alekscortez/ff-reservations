@@ -1,7 +1,7 @@
 <section class="mx-auto min-h-screen w-full max-w-xl px-4 py-8">
   <article class="rounded-2xl border border-brand-200 bg-white p-5 shadow-sm">
-    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-500">Famoso Fuego</p>
-    <h1 class="mt-1 text-2xl font-semibold text-brand-900">Complete Payment</h1>
+    <img src="/assets/ff-logo.svg" alt="Fuego Western Club logo" class="h-12 w-auto" />
+    <h1 class="mt-3 text-2xl font-semibold text-brand-900">Complete Payment</h1>
 
     <p class="mt-2 text-sm text-brand-600" *ngIf="loading">Loading payment session…</p>
     <p class="mt-2 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
@@ -11,7 +11,7 @@
       <div class="mt-4 rounded-xl border border-brand-200 bg-brand-50 p-3">
         <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Reservation</p>
         <p class="mt-1 text-sm font-semibold text-brand-900">
-          {{ s.reservation.eventName || ('Event ' + s.reservation.eventDate) }} · Table {{ s.reservation.tableId || '—' }}
+          {{ formatEventDateLong(s.reservation.eventDate) }} · Table {{ s.reservation.tableId || '—' }}
         </p>
         <p class="mt-1 text-sm text-brand-700">{{ s.reservation.customerName || 'Guest' }}</p>
       </div>
@@ -27,13 +27,10 @@
         </div>
       </div>
 
-      <div class="mt-4 rounded-xl border border-brand-200 bg-white p-3" *ngIf="!result">
-        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Pay with Cash App</p>
-        <p class="mt-1 text-xs text-brand-600">
-          Use Cash App Pay here. If needed, choose another available method shown by Square.
-        </p>
-        <div class="mt-3 min-h-[150px]" #cashAppHost></div>
-      </div>
+      <div class="mt-7 flex min-h-[72px] items-start justify-center" *ngIf="!result" #cashAppHost></div>
+      <p class="mt-2 text-center text-xs text-brand-500" *ngIf="!result">
+        If payment options do not appear, tap Refresh.
+      </p>
 
       <div class="mt-4 rounded-xl border border-success-200 bg-success-50 p-3" *ngIf="result as r">
         <p class="text-sm font-semibold text-success-800">Payment complete</p>
@@ -51,7 +48,7 @@
         </a>
       </div>
 
-      <div class="mt-4 flex gap-2" *ngIf="!result">
+      <div class="mt-4 flex justify-center gap-2" *ngIf="!result">
         <button
           type="button"
           class="h-10 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:opacity-50"

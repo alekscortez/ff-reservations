@@ -63,6 +63,19 @@ export class PublicPayPage implements OnInit, OnDestroy {
     return new Date(epoch * 1000).toLocaleString();
   }
 
+  formatEventDateLong(value: string | null | undefined): string {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 'Event date';
+    const parsed = new Date(`${raw}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
   refresh(): void {
     this.result = null;
     this.clearPrepareRetryTimer();
