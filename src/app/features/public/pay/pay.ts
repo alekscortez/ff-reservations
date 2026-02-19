@@ -35,6 +35,8 @@ export class PublicPayPage implements OnInit, OnDestroy {
   @ViewChild('cashAppHost') cashAppHost?: ElementRef<HTMLElement>;
   private routeSub: Subscription | null = null;
   private cashAppDestroy: (() => Promise<void>) | null = null;
+  private prepareRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly maxPrepareAttempts = 6;
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParamMap.subscribe((params) => {
@@ -42,6 +44,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
       this.reservationId = String(params.get('reservationId') ?? '').trim();
       this.token = String(params.get('token') ?? '').trim();
       this.result = null;
+      this.clearPrepareRetryTimer();
       void this.destroyCashAppWidget();
       this.loadSession();
     });
@@ -50,6 +53,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     this.routeSub = null;
+    this.clearPrepareRetryTimer();
     void this.destroyCashAppWidget();
   }
 
@@ -61,6 +65,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
 
   refresh(): void {
     this.result = null;
+    this.clearPrepareRetryTimer();
     void this.destroyCashAppWidget();
     this.loadSession();
   }
@@ -79,9 +84,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
       next: (res) => {
         this.session = res;
         this.loading = false;
-        setTimeout(() => {
-          void this.prepareCashAppWidget();
-        }, 0);
+        this.schedulePrepareCashAppWidget(0);
       },
       error: (err) => {
         this.session = null;
@@ -91,10 +94,42 @@ export class PublicPayPage implements OnInit, OnDestroy {
     });
   }
 
-  private async prepareCashAppWidget(): Promise<void> {
+  private schedulePrepareCashAppWidget(attempt: number): void {
+    if (attempt > this.maxPrepareAttempts) return;
+    this.clearPrepareRetryTimer();
+    const delayMs = attempt === 0 ? 0 : Math.min(200 * 2 ** (attempt - 1), 1200);
+    this.prepareRetryTimer = setTimeout(() => {
+      this.prepareRetryTimer = null;
+      void this.prepareCashAppWidget(attempt);
+    }, delayMs);
+  }
+
+  private clearPrepareRetryTimer(): void {
+    if (this.prepareRetryTimer) {
+      clearTimeout(this.prepareRetryTimer);
+      this.prepareRetryTimer = null;
+    }
+  }
+
+  private shouldRetryPrepareError(message: string | null | undefined): boolean {
+    const value = String(message ?? '').trim().toLowerCase();
+    if (!value) return false;
+    return (
+      value.includes('sdk') ||
+      value.includes('loaded') ||
+      value.includes('initialize') ||
+      value.includes('unavailable')
+    );
+  }
+
+  private async prepareCashAppWidget(attempt = 0): Promise<void> {
     const session = this.session;
     const host = this.cashAppHost?.nativeElement;
-    if (!session || !host || this.result) return;
+    if (!session || this.result) return;
+    if (!host) {
+      this.schedulePrepareCashAppWidget(attempt + 1);
+      return;
+    }
 
     this.preparing = true;
     this.notice = null;
@@ -123,11 +158,16 @@ export class PublicPayPage implements OnInit, OnDestroy {
       this.cashAppDestroy = mounted.destroy;
       this.notice = 'Payment options loaded. Complete payment on this page.';
     } catch (err: unknown) {
-      this.error =
+      const message =
         (err as { message?: string } | null | undefined)?.message ||
         'Unable to initialize payment options.';
+      if (attempt < this.maxPrepareAttempts && this.shouldRetryPrepareError(message)) {
+        this.schedulePrepareCashAppWidget(attempt + 1);
+      } else {
+        this.error = message;
+      }
     } finally {
-      this.preparing = false;
+      this.preparing = this.prepareRetryTimer !== null;
     }
   }
 
