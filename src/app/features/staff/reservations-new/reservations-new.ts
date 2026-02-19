@@ -1145,10 +1145,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   private toCreatePaymentMethod(
     method: 'cash' | 'square' | 'client'
-  ): 'cash' | 'square' | null {
+  ): 'cash' | 'square' | 'cashapp' | null {
     if (method === 'cash') return 'cash';
     if (method === 'square') return 'square';
-    return null;
+    return 'cashapp';
   }
 
   private toLinkMode(
