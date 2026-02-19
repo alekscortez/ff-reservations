@@ -44,6 +44,7 @@ interface ActivityItem {
 }
 
 interface GeneratedPaymentLink {
+  method: 'square' | 'cashapp';
   url: string;
   amount: number;
   createdAtMs: number;
@@ -805,28 +806,29 @@ export class Dashboard implements OnInit, OnDestroy {
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
-        note: `Payment link for table ${item.tableId}`,
+        note: `Square link for table ${item.tableId}`,
       })
       .subscribe({
         next: (res) => {
           const url = String(res?.square?.url ?? '').trim();
           if (!url) {
-            this.paymentLinkError = 'Payment link generation succeeded but no URL was returned.';
+            this.paymentLinkError = 'Square link generation succeeded but no URL was returned.';
             this.paymentLinkLoadingId = null;
             return;
           }
           this.paymentLinksByReservationId[item.reservationId] = {
+            method: 'square',
             url,
             amount: Number(res?.reservation?.linkAmount ?? remaining),
             createdAtMs: Date.now(),
             audit: res?.square?.audit,
           };
-          this.paymentLinkNotice = 'Payment link ready to share.';
+          this.paymentLinkNotice = 'Square link ready to share.';
           this.paymentLinkLoadingId = null;
         },
         error: (err) => {
           this.paymentLinkError =
-            err?.error?.message || err?.message || 'Failed to generate payment link';
+            err?.error?.message || err?.message || 'Failed to generate Square link';
           this.paymentLinkLoadingId = null;
         },
       });
@@ -858,15 +860,12 @@ export class Dashboard implements OnInit, OnDestroy {
             return;
           }
           this.paymentLinksByReservationId[item.reservationId] = {
+            method: 'cashapp',
             url,
             amount: Number(res?.reservation?.linkAmount ?? remaining),
             createdAtMs: Date.now(),
           };
-          const ttlMinutes = Number(res?.publicPay?.ttlMinutes ?? 0);
-          this.paymentLinkNotice =
-            Number.isFinite(ttlMinutes) && ttlMinutes > 0
-              ? `Cash App link ready to share (expires in ${Math.round(ttlMinutes)} min).`
-              : 'Cash App link ready to share.';
+          this.paymentLinkNotice = 'Cash App link ready to share.';
           this.publicPayLinkLoadingId = null;
         },
         error: (err) => {
@@ -893,17 +892,18 @@ export class Dashboard implements OnInit, OnDestroy {
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
-        note: `Payment link for table ${item.tableId} via SMS`,
+        note: `Square link for table ${item.tableId} via SMS`,
       })
       .subscribe({
         next: (res) => {
           const url = String(res?.square?.url ?? '').trim();
           if (!url) {
-            this.paymentLinkError = 'SMS sent flow succeeded but no payment URL was returned.';
+            this.paymentLinkError = 'SMS sent flow succeeded but no Square URL was returned.';
             this.paymentLinkLoadingId = null;
             return;
           }
           this.paymentLinksByReservationId[item.reservationId] = {
+            method: 'square',
             url,
             amount: Number(res?.reservation?.linkAmount ?? remaining),
             createdAtMs: Date.now(),
@@ -912,14 +912,68 @@ export class Dashboard implements OnInit, OnDestroy {
           const to = String(res?.sms?.to ?? '').trim();
           const messageId = String(res?.sms?.messageId ?? '').trim();
           this.paymentLinkNotice = to
-            ? `SMS sent to ${to}${messageId ? ` (${messageId})` : ''}.`
+            ? `Square link sent by FF SMS to ${to}${messageId ? ` (${messageId})` : ''}.`
             : 'SMS sent successfully.';
           this.paymentLinkLoadingId = null;
         },
         error: (err) => {
           this.paymentLinkError =
-            err?.error?.message || err?.message || 'Failed to send payment link SMS';
+            err?.error?.message || err?.message || 'Failed to send Square link SMS';
           this.paymentLinkLoadingId = null;
+        },
+      });
+  }
+
+  sendGeneratedLinkSms(item: ReservationItem, method: 'square' | 'cashapp'): void {
+    if (method === 'cashapp') {
+      this.sendPublicPayLinkSms(item);
+      return;
+    }
+    this.sendPaymentLinkSms(item);
+  }
+
+  sendPublicPayLinkSms(item: ReservationItem): void {
+    if (!this.canGeneratePaymentLink(item)) return;
+    if (this.paymentLinkLoadingId || this.publicPayLinkLoadingId) return;
+
+    const remaining = this.remainingAmount(item);
+    if (remaining <= 0) return;
+
+    this.publicPayLinkLoadingId = item.reservationId;
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+
+    this.reservationsApi
+      .createPublicPayLinkSms({
+        reservationId: item.reservationId,
+        eventDate: item.eventDate,
+        amount: remaining,
+      })
+      .subscribe({
+        next: (res) => {
+          const url = String(res?.publicPay?.url ?? '').trim();
+          if (!url) {
+            this.paymentLinkError = 'SMS sent flow succeeded but no Cash App URL was returned.';
+            this.publicPayLinkLoadingId = null;
+            return;
+          }
+          this.paymentLinksByReservationId[item.reservationId] = {
+            method: 'cashapp',
+            url,
+            amount: Number(res?.reservation?.linkAmount ?? remaining),
+            createdAtMs: Date.now(),
+          };
+          const to = String(res?.sms?.to ?? '').trim();
+          const messageId = String(res?.sms?.messageId ?? '').trim();
+          this.paymentLinkNotice = to
+            ? `Cash App link sent by FF SMS to ${to}${messageId ? ` (${messageId})` : ''}.`
+            : 'Cash App link sent by FF SMS.';
+          this.publicPayLinkLoadingId = null;
+        },
+        error: (err) => {
+          this.paymentLinkError =
+            err?.error?.message || err?.message || 'Failed to send Cash App link SMS';
+          this.publicPayLinkLoadingId = null;
         },
       });
   }
@@ -930,7 +984,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentLinkError = null;
     this.writeClipboard(link.url).then((ok) => {
       this.paymentLinkNotice = ok
-        ? 'Payment link copied.'
+        ? 'Link copied.'
         : 'Copy failed. Please copy manually from the link box.';
     });
   }
@@ -1091,12 +1145,13 @@ export class Dashboard implements OnInit, OnDestroy {
                       return;
                     }
                     this.paymentLinksByReservationId[afterCredit.reservationId] = {
+                      method: 'square',
                       url,
                       amount: Number(res?.reservation?.linkAmount ?? remaining),
                       createdAtMs: Date.now(),
                       audit: res?.square?.audit,
                     };
-                    this.paymentLinkNotice = 'Credit applied. Square payment link is ready.';
+                    this.paymentLinkNotice = 'Credit applied. Square link is ready.';
                     this.urgentPayments = this.computeUrgentPayments(this.reservations);
                     this.recentActivity = this.computeRecentActivity(this.reservations);
                     this.paymentLoading = false;
@@ -1440,6 +1495,8 @@ export class Dashboard implements OnInit, OnDestroy {
     const normalized = String(eventType ?? '').trim().toUpperCase();
     if (normalized === 'RESERVATION_CREATED') return 'Reservation Created';
     if (normalized === 'PAYMENT_RECORDED') return 'Payment Recorded';
+    if (normalized === 'PAYMENT_LINK_ISSUED') return 'Square Link';
+    if (normalized === 'PUBLIC_PAY_LINK_ISSUED') return 'Cash App Link';
     if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'Payment Request Sent';
     if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
     if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
@@ -1496,6 +1553,12 @@ export class Dashboard implements OnInit, OnDestroy {
     }
     if (item.eventType === 'PAYMENT_LINK_SMS_FAILED') {
       return smsError || 'SMS send failed';
+    }
+    if (item.eventType === 'PAYMENT_LINK_ISSUED') {
+      return 'Square link generated';
+    }
+    if (item.eventType === 'PUBLIC_PAY_LINK_ISSUED') {
+      return 'Cash App link generated';
     }
     if (item.eventType === 'CHECKIN_PASS_SMS_SENT') {
       return smsTo ? `Sent to ${smsTo}` : 'SMS sent';
@@ -1575,7 +1638,9 @@ export class Dashboard implements OnInit, OnDestroy {
         const createdAt = Number(item?.paymentLinkCreatedAt ?? 0);
         const remaining = this.remainingAmount(item);
         const fallbackAmount = Number(item?.amountDue ?? item?.tablePrice ?? 0);
+        const provider = String(item?.paymentLinkProvider ?? '').trim().toLowerCase();
         next[reservationId] = {
+          method: provider === 'square' ? 'square' : (next[reservationId]?.method ?? 'square'),
           url,
           amount: Number((remaining > 0 ? remaining : fallbackAmount).toFixed(2)),
           createdAtMs: createdAt > 0 ? createdAt * 1000 : Date.now(),
@@ -1642,7 +1707,7 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   private buildShareMessage(item: ReservationItem, url: string): string {
-    return `Hi ${item.customerName}, here is your table payment link for ${item.eventDate} table ${item.tableId}: ${url}`;
+    return `Hi ${item.customerName}, here is your table link for ${item.eventDate} table ${item.tableId}: ${url}`;
   }
 
   private buildCheckInPassShareMessage(item: ReservationItem, url: string): string {

@@ -124,6 +124,16 @@ export interface CreatePublicPayLinkResponse {
   };
 }
 
+export interface CreatePublicPayLinkSmsResponse extends CreatePublicPayLinkResponse {
+  sms: {
+    sent: boolean;
+    provider?: string | null;
+    messageId?: string | null;
+    to?: string | null;
+    sentAt?: number | null;
+  };
+}
+
 export interface ReservationHistoryItem {
   eventId?: string | null;
   eventType?: string | null;
@@ -234,6 +244,17 @@ export class ReservationsService {
   createPublicPayLink(payload: CreatePublicPayLinkPayload) {
     return this.api.post<CreatePublicPayLinkResponse>(
       `/reservations/${payload.reservationId}/public-pay-link/square`,
+      {
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        ttlMinutes: payload.ttlMinutes,
+      }
+    );
+  }
+
+  createPublicPayLinkSms(payload: CreatePublicPayLinkPayload) {
+    return this.api.post<CreatePublicPayLinkSmsResponse>(
+      `/reservations/${payload.reservationId}/public-pay-link/square/sms`,
       {
         eventDate: payload.eventDate,
         amount: payload.amount,

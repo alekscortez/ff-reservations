@@ -320,6 +320,7 @@ const smsNotificationsService = createSmsNotificationsService({
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
+    EVENTS_TABLE,
     HOLDS_TABLE,
     RES_TABLE,
     CLIENTS_TABLE,

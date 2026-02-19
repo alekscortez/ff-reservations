@@ -1190,21 +1190,17 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             const url = String(res?.publicPay?.url ?? '').trim();
             if (!url) {
               this.paymentLinkError =
-                'Payment link generation succeeded but no URL was returned.';
+                'Cash App link generation succeeded but no URL was returned.';
               this.creatingPaymentLink = false;
               return;
             }
             this.paymentLinkUrl = url;
-            const ttlMinutes = Number(res?.publicPay?.ttlMinutes ?? 0);
-            this.paymentLinkNotice =
-              Number.isFinite(ttlMinutes) && ttlMinutes > 0
-                ? `Cash App link generated (expires in ${Math.round(ttlMinutes)} min).`
-                : 'Cash App link generated. Share it with the customer.';
+            this.paymentLinkNotice = 'Cash App link generated. Share it with the customer.';
             this.creatingPaymentLink = false;
           },
           error: (err: any) => {
             this.paymentLinkError =
-              err?.error?.message || err?.message || 'Failed to generate payment link';
+              err?.error?.message || err?.message || 'Failed to generate Cash App link';
             this.creatingPaymentLink = false;
           },
         });
@@ -1216,23 +1212,23 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         reservationId: this.createdReservation.reservationId,
         eventDate: this.createdReservation.eventDate,
         amount: this.createdReservation.amount,
-        note: `Payment link for table ${this.createdReservation.tableId}`,
+        note: `Square link for table ${this.createdReservation.tableId}`,
       })
       .subscribe({
         next: (res) => {
           const url = String(res?.square?.url ?? '').trim();
           if (!url) {
-            this.paymentLinkError = 'Payment link generation succeeded but no URL was returned.';
+            this.paymentLinkError = 'Square link generation succeeded but no URL was returned.';
             this.creatingPaymentLink = false;
             return;
           }
           this.paymentLinkUrl = url;
-          this.paymentLinkNotice = 'Payment link generated. Share it with the customer.';
+          this.paymentLinkNotice = 'Square link generated. Share it with the customer.';
           this.creatingPaymentLink = false;
         },
         error: (err: any) => {
           this.paymentLinkError =
-            err?.error?.message || err?.message || 'Failed to generate payment link';
+            err?.error?.message || err?.message || 'Failed to generate Square link';
           this.creatingPaymentLink = false;
         },
       });
@@ -1243,7 +1239,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (!url) return;
     this.writeClipboard(url).then((ok) => {
       this.paymentLinkNotice = ok
-        ? 'Payment link copied.'
+        ? 'Link copied.'
         : 'Copy failed. Please copy manually.';
     });
   }
@@ -1290,7 +1286,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   linkCollectionTitle(): string {
     const mode = this.currentLinkMode();
-    return mode === 'client' ? 'Cash App Link' : 'Square Payment Link';
+    return mode === 'client' ? 'Cash App Link' : 'Square Link';
   }
 
   reservationActionLabel(): string {
@@ -1298,7 +1294,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (this.isLinkCollectionFlow()) {
       return this.currentLinkModeFromForm() === 'client'
         ? 'Confirm & Generate Cash App Link'
-        : 'Confirm & Generate Link';
+        : 'Confirm & Generate Square Link';
     }
     return 'Confirm Reservation';
   }
@@ -1467,7 +1463,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   private buildShareMessage(ctx: CreatedReservationContext, url: string): string {
-    return `Hi ${ctx.customerName}, here is your table payment link for ${ctx.eventDate} table ${ctx.tableId}: ${url}`;
+    return `Hi ${ctx.customerName}, here is your table link for ${ctx.eventDate} table ${ctx.tableId}: ${url}`;
   }
 
   private toSmsRecipient(phone: string | undefined): string {
