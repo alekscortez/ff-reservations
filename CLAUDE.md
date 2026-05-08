@@ -95,8 +95,9 @@ There is no per-environment config file yet.
 - Phone numbers stored E.164 (`+1...` or `+52...`). Search uses candidate fan-out (`buildPhoneSearchCandidates`).
 - Times: epoch seconds for `expiresAt`/`issuedAt`/etc.; deadlines as `YYYY-MM-DDTHH:mm:ss` local-iso plus an IANA tz string (`paymentDeadlineAt`, `paymentDeadlineTz`). Default tz `America/Chicago`.
 - Errors raised via `httpError(status, message)` from `core-utils.mjs`; the router's outer `try/catch` formats the response.
-- Reservation `paymentStatus`: `PENDING | PARTIAL | PAID | COURTESY`. `paymentMethod`: `cash | square | cashapp | credit`.
+- Reservation `paymentStatus`: `PENDING | PARTIAL | PAID | COURTESY | REFUNDED`. `paymentMethod`: `cash | square | cashapp | credit`.
 - Reservation `status`: `CONFIRMED | CANCELLED`. Lock `lockType`: `HOLD | RESERVED`.
+- Cancellation `resolutionType`: `CANCEL_NO_REFUND | RESCHEDULE_CREDIT | REFUND`. REFUND iterates `payments[]`, refunds each Square/Cash App entry via `POST /v2/refunds`, then sets `paymentStatus=REFUNDED`. Partial failure throws 502 without cancelling (operator must reconcile).
 
 ## Known gotchas
 
@@ -107,18 +108,37 @@ There is no per-environment config file yet.
 - `app.config.ts:provideAppInitializer` calls `oidc.checkAuth()` before bootstrap; navigation happens after.
 - `auth-callback.ts` decides `/staff/dashboard` vs `/unauthorized` based on `cognito:groups` from the **ID token**, while API calls use the **access token**. Keep them in sync.
 
-## Wiring not in this repo (manual AWS console / IaC TODO)
+## Wiring outside this repo
 
-- Cognito Pre Token Generation v2 trigger pointing at `ff-reservations-pre-token-gen`. Without it: 403 cascade. See `backend/cognito-pre-token-gen/README.md`.
-- EventBridge schedule (suggested 1/min) targeting `ff-reservations-api` Lambda directly with an empty payload — the handler detects `event.source === 'aws.events'` and runs `runScheduledMaintenance`.
-- API Gateway HTTP API per-route JWT authorizer attachment (defense-in-depth — Lambda also checks but should not be the only line).
-- DynamoDB PITR + CloudWatch alarms (5xx, lambda errors, DDB throttles, SNS publish failures, webhook signature mismatches).
-- AWS WAF v2 + stage throttling on public routes.
+**Already in place (confirmed by audit 2026-05-08):**
+
+- Cognito Pre Token Generation v2 Lambda `ff-reservations-pretoken` is deployed and wired (`UserPool.LambdaConfig.PreTokenGenerationConfig.LambdaVersion = V2_0`). The source in `backend/cognito-pre-token-gen/` is a versioned baseline; the live function predates this repo.
+- EventBridge `ff-reservations-overdue-release` rule fires `rate(1 minute)` → invokes the lambda → `runScheduledMaintenance` → `releaseOverdueReservationsForAllActiveEvents`.
+- API Gateway JWT authorizer (`5ea6tk`) is attached to every non-public route. Public routes: `/cashapp/session*`, `/public/availability`, `/check-in/pass`, `/webhooks/square`, `/cashapp/session/charge`.
+- DynamoDB PITR enabled on `ff-reservations`, `ff-table-holds`, `ff-clients`, `ff-checkin-passes` (35-day window). Other tables (`ff-events`, `ff-frequent-clients`, `ff-settings`) are deliberately not PITR-protected.
+- CloudWatch alarms publish to SNS topic `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`):
+  - `ff-res-lambda-duration-p95-high` (≥10s)
+  - `ff-res-lambda-errors-5m` (≥1)
+  - `ff-res-lambda-throttles-5m` (≥1)
+  - `ff-res-sms-errors-5m` (≥3 PaymentLinkSmsErrorCount in 5min)
+- Log metric filters extract `PaymentLinkSmsErrorCount` and `PaymentLinkSmsSuccessCount` from `payment_link_sms_route_*` log lines into `FFReservations/SMS` namespace.
+- API Gateway `$default` stage has `DetailedMetricsEnabled=true` (per-route 4xx/5xx/latency in `AWS/ApiGateway`).
+- SNS SMS delivery status logging enabled at 100% sample rate. Successes go to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber`; failures to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber/Failure`. Both 30-day retention.
+
+**Still missing (Phase 3+ work):**
+
+- AWS WAF v2 web ACL + HTTP API stage throttling.
+- AWS End User Messaging Configuration Set with event destinations (richer SMS event data than the SNS-side logs above).
+- Toll-free `+18557656160` is registered but `Status: PENDING` carrier approval. Once approved, SNS will auto-pick it as origination identity (resource policy already correct). Until then, SNS uses shared shortcodes.
+- SNS-side `MonthlySpendLimit` is $20; AWS End User Messaging cap is $50 (the max AWS authorized). Aligning these is a deferred audit item.
+- IaC baseline (CDK/SAM/Terraform) for everything above.
 
 ## Where to look first
 
-- Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file.
+- Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public routes).**
 - Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards.
-- Touching reservation state → start with `services-reservations-holds.mjs` (the 2200-line file). Read existing TransactWrite + ConditionExpression patterns before adding writes.
+- Touching reservation state → start with `services-reservations-holds.mjs` (the ~2400-line file). Read existing TransactWrite + ConditionExpression patterns before adding writes.
 - Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver.
 - Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin`.
+- "Did SMS X arrive?" → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure). Logs include `messageId`, `destination`, `providerResponse`, `dwellTimeMs`, `status`.
+- "Did the cron sweep run?" → `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance"`.
