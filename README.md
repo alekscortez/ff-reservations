@@ -20,6 +20,9 @@ Nightclub reservations platform with role-aware staff/admin web app, serverless 
 - Amplify URL: `https://main.d1gxn3rvy5gfn4.amplifyapp.com`
 - Pre Token Generation v2 Lambda `ff-reservations-pretoken` is wired on the user pool — required for `cognito:groups` to land in the access token (source under `backend/cognito-pre-token-gen/`).
 - EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
+- Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Failed scheduled invocations land here; `ff-res-lambda-dlq-depth` alarm pages on ≥1 visible message in 5min.
+- API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides).
+- CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth.
 
 For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
 
@@ -148,6 +151,9 @@ Environment variables for `.http` runs should be kept local (not committed), for
 - Square webhook not updating reservation: verify webhook signature key, route, and Lambda logs.
 - SMS not delivered: query CloudWatch log group `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure) for the recipient phone — these were enabled at 100% sample rate.
 - Cron sweep status: `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance" --region us-east-1`.
+- Lambda DLQ has messages (`ff-res-lambda-dlq-depth` alarm fired): `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1` to inspect the failed async invocation payloads. Investigate before redriving — the same code path is still scheduled to run.
+- `429 Too Many Requests` from API Gateway: stage throttle is 200 burst / 100 RPS by default. Bump in `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...` if a real workload outgrows it.
+- Reservation history rows missing in audit log: `ff-res-history-write-errors-5m` alarm + filter-log-events on `"reservation_history_write_error"` will surface the cause (IAM, throttling, schema).
 
 ## Build and test
 ```bash

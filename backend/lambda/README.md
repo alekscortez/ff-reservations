@@ -49,6 +49,8 @@ API Gateway uses **explicit per-route definitions** — no `$default` proxy. Add
 - **Cognito Pre Token Generation v2 Lambda** (`backend/cognito-pre-token-gen/`) injects `cognito:groups` into the access token. Without it, every authenticated request returns 403.
 - **EventBridge rule `ff-reservations-overdue-release`** fires `rate(1 minute)` and invokes this lambda with `event.source = "aws.events"`. The handler dispatches to `runScheduledMaintenance` → `releaseOverdueReservationsForAllActiveEvents`. Disabling the rule means overdue reservations only get cleaned up when a staff member loads `/reservations` or hits a payment route for that event.
 - **Square secret** stored in Secrets Manager at `ff/square/production-QaNJNJ` — JSON with `SQUARE_ACCESS_TOKEN` and `SQUARE_WEBHOOK_SIGNATURE_KEY`. Lambda role needs `secretsmanager:GetSecretValue` on this ARN.
+- **Dead-letter queue `ff-reservations-api-dlq`** (SQS, 14-day retention) catches failed async invocations (mostly the EventBridge cron) via `DeadLetterConfig`. Lambda role's inline `DeadLetterQueueAccess` policy grants `sqs:SendMessage` on the queue ARN only. Alarm `ff-res-lambda-dlq-depth` fires on ≥1 visible message in 5min. Inspect with `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1`.
+- **API Gateway stage throttle** on the `$default` stage: 200 burst / 100 RPS default-route. Per-route overrides via `aws apigatewayv2 update-route --route-settings`.
 
 ## Verifying a deploy
 
