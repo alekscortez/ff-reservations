@@ -279,12 +279,33 @@ export class Reservations implements OnInit, OnDestroy {
   cancel(item: ReservationItem): void {
     const reason = window.prompt('Reason for cancellation (required):');
     if (!reason || !reason.trim()) return;
-    const isRescheduleRequest = window.confirm(
-      'Is this a reservation credit request (no refund)?'
-    );
-    const resolutionType = isRescheduleRequest
-      ? 'RESCHEDULE_CREDIT'
-      : 'CANCEL_NO_REFUND';
+
+    let resolutionType: 'CANCEL_NO_REFUND' | 'RESCHEDULE_CREDIT' | 'REFUND';
+    const refundable = this.refundableAmount(item);
+    if (refundable > 0) {
+      const refundConfirmed = window.confirm(
+        `Refund $${refundable.toFixed(2)} to the original Square / Cash App payment method? ` +
+          `OK = refund and cancel. Cancel = continue without refund.`
+      );
+      if (refundConfirmed) {
+        const finalConfirmed = window.confirm(
+          `Confirm: $${refundable.toFixed(2)} will be returned via Square and cannot be undone here. Proceed?`
+        );
+        if (!finalConfirmed) return;
+        resolutionType = 'REFUND';
+      } else {
+        const isRescheduleRequest = window.confirm(
+          'Is this a reservation credit request (no refund)?'
+        );
+        resolutionType = isRescheduleRequest ? 'RESCHEDULE_CREDIT' : 'CANCEL_NO_REFUND';
+      }
+    } else {
+      const isRescheduleRequest = window.confirm(
+        'Is this a reservation credit request (no refund)?'
+      );
+      resolutionType = isRescheduleRequest ? 'RESCHEDULE_CREDIT' : 'CANCEL_NO_REFUND';
+    }
+
     this.loading = true;
     this.error = null;
     this.reservationsApi
@@ -299,7 +320,14 @@ export class Reservations implements OnInit, OnDestroy {
       next: () => {
         this.items = this.items.map((x) =>
           x.reservationId === item.reservationId
-            ? { ...x, status: 'CANCELLED', cancelReason: reason.trim() }
+            ? {
+                ...x,
+                status: 'CANCELLED',
+                cancelReason: reason.trim(),
+                ...(resolutionType === 'REFUND'
+                  ? { paymentStatus: 'REFUNDED' as const }
+                  : {}),
+              }
             : x
         );
         const updated = this.items.find((x) => x.reservationId === item.reservationId) ?? null;
@@ -313,6 +341,23 @@ export class Reservations implements OnInit, OnDestroy {
         this.loading = false;
       },
     });
+  }
+
+  private refundableAmount(item: ReservationItem): number {
+    const paymentStatus = String(item?.paymentStatus ?? '').toUpperCase();
+    if (paymentStatus !== 'PAID' && paymentStatus !== 'PARTIAL') return 0;
+    const payments = Array.isArray(item?.payments) ? item.payments : [];
+    let total = 0;
+    for (const p of payments) {
+      const method = String(p?.method ?? '').toLowerCase();
+      if (method !== 'square' && method !== 'cashapp') continue;
+      const providerPaymentId = String(p?.provider?.providerPaymentId ?? '').trim();
+      if (!providerPaymentId) continue;
+      const amt = Number(p?.amount ?? 0);
+      if (!Number.isFinite(amt) || amt <= 0) continue;
+      total += amt;
+    }
+    return Number(total.toFixed(2));
   }
 
   onReservationRowClick(item: ReservationItem): void {

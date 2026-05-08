@@ -1,7 +1,19 @@
 export type ReservationStatus = 'CONFIRMED' | 'CANCELLED';
-export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
+export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | 'REFUNDED';
 export type PaymentMethod = 'cash' | 'square' | 'cashapp' | 'credit';
 export type PaymentSource = 'manual' | 'square-direct' | 'square-webhook' | 'reschedule-credit';
+
+export interface ReservationRefundResult {
+  paymentLocalId: string;
+  providerPaymentId: string;
+  amount: number;
+  method: 'square' | 'cashapp';
+  refundId?: string | null;
+  refundStatus?: string | null;
+  idempotencyKey?: string;
+  success: boolean;
+  errorMessage?: string;
+}
 
 export interface ReservationPayment {
   paymentId: string;
@@ -59,4 +71,8 @@ export interface ReservationItem {
   cancelReason?: string;
   cancelledAt?: number;
   cancelledBy?: string;
+  refundedAmount?: number;
+  refundedAt?: number;
+  refundedBy?: string;
+  refunds?: ReservationRefundResult[];
 }
