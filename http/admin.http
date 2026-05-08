@@ -1,0 +1,17 @@
+### Admin diagnostics
+### Requires: {{baseUrl}} and {{accessToken}} in http-client env
+
+### whoami — returns the caller's sub/username/email/groups/role plus a
+### diagnostic.missingGroupsLikelyPreTokenGen flag the frontend uses to
+### render the AuthHealthBanner. If groups is empty AND tokenUse is
+### "access", the Pre Token Generation Lambda is broken or unwired —
+### see backend/cognito-pre-token-gen/README.md.
+GET {{baseUrl}}/admin/whoami
+Authorization: Bearer {{accessToken}}
+
+###
+
+### Same call without auth — should return 401 from API Gateway authorizer.
+GET {{baseUrl}}/admin/whoami
+
+###
