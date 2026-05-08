@@ -277,13 +277,19 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     const groups = getGroupsFromEvent(event);
     const isAdmin = groups.includes("Admin");
     const item = await createReservation(body, user, isAdmin);
-    try {
-      await upsertCrmClient(body, user);
-    } catch (crmErr) {
-      console.error("CRM upsert failed after reservation create", crmErr);
+    const isIdempotentReplay = Boolean(item?.idempotentReplay);
+    if (!isIdempotentReplay) {
+      try {
+        await upsertCrmClient(body, user);
+      } catch (crmErr) {
+        console.error("CRM upsert failed after reservation create", crmErr);
+      }
     }
-    let autoSquareLinkSms = null;
-    const shouldAutoSendDigitalLinkSms = Boolean(autoSendSquareLinkSmsEnabled);
+    let autoSquareLinkSms = isIdempotentReplay
+      ? { attempted: false, sent: false, reason: "idempotent_replay" }
+      : null;
+    const shouldAutoSendDigitalLinkSms =
+      !isIdempotentReplay && Boolean(autoSendSquareLinkSmsEnabled);
     if (shouldAutoSendDigitalLinkSms && typeof sendPaymentLinkSms === "function") {
       const eventDate = String(body?.eventDate ?? "").trim();
       const reservationId = String(item?.reservationId ?? "").trim();

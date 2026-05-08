@@ -1894,58 +1894,98 @@ export function createReservationsHoldsService({
 
     const holdKey = { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` };
 
-    await ddb.send(
-      new TransactWriteCommand({
-        TransactItems: [
-          {
-            Update: {
-              TableName: HOLDS_TABLE,
-              Key: holdKey,
-              UpdateExpression:
-                "SET lockType = :reserved, reservationId = :rid, customerName = :name, phone = :phone, createdAt = :now, createdBy = :by REMOVE expiresAt, holdId",
-              ConditionExpression: "lockType = :hold AND holdId = :hid AND expiresAt >= :now",
-              ExpressionAttributeValues: {
-                ":reserved": "RESERVED",
-                ":hold": "HOLD",
-                ":hid": holdId,
-                ":rid": reservationId,
-                ":name": customerName,
-                ":phone": phone,
-                ":now": now,
-                ":by": user,
+    try {
+      await ddb.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: HOLDS_TABLE,
+                Key: holdKey,
+                UpdateExpression:
+                  "SET lockType = :reserved, reservationId = :rid, customerName = :name, phone = :phone, createdAt = :now, createdBy = :by REMOVE expiresAt, holdId",
+                ConditionExpression: "lockType = :hold AND holdId = :hid AND expiresAt >= :now",
+                ExpressionAttributeValues: {
+                  ":reserved": "RESERVED",
+                  ":hold": "HOLD",
+                  ":hid": holdId,
+                  ":rid": reservationId,
+                  ":name": customerName,
+                  ":phone": phone,
+                  ":now": now,
+                  ":by": user,
+                },
               },
             },
-          },
-          {
-            Put: {
+            {
+              Put: {
+                TableName: RES_TABLE,
+                Item: {
+                  PK: `EVENTDATE#${eventDate}`,
+                  SK: `RES#${reservationId}`,
+                  reservationId,
+                  eventDate,
+                  tableId,
+                  customerName,
+                  phone,
+                  phoneCountry: normalizedPhoneCountry,
+                  depositAmount: effectiveDeposit,
+                  amountDue: effectiveAmountDue,
+                  tablePrice,
+                  paymentStatus,
+                  paymentDeadlineAt: effectiveDeadlineAt || null,
+                  paymentDeadlineTz: effectiveDeadlineTz,
+                  paymentMethod: effectivePaymentMethod,
+                  payments,
+                  status: "CONFIRMED",
+                  createdAt: now,
+                  createdBy: user,
+                },
+                ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+              },
+            },
+          ],
+        })
+      );
+    } catch (err) {
+      if (err?.name !== "TransactionCanceledException") throw err;
+      // Most common cause of TransactionCanceledException here: the client
+      // retried POST /reservations after the first call already succeeded.
+      // The hold has been converted to RESERVED with a reservationId set.
+      // Look it up and return idempotently. (Audit M3.)
+      const holdRow = await ddb.send(
+        new GetCommand({ TableName: HOLDS_TABLE, Key: holdKey })
+      );
+      const lock = holdRow?.Item;
+      if (lock?.lockType === "RESERVED") {
+        const existingReservationId = String(lock.reservationId ?? "").trim();
+        if (existingReservationId) {
+          const resRow = await ddb.send(
+            new GetCommand({
               TableName: RES_TABLE,
-              Item: {
+              Key: {
                 PK: `EVENTDATE#${eventDate}`,
-                SK: `RES#${reservationId}`,
-                reservationId,
-                eventDate,
-                tableId,
-                customerName,
-                phone,
-                phoneCountry: normalizedPhoneCountry,
-                depositAmount: effectiveDeposit,
-                amountDue: effectiveAmountDue,
-                tablePrice,
-                paymentStatus,
-                paymentDeadlineAt: effectiveDeadlineAt || null,
-                paymentDeadlineTz: effectiveDeadlineTz,
-                paymentMethod: effectivePaymentMethod,
-                payments,
-                status: "CONFIRMED",
-                createdAt: now,
-                createdBy: user,
+                SK: `RES#${existingReservationId}`,
               },
-              ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
-            },
-          },
-        ],
-      })
-    );
+            })
+          );
+          const existing = resRow?.Item;
+          if (existing) {
+            return {
+              reservationId: existingReservationId,
+              checkInPass: null,
+              idempotentReplay: true,
+            };
+          }
+        }
+      }
+      // Not an idempotent replay — the hold expired, was claimed by someone
+      // else, or never existed. Surface a clean 409.
+      throw httpError(
+        409,
+        "This hold is no longer available — refresh and try again."
+      );
+    }
 
     const created = {
       reservationId,
