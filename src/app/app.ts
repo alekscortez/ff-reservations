@@ -18,21 +18,9 @@ export class App implements OnInit {
   userData$ = this.oidc.userData$;
 
   ngOnInit(): void {
-    // 🔴 REQUIRED — initializes auth state
-    this.oidc.checkAuth().subscribe((result) => {
-      console.log('[checkAuth]', result);
-
-      // ✅ DEV ONLY: log refresh token once after successful auth
-      if (result.isAuthenticated) {
-        this.oidc.getAuthenticationResult().subscribe((r) => {
-          console.log('REFRESH TOKEN (dev only):', r?.refresh_token);
-        });
-      }
-    });
-
+    this.oidc.checkAuth().subscribe();
     this.oidc.isAuthenticated$.subscribe(({ isAuthenticated }) => {
       this.isAuthenticated = isAuthenticated;
-      console.log('[isAuthenticated]', isAuthenticated);
     });
   }
 

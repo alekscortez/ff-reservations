@@ -27,17 +27,9 @@ export const appConfig: ApplicationConfig = {
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
-
-      // ✅ return a Promise directly (NOT a function)
       return new Promise<void>((resolve, reject) => {
         oidc.checkAuth().subscribe({
-          next: (r) => {
-            console.log('[APP_INIT checkAuth]', r);
-          },
-          error: (e) => {
-            console.error('[APP_INIT checkAuth] error', e);
-            reject(e);
-          },
+          error: (e) => reject(e),
           complete: () => resolve(),
         });
       });
