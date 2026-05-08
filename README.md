@@ -14,19 +14,27 @@ Nightclub reservations platform with role-aware staff/admin web app, serverless 
 - Scanner: ZXing for QR check-in flow
 
 ## Current AWS context
-- API base URL: `https://oxk1adhl3a.execute-api.us-east-1.amazonaws.com`
+- API base URL: `https://api.famosofuego.com` (custom domain mapped to API Gateway HTTP API `oxk1adhl3a`)
 - Cognito user pool: `us-east-1_Upsi9Q2Tc`
 - Cognito app client: `1kdkvis45qo915plp7lvj03u16`
 - Amplify URL: `https://main.d1gxn3rvy5gfn4.amplifyapp.com`
+- Pre Token Generation v2 Lambda `ff-reservations-pretoken` is wired on the user pool — required for `cognito:groups` to land in the access token (source under `backend/cognito-pre-token-gen/`).
+- EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
+
+For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
 
 ## Core flows implemented
 - Event management with one active event per date lock.
 - Table hold lifecycle (short hold), reservation creation, cancellation, payment updates.
-- Staff payment collection with `cash`, `square`, and reschedule credit usage.
+- `POST /reservations` is idempotent on `holdId` (safe to retry on network failure).
+- Staff payment collection with `cash`, `square`, `cashapp`, and reschedule credit usage.
 - Square payment links + webhook reconciliation.
-- SMS send for payment links and check-in communications.
+- Cash App self-service payment via short-lived public link (256-bit token).
+- Cancellation resolutions: `CANCEL_NO_REFUND`, `RESCHEDULE_CREDIT`, `REFUND` (REFUND issues actual Square refunds for paid Square/Cash App entries).
+- SMS for payment links, check-in pass, and expired-link notices (with `Reply STOP to opt out.` per 10DLC compliance).
 - Check-in pass issue/reissue + one-time QR validation.
 - Public live map route at `/map?eventDate=YYYY-MM-DD` (also `/availability` alias).
+- EventBridge cron sweeps overdue reservations every 60 seconds (no manual cleanup needed).
 
 ## Important business rules
 - One active event per calendar day.
@@ -134,11 +142,12 @@ Environment variables for `.http` runs should be kept local (not committed), for
 
 ## Common troubleshooting
 - `401 Unauthorized` in `.http`: refresh access token.
-- `403` admin route: verify `cognito:groups` claim and JWT authorizer.
+- `403 Admin/Staff privileges required` for every authenticated user: the Pre Token Generation Lambda (`ff-reservations-pretoken`) is broken or unwired. The staff app shows a red `AuthHealthBanner` from `GET /admin/whoami` when this happens. See `backend/cognito-pre-token-gen/README.md`.
 - `redirect_mismatch`: callback URL mismatch in Cognito app client settings.
-- CORS issues on mobile/ngrok: add origin to API Gateway CORS allowlist.
+- CORS issues on mobile/ngrok: add origin to the allowlist in `backend/lambda/index.mjs` *and* API Gateway CORS.
 - Square webhook not updating reservation: verify webhook signature key, route, and Lambda logs.
-- SMS not delivered: verify SNS sandbox/production status and spend limits.
+- SMS not delivered: query CloudWatch log group `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure) for the recipient phone — these were enabled at 100% sample rate.
+- Cron sweep status: `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance" --region us-east-1`.
 
 ## Build and test
 ```bash

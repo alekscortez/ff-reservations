@@ -52,11 +52,13 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 ## Concurrency / data integrity
 
 - All DDB writes use `ConditionExpression` and `ExpressionAttributeNames`/`Values` (never string-built expressions).
-- Hold → reservation upgrade is a single `TransactWriteCommand` (`services-reservations-holds.mjs`); retries are safe.
+- Hold → reservation upgrade is a single `TransactWriteCommand` (`services-reservations-holds.mjs`).
+- **`POST /reservations` is idempotent on `holdId`** (audit M3): a duplicate request that loses the TransactWrite race triggers a GetItem on the hold; if it's already RESERVED with a `reservationId`, the existing reservation is returned with `idempotentReplay: true`. The route handler skips CRM upsert (which uses `ADD :amt :one` and would double-count) and auto-SMS on replay.
+- **5-second grace window** on the hold-to-reservation upgrade (audit M7): `expiresAt >= :now - 5` so a "Confirm" click within ~1-2s of expiry still succeeds. Same-owner only — the `holdId` match still has to hold.
 - Webhook idempotency: `addReservationPayment` deduplicates on `providerPaymentId` or `idempotencyKey` in the reservation's `payments[]`.
 - Cash App "session" routes are public, gated by a 256-bit hex token (two concatenated UUIDs), compared via `crypto.timingSafeEqual`.
-- Reservation history lives in `RES_TABLE` under `SK = HIST#{reservationId}#{epoch}#{eventId}`.
-- `releaseOverdueReservationsForEventDate` is owned by an EventBridge cron (Phase 2). The Lambda handler dispatches scheduled invocations to `runScheduledMaintenance`, which calls `releaseOverdueReservationsForAllActiveEvents`. Anonymous request paths (`/public/availability`, `/cashapp/session*`) never trigger release; staff dashboard's `GET /reservations` and the various payment routes still do for short-window freshness.
+- Reservation history lives in `RES_TABLE` under `SK = HIST#{reservationId}#{epoch}#{eventId}`. Writes are fire-and-forget with `console.warn` on failure (audit M9 still open).
+- `releaseOverdueReservationsForEventDate` is owned by an EventBridge cron (audit P2-M2). The Lambda handler dispatches scheduled invocations to `runScheduledMaintenance`, which calls `releaseOverdueReservationsForAllActiveEvents`. Anonymous request paths (`/public/availability`, `/cashapp/session*`) never trigger release; staff `GET /reservations` and payment routes still do for short-window freshness.
 
 ## DynamoDB tables
 
@@ -102,11 +104,12 @@ There is no per-environment config file yet.
 ## Known gotchas
 
 - `qrcode` triggers a CommonJS optimization warning during build — cosmetic, ignore.
-- Unit tests use Vitest and currently have stale provider setup for the OIDC `StsConfigLoader` and `ActivatedRoute`. Phase 1 of the remediation is fixing this.
+- Tests use Vitest with a shared OIDC mock at `src/app/testing/oidc-mock.ts`. **If you add a component that injects `OidcSecurityService`, use `provideMockOidc()` plus `provideRouter([])` in the spec's TestBed providers** — see `src/app/app.spec.ts` for the pattern.
 - `backend/lambda/function.zip` is the built artifact; do not hand-edit and never commit.
 - `backend/lambda/code_url.txt` may contain a presigned S3 URL from a previous deploy — never commit.
 - `app.config.ts:provideAppInitializer` calls `oidc.checkAuth()` before bootstrap; navigation happens after.
 - `auth-callback.ts` decides `/staff/dashboard` vs `/unauthorized` based on `cognito:groups` from the **ID token**, while API calls use the **access token**. Keep them in sync.
+- API Gateway routes are explicit (no `$default` proxy). Adding a backend route requires both: (a) implementing the handler in `lib/routes-*.mjs`, (b) `aws apigatewayv2 create-route` with the right authorizer.
 
 ## Wiring outside this repo
 
