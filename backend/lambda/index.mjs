@@ -45,6 +45,7 @@ import { handleSquareWebhookRoute } from "./lib/routes-square-webhooks.mjs";
 import { handleCheckInRoute } from "./lib/routes-checkin.mjs";
 import { handleSettingsRoute } from "./lib/routes-settings.mjs";
 import { handleUsersRoute } from "./lib/routes-users.mjs";
+import { handleAdminRoute } from "./lib/routes-admin.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -91,6 +92,28 @@ const userCache = new Map();
 
 const envAutoSendSquareLinkSmsEnabled =
   String(AUTO_SEND_SQUARE_LINK_SMS ?? "false").trim().toLowerCase() === "true";
+
+// ---------- scheduled maintenance (EventBridge) ----------
+
+async function runScheduledMaintenance(event) {
+  const startedAtMs = Date.now();
+  try {
+    const result =
+      await reservationsHoldsService.releaseOverdueReservationsForAllActiveEvents();
+    console.info("scheduled_maintenance_release_overdue", {
+      ...result,
+      durationMs: Date.now() - startedAtMs,
+      ruleArn: Array.isArray(event?.resources) ? event.resources[0] : null,
+    });
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("scheduled_maintenance_failed", {
+      message: String(err?.message ?? err ?? ""),
+      durationMs: Date.now() - startedAtMs,
+    });
+    throw err;
+  }
+}
 
 // ---------- helpers ----------
 
@@ -183,6 +206,7 @@ function corsHeaders(event) {
     "https://main.d1gxn3rvy5gfn4.amplifyapp.com",
     "https://famosofuego.com",
     "https://www.famosofuego.com",
+    "https://app.famosofuego.com",
   ]);
   return allowed.has(origin)
     ? { "access-control-allow-origin": origin, "vary": "Origin" }
@@ -335,6 +359,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   normalizePhoneCountry,
   detectPhoneCountryFromE164,
   getEventByDate: eventsService.getEventByDate,
+  listEvents: eventsService.listEvents,
   getDisabledTablesFromFrequent: clientsService.getDisabledTablesFromFrequent,
   getTablePriceForEvent,
   ensureCheckInPassForReservation: checkInPassesService.issuePassForReservation,
@@ -349,6 +374,11 @@ const reservationsHoldsService = createReservationsHoldsService({
 
 // ---------- router ----------
 export const handler = async (event) => {
+  // EventBridge scheduled invocations: not HTTP. Run cron sweeps and return.
+  if (event?.source === "aws.events" || event?.["detail-type"] === "Scheduled Event") {
+    return await runScheduledMaintenance(event);
+  }
+
   const method = event.requestContext?.http?.method || "GET";
   const path = event.requestContext?.http?.path || event.rawPath || "/";
   const cors = corsHeaders(event);
@@ -367,6 +397,16 @@ export const handler = async (event) => {
     if (!EVENTS_TABLE) {
       return json(500, { message: "Missing env var EVENTS_TABLE" }, cors);
     }
+
+    const adminRouteResponse = await handleAdminRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      getGroupsFromEvent,
+    });
+    if (adminRouteResponse) return adminRouteResponse;
 
     const settingsRouteResponse = await handleSettingsRoute({
       method,
@@ -413,6 +453,7 @@ export const handler = async (event) => {
       noContent,
       getBody,
       requireAdmin,
+      requireStaffOrAdmin,
       getUserLabel,
       listEvents: eventsService.listEvents,
       getEventByDate: eventsService.getEventByDate,

@@ -1,0 +1,154 @@
+export function json(statusCode, body, extraHeaders = {}) {
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      ...extraHeaders,
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+export function noContent(statusCode = 204, extraHeaders = {}) {
+  return {
+    statusCode,
+    headers: { ...extraHeaders },
+    body: "",
+  };
+}
+
+export function getBody(event) {
+  if (!event.body) return null;
+  try {
+    return event.isBase64Encoded
+      ? JSON.parse(Buffer.from(event.body, "base64").toString("utf8"))
+      : JSON.parse(event.body);
+  } catch {
+    return null;
+  }
+}
+
+export function httpError(statusCode, message) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+export function nowEpoch() {
+  return Math.floor(Date.now() / 1000);
+}
+
+const SUPPORTED_PHONE_COUNTRIES = new Set(["US", "MX"]);
+
+export function normalizePhoneCountry(country) {
+  const value = String(country ?? "").trim().toUpperCase();
+  return SUPPORTED_PHONE_COUNTRIES.has(value) ? value : "US";
+}
+
+function parseInternationalDigitsToE164(digitsOnly) {
+  const digits = String(digitsOnly ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits.startsWith("1")) {
+    const national = digits.slice(1);
+    if (national.length === 10) return `+1${national}`;
+    return "";
+  }
+
+  if (digits.startsWith("52")) {
+    const national = digits.slice(2);
+    if (national.length === 10) return `+52${national}`;
+    if (national.length === 11 && national.startsWith("1")) return `+52${national.slice(1)}`;
+    return "";
+  }
+
+  return "";
+}
+
+function parseNationalDigitsToE164(digitsOnly, countryHint) {
+  const digits = String(digitsOnly ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (digits.length === 12 && digits.startsWith("52")) return `+${digits}`;
+  if (digits.length === 13 && digits.startsWith("521")) return `+52${digits.slice(3)}`;
+
+  const country = normalizePhoneCountry(countryHint);
+  if (digits.length !== 10) return "";
+  if (country === "MX") return `+52${digits}`;
+  return `+1${digits}`;
+}
+
+export function normalizePhoneE164(phone, countryHint = "US") {
+  const raw = String(phone ?? "").trim();
+  if (!raw) return "";
+
+  let cleaned = raw.replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("00")) cleaned = `+${cleaned.slice(2)}`;
+
+  if (cleaned.startsWith("+")) {
+    return parseInternationalDigitsToE164(cleaned.slice(1));
+  }
+
+  return parseNationalDigitsToE164(cleaned, countryHint);
+}
+
+export function detectPhoneCountryFromE164(phone) {
+  const e164 = normalizePhoneE164(phone);
+  if (e164.startsWith("+52")) return "MX";
+  if (e164.startsWith("+1")) return "US";
+  return null;
+}
+
+export function normalizePhone(phone, countryHint = "US") {
+  const e164 = normalizePhoneE164(phone, countryHint);
+  return e164 ? e164.replace(/\D/g, "") : "";
+}
+
+export function buildPhoneSearchCandidates(phone, countryHint = "US") {
+  const raw = String(phone ?? "").trim();
+  if (!raw) return [];
+
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return [];
+
+  const set = new Set();
+  set.add(digits);
+
+  const normalizedDigits = normalizePhone(raw, countryHint);
+  if (normalizedDigits) set.add(normalizedDigits);
+
+  if (digits.length === 10) {
+    set.add(`1${digits}`);
+    set.add(`52${digits}`);
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    set.add(digits.slice(1));
+  }
+  if (digits.length === 12 && digits.startsWith("52")) {
+    set.add(digits.slice(2));
+  }
+  if (digits.length === 13 && digits.startsWith("521")) {
+    set.add(digits.slice(3));
+    set.add(`52${digits.slice(3)}`);
+  }
+
+  return [...set].filter(Boolean);
+}
+
+export function addDaysToIsoDate(dateStr, days) {
+  const parts = String(dateStr ?? "").split("-").map((p) => Number(p));
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return dateStr;
+  const [year, month, day] = parts;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + Number(days || 0));
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function requiredEnv(name, value) {
+  if (!value) throw httpError(500, `Missing env var ${name}`);
+  return value;
+}

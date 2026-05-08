@@ -43,4 +43,7 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 /http-client/
-/backend/
+
+# Backend lambda artifacts (the source itself IS tracked; build outputs are not)
+backend/lambda/function.zip
+backend/lambda/code_url.txt
