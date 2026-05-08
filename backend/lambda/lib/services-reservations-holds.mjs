@@ -291,11 +291,12 @@ export function createReservationsHoldsService({
         })
       );
     } catch (err) {
-      console.warn("appendReservationHistory failed", {
+      console.error("reservation_history_write_error", {
         reservationId: String(reservationId ?? "").trim() || null,
         eventDate: String(eventDate ?? "").trim() || null,
         eventType: String(eventType ?? "").trim() || null,
         message: String(err?.message ?? err ?? ""),
+        errorName: err?.name ?? null,
       });
     }
   }
