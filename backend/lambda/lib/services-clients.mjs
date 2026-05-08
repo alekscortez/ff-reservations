@@ -506,20 +506,24 @@ export function createClientsService({
     const candidates = buildPhoneSearchCandidates(phoneQuery);
     if (!candidates.length) return [];
 
+    const responses = await Promise.all(
+      candidates.map((candidate) =>
+        ddb.send(
+          new QueryCommand({
+            TableName: CLIENTS_TABLE,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+              ":pk": "CLIENT",
+              ":sk": `PHONE#${candidate}`,
+            },
+            Limit: 10,
+            ScanIndexForward: false,
+          })
+        )
+      )
+    );
     const byKey = new Map();
-    for (const candidate of candidates) {
-      const res = await ddb.send(
-        new QueryCommand({
-          TableName: CLIENTS_TABLE,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          ExpressionAttributeValues: {
-            ":pk": "CLIENT",
-            ":sk": `PHONE#${candidate}`,
-          },
-          Limit: 10,
-          ScanIndexForward: false,
-        })
-      );
+    for (const res of responses) {
       for (const item of res.Items ?? []) {
         if (item?.SK) byKey.set(String(item.SK), item);
       }
