@@ -364,6 +364,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   getTablePriceForEvent,
   ensureCheckInPassForReservation: checkInPassesService.issuePassForReservation,
   deactivateSquarePaymentLink: squarePaymentsService.deactivatePaymentLink,
+  refundSquarePayment: squarePaymentsService.refundPayment,
   sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
   sendCheckInPassSms: smsNotificationsService.sendCheckInPassSms,
   paymentLinkTtlMinutes: PAYMENT_LINK_TTL_MINUTES,

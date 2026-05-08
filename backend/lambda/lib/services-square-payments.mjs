@@ -480,6 +480,56 @@ export function createSquarePaymentsService({
     };
   }
 
+  async function refundPayment({ paymentId, amount, idempotencyKey, reason }) {
+    const normalizedPaymentId = String(paymentId ?? "").trim();
+    if (!normalizedPaymentId) throw httpError(400, "paymentId is required");
+
+    const squareEnv = resolveSquareEnv();
+    const apiBaseUrl = resolveSquareApiBaseUrl(squareEnv);
+    const apiVersion = String(env.SQUARE_API_VERSION ?? "2026-01-22").trim();
+    const currency = String(env.SQUARE_CURRENCY ?? "USD").trim().toUpperCase();
+    const idempotency = String(idempotencyKey ?? "").trim() || randomUUID();
+    const amountMinor = toAmountMoney(amount);
+    const secret = await loadSquareSecret();
+
+    const response = await fetchImpl(`${apiBaseUrl}/v2/refunds`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret.SQUARE_ACCESS_TOKEN}`,
+        "Square-Version": apiVersion,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        idempotency_key: idempotency,
+        amount_money: { amount: amountMinor, currency },
+        payment_id: normalizedPaymentId,
+        reason: String(reason ?? "").trim() || undefined,
+      }),
+    });
+
+    const text = await response.text();
+    const payload = parseJsonPayload(text);
+
+    if (!response.ok) {
+      const message = parseSquareErrorMessage(
+        payload,
+        `Square refund failed (${response.status})`
+      );
+      throw httpError(502, message);
+    }
+
+    const refund = payload?.refund;
+    if (!refund?.id) {
+      throw httpError(502, "Square refund response missing refund id");
+    }
+
+    return {
+      idempotencyKey: idempotency,
+      squareEnv,
+      refund,
+    };
+  }
+
   async function deactivatePaymentLink({ paymentLinkId }) {
     const normalizedPaymentLinkId = String(paymentLinkId ?? "").trim();
     if (!normalizedPaymentLinkId) throw httpError(400, "paymentLinkId is required");
@@ -781,6 +831,7 @@ export function createSquarePaymentsService({
     createPayment,
     createPaymentLink,
     deactivatePaymentLink,
+    refundPayment,
     verifyWebhookSignature,
     getWebhookHealthSummary,
     processSquareWebhookEvent,

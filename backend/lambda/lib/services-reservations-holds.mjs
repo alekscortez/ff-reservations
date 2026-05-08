@@ -25,6 +25,7 @@ export function createReservationsHoldsService({
   getTablePriceForEvent,
   ensureCheckInPassForReservation,
   deactivateSquarePaymentLink,
+  refundSquarePayment,
   sendPaymentLinkExpiredSms,
   sendCheckInPassSms,
   paymentLinkTtlMinutes,
@@ -1296,11 +1297,11 @@ export function createReservationsHoldsService({
         "resolutionType must be CANCEL_NO_REFUND | RESCHEDULE_CREDIT | REFUND"
       );
     }
-    if (resolutionType === "REFUND") {
-      throw httpError(501, "Refund workflow is not implemented yet");
-    }
     if (!cancelReason) {
       throw httpError(400, "cancelReason is required");
+    }
+    if (resolutionType === "REFUND" && typeof refundSquarePayment !== "function") {
+      throw httpError(501, "Refund workflow requires Square refund service to be configured");
     }
     if (resolutionType === "RESCHEDULE_CREDIT") {
       await assertRescheduleCreditAllowed(eventDate);
@@ -1414,6 +1415,178 @@ export function createReservationsHoldsService({
         creditIssuedAt: issuedCredit.issuedAt,
         creditIssuedBy: issuedCredit.issuedBy,
       };
+    } else if (resolutionType === "REFUND") {
+      const existingPayments = Array.isArray(current?.payments) ? current.payments : [];
+      const refundCandidates = existingPayments
+        .map((p, idx) => ({ p, idx }))
+        .filter(({ p }) => {
+          const method = String(p?.method ?? "").trim().toLowerCase();
+          if (method !== "square" && method !== "cashapp") return false;
+          const providerPaymentId = String(p?.provider?.providerPaymentId ?? "").trim();
+          if (!providerPaymentId) return false;
+          const amt = Number(p?.amount ?? 0);
+          if (!Number.isFinite(amt) || amt <= 0) return false;
+          // skip already-refunded payments
+          if (p?.refund && String(p.refund?.refundId ?? "").trim()) return false;
+          return true;
+        });
+
+      if (refundCandidates.length === 0) {
+        throw httpError(
+          400,
+          "No refundable Square or Cash App payments found on this reservation. Use CANCEL_NO_REFUND or RESCHEDULE_CREDIT instead."
+        );
+      }
+
+      const refundResults = [];
+      let totalRefundedAmount = 0;
+      let allSucceeded = true;
+
+      for (const { p, idx } of refundCandidates) {
+        const providerPaymentId = String(p.provider.providerPaymentId).trim();
+        const refundAmount = roundMoney(p.amount);
+        const paymentLocalId = String(p?.paymentId ?? `idx-${idx}`).trim();
+        const idemKey = `refund-${reservationId}-${paymentLocalId}`;
+        try {
+          const result = await refundSquarePayment({
+            paymentId: providerPaymentId,
+            amount: refundAmount,
+            idempotencyKey: idemKey,
+            reason: cancelReason.slice(0, 192),
+          });
+          const status = String(result?.refund?.status ?? "").toUpperCase();
+          refundResults.push({
+            paymentLocalId,
+            providerPaymentId,
+            amount: refundAmount,
+            method: String(p.method).toLowerCase(),
+            refundId: String(result?.refund?.id ?? "").trim() || null,
+            refundStatus: status || null,
+            idempotencyKey: idemKey,
+            success: true,
+          });
+          totalRefundedAmount = roundMoney(totalRefundedAmount + refundAmount);
+        } catch (err) {
+          allSucceeded = false;
+          refundResults.push({
+            paymentLocalId,
+            providerPaymentId,
+            amount: refundAmount,
+            method: String(p.method).toLowerCase(),
+            success: false,
+            errorMessage: String(err?.message ?? err ?? "Refund failed").slice(0, 256),
+          });
+          console.warn("refund_payment_failed", {
+            reservationId,
+            providerPaymentId,
+            message: String(err?.message ?? err ?? ""),
+          });
+        }
+      }
+
+      if (!allSucceeded) {
+        await appendReservationHistory({
+          eventDate,
+          reservationId,
+          eventType: "REFUND_FAILED",
+          actor: user,
+          source: historySourceFromActor(user),
+          tableId,
+          customerName: String(current?.customerName ?? "").trim() || null,
+          details: {
+            cancelReason,
+            totalRefundedAmount,
+            refunds: refundResults,
+          },
+          at: cancelAt,
+        });
+        const failures = refundResults.filter((r) => !r.success);
+        const firstFailure = failures[0]?.errorMessage ?? "Unknown refund failure";
+        throw httpError(
+          502,
+          `Refund partially failed for ${failures.length} of ${refundResults.length} payment(s): ${firstFailure}. Manual reconciliation may be required.`
+        );
+      }
+
+      try {
+        const cancelResult = await ddb.send(
+          new UpdateCommand({
+            TableName: RES_TABLE,
+            Key: { PK: pk, SK: sk },
+            UpdateExpression:
+              "SET #status = :cancelled, #paymentStatus = :refunded, #updatedAt = :now, #updatedBy = :by, #cancelReason = :reason, #cancelledAt = :now, #cancelledBy = :by, #refundedAmount = :refundedAmount, #refundedAt = :now, #refundedBy = :by, #refunds = :refunds",
+            ExpressionAttributeNames: {
+              "#status": "status",
+              "#paymentStatus": "paymentStatus",
+              "#updatedAt": "updatedAt",
+              "#updatedBy": "updatedBy",
+              "#cancelReason": "cancelReason",
+              "#cancelledAt": "cancelledAt",
+              "#cancelledBy": "cancelledBy",
+              "#refundedAmount": "refundedAmount",
+              "#refundedAt": "refundedAt",
+              "#refundedBy": "refundedBy",
+              "#refunds": "refunds",
+            },
+            ExpressionAttributeValues: {
+              ":cancelled": "CANCELLED",
+              ":confirmed": "CONFIRMED",
+              ":refunded": "REFUNDED",
+              ":now": cancelAt,
+              ":by": user,
+              ":reason": cancelReason,
+              ":refundedAmount": totalRefundedAmount,
+              ":refunds": refundResults,
+            },
+            ConditionExpression: "#status = :confirmed",
+            ReturnValues: "ALL_NEW",
+          })
+        );
+        cancelled = cancelResult?.Attributes ?? null;
+      } catch (err) {
+        if (err?.name === "ConditionalCheckFailedException") {
+          // Refunds already issued at Square but reservation status changed
+          // mid-flight (e.g. raced with another cancellation). Surface loudly.
+          await appendReservationHistory({
+            eventDate,
+            reservationId,
+            eventType: "REFUND_ORPHANED",
+            actor: user,
+            source: historySourceFromActor(user),
+            tableId,
+            customerName: String(current?.customerName ?? "").trim() || null,
+            details: {
+              cancelReason,
+              totalRefundedAmount,
+              refunds: refundResults,
+              errorMessage:
+                "Reservation status changed between refund and cancellation update. Refunds were issued at Square but reservation may not show as REFUNDED.",
+            },
+            at: cancelAt,
+          });
+          throw httpError(
+            409,
+            "Refund issued at Square but reservation status changed concurrently. Manual reconciliation required."
+          );
+        }
+        throw err;
+      }
+
+      await appendReservationHistory({
+        eventDate,
+        reservationId,
+        eventType: "REFUND_ISSUED",
+        actor: user,
+        source: historySourceFromActor(user),
+        tableId,
+        customerName: String(current?.customerName ?? "").trim() || null,
+        details: {
+          cancelReason,
+          totalRefundedAmount,
+          refunds: refundResults,
+        },
+        at: cancelAt,
+      });
     } else {
       const cancelResult = await ddb.send(
         new UpdateCommand({
