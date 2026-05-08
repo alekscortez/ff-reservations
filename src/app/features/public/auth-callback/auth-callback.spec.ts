@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { AuthCallback } from './auth-callback';
+import { provideMockOidc } from '../../../testing/oidc-mock';
 
 describe('AuthCallback', () => {
   let component: AuthCallback;
@@ -8,7 +10,14 @@ describe('AuthCallback', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AuthCallback]
+      imports: [AuthCallback],
+      providers: [
+        provideRouter([
+          { path: 'unauthorized', children: [] },
+          { path: 'staff/dashboard', children: [] },
+        ]),
+        provideMockOidc(),
+      ],
     })
     .compileComponents();
 

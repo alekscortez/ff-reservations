@@ -21,6 +21,27 @@ describe('Dashboard', () => {
           useValue: {
             getEventByDate: () => of({ eventId: '1', eventName: 'Tonight', eventDate: '2026-02-14', status: 'ACTIVE', minDeposit: 0 }),
             listEvents: () => of([]),
+            getCurrentContext: () =>
+              of({
+                businessDate: '2026-02-14',
+                event: null,
+                nextEvent: null,
+                operatingTz: 'America/Chicago',
+                operatingDayCutoffHour: 5,
+                settings: {
+                  operatingTz: 'America/Chicago',
+                  operatingDayCutoffHour: 5,
+                  defaultPaymentDeadlineHour: 0,
+                  defaultPaymentDeadlineMinute: 0,
+                  rescheduleCutoffHour: 22,
+                  rescheduleCutoffMinute: 0,
+                  dashboardPollingSeconds: 15,
+                  tableAvailabilityPollingSeconds: 10,
+                  clientAvailabilityPollingSeconds: 15,
+                  urgentPaymentWindowMinutes: 360,
+                  showClientFacingMap: false,
+                },
+              }),
           },
         },
         {

@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { Topbar } from './topbar';
+import { provideMockOidc } from '../../../testing/oidc-mock';
 
 describe('Topbar', () => {
   let component: Topbar;
@@ -8,7 +10,8 @@ describe('Topbar', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [Topbar]
+      imports: [Topbar],
+      providers: [provideRouter([]), provideMockOidc()],
     })
     .compileComponents();
 

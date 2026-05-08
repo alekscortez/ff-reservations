@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { Shell } from './shell';
+import { provideMockOidc } from '../../../testing/oidc-mock';
 
 describe('Shell', () => {
   let component: Shell;
@@ -8,7 +10,8 @@ describe('Shell', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [Shell]
+      imports: [Shell],
+      providers: [provideRouter([]), provideMockOidc()],
     })
     .compileComponents();
 
