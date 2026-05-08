@@ -45,6 +45,11 @@ export function createReservationsHoldsService({
   const DEFAULT_PAYMENT_LINK_TTL_MINUTES = 10;
   const DEFAULT_FREQUENT_PAYMENT_LINK_TTL_MINUTES = 1440;
   const DEFAULT_HOLD_TTL_SECONDS = 300;
+  // Allow a small grace window when converting an expiring hold. Covers the
+  // UX papercut where a user clicks "Confirm reservation" within ~1-2 seconds
+  // of their hold expiring. Audit M7. (Same hold owner only — if someone
+  // else placed a new hold meanwhile, the holdId match still fails.)
+  const HOLD_EXPIRY_GRACE_SECONDS = 5;
 
   function clampNumber(value, min, max, fallback) {
     const parsed = Number(value);
@@ -1904,7 +1909,8 @@ export function createReservationsHoldsService({
                 Key: holdKey,
                 UpdateExpression:
                   "SET lockType = :reserved, reservationId = :rid, customerName = :name, phone = :phone, createdAt = :now, createdBy = :by REMOVE expiresAt, holdId",
-                ConditionExpression: "lockType = :hold AND holdId = :hid AND expiresAt >= :now",
+                ConditionExpression:
+                  "lockType = :hold AND holdId = :hid AND expiresAt >= :graceCutoff",
                 ExpressionAttributeValues: {
                   ":reserved": "RESERVED",
                   ":hold": "HOLD",
@@ -1913,6 +1919,7 @@ export function createReservationsHoldsService({
                   ":name": customerName,
                   ":phone": phone,
                   ":now": now,
+                  ":graceCutoff": now - HOLD_EXPIRY_GRACE_SECONDS,
                   ":by": user,
                 },
               },
