@@ -555,6 +555,14 @@ export function ReservationNew() {
   const creditRemainderDue = creditEnabled
     ? Math.max(0, (watchedAmountDue || 0) - creditApplied)
     : watchedAmountDue || 0;
+  // When credit is applied with a remainder, the staff still owes us a
+  // payment deadline for that balance — auto-enable the deadline panel so
+  // they can't accidentally submit without one.
+  useEffect(() => {
+    if (creditEnabled && creditRemainderDue > 0.005) {
+      setPaymentDeadlineEnabled(true);
+    }
+  }, [creditEnabled, creditRemainderDue]);
   const apiClient = useApiClient();
   const [creditApplyError, setCreditApplyError] = useState<string | null>(null);
 
@@ -1201,6 +1209,29 @@ export function ReservationNew() {
                 }
                 onAnother={() => {
                   setCreatedReservation(null);
+                  // Fresh form for the next reservation: clear customer info,
+                  // payment selections, deposit, and the credit toggle.
+                  // Restored deadline defaults will reapply on the next hold.
+                  reset({
+                    customerName: '',
+                    phone: '',
+                    phoneCountry: 'US',
+                    paymentMethod: 'square',
+                    paymentStatus: 'PENDING',
+                    amountDue: 0,
+                    depositAmount: 0,
+                    paymentDeadlineDate: nextDayDateString(),
+                    paymentDeadlineTime: '00:00',
+                    packageId: '',
+                    receiptNumber: '',
+                  });
+                  setAllowCustomDeposit(false);
+                  setPaymentDeadlineEnabled(false);
+                  setCreditEnabled(false);
+                  setSelectedCreditId(null);
+                  setDeadlineError(null);
+                  setCreditApplyError(null);
+                  setDeadlineDefaultsApplied(false);
                 }}
               />
             )}
