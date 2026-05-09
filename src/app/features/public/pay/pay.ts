@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import {
@@ -19,6 +19,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private api = inject(PublicPayService);
   private squareWebPayments = inject(SquareWebPaymentsService);
+  private zone = inject(NgZone);
 
   loading = false;
   preparing = false;
@@ -157,15 +158,17 @@ export class PublicPayPage implements OnInit, OnDestroy {
         label: `Table ${session.reservation.tableId ?? ''} payment`.trim(),
         referenceId: session.reservation.reservationId,
         container: host,
+        // Square's SDK fires these callbacks outside the Angular zone (it
+        // doesn't know about us). Re-enter the zone so change detection
+        // picks up `processing` / `error` / `result` mutations cleanly,
+        // instead of relying on setTimeout(..., 0) as a side door.
         onTokenized: (sourceId) => {
-          setTimeout(() => {
-            this.capturePayment(sourceId);
-          }, 0);
+          this.zone.run(() => this.capturePayment(sourceId));
         },
         onError: (message) => {
-          setTimeout(() => {
+          this.zone.run(() => {
             this.error = message || 'Cash App Pay was not completed.';
-          }, 0);
+          });
         },
       });
       this.cashAppDestroy = mounted.destroy;
