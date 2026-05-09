@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   IconCalendarEvent,
@@ -68,30 +68,36 @@ function NavGroup({
   items: NavItem[];
 }) {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{t(labelKey)}</SidebarGroupLabel>
       <SidebarGroupContent className="flex flex-col gap-1">
         <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.to}>
-              <NavLink to={item.to} end={item.end}>
-                {({ isActive }) => (
-                  <SidebarMenuButton
-                    tooltip={t(item.labelKey)}
-                    isActive={isActive}
-                    className="cursor-pointer"
-                    asChild={false}
-                  >
-                    <span className="flex items-center gap-2">
-                      <item.icon className="size-4" />
-                      <span>{t(item.labelKey)}</span>
-                    </span>
-                  </SidebarMenuButton>
-                )}
-              </NavLink>
-            </SidebarMenuItem>
-          ))}
+          {items.map((item) => {
+            // Active when the current path equals the route exactly (`end`) or
+            // is a descendant. Computed outside so SidebarMenuButton can use
+            // asChild + Link without a NavLink render prop (which conflicts
+            // with shadcn's icon-on-collapse CSS that targets the button's
+            // direct children).
+            const isActive = item.end
+              ? pathname === item.to
+              : pathname === item.to || pathname.startsWith(item.to + '/');
+            return (
+              <SidebarMenuItem key={item.to}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive}
+                  tooltip={t(item.labelKey)}
+                >
+                  <Link to={item.to}>
+                    <item.icon />
+                    <span>{t(item.labelKey)}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
