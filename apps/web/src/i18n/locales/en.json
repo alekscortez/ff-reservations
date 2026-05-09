@@ -377,6 +377,9 @@
       "sections": "Sections",
       "reset": "Clear filters"
     },
+    "holdValidation": {
+      "lost": "Your previous hold expired or was released on another device. Pick a table again to continue."
+    },
     "pastEvents": {
       "button": "Past events ({{count}})",
       "title": "Past events",

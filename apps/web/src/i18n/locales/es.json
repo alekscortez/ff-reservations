@@ -377,6 +377,9 @@
       "sections": "Secciones",
       "reset": "Limpiar filtros"
     },
+    "holdValidation": {
+      "lost": "Tu apartado anterior expiró o se liberó en otro dispositivo. Elige una mesa de nuevo para continuar."
+    },
     "pastEvents": {
       "button": "Eventos pasados ({{count}})",
       "title": "Eventos pasados",

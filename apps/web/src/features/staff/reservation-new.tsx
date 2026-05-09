@@ -8,7 +8,7 @@ import type { ReservationItem } from '@ff/core';
 import { formatPhoneForDisplay, inferPhoneCountryFromE164 } from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
-import { useCreateHold, useReleaseHold, type Hold } from '@/lib/api/holds';
+import { useCreateHold, useHoldsList, useReleaseHold, type Hold } from '@/lib/api/holds';
 import {
   useCreateReservation,
   useCreateSquarePaymentLink,
@@ -422,6 +422,42 @@ export function ReservationNew() {
     }
     setRestoredOnce(true);
   }, [restoredOnce, reset]);
+
+  // After restoring from localStorage, verify the hold still exists on the
+  // server with a matching holdId. The TTL on the lock is 10–15 min so a
+  // refresh after a long pause may surface a session whose row has been
+  // garbage-collected; trusting localStorage alone would let staff fill out
+  // the form and POST /reservations only to hit a 409.
+  const [holdVerifiedAt, setHoldVerifiedAt] = useState<number | null>(null);
+  const [holdValidationError, setHoldValidationError] = useState<string | null>(null);
+  const holdsList = useHoldsList(hold ? eventDate : null);
+  useEffect(() => {
+    if (!hold || !holdsList.data) return;
+    if (holdVerifiedAt) return;
+    const stillThere = holdsList.data.find(
+      (lock) =>
+        lock.tableId === hold.tableId &&
+        (lock.holdId === hold.holdId || lock.lockType === 'RESERVED')
+    );
+    if (!stillThere) {
+      setHold(null);
+      setHoldValidationError(t('reservationNew.holdValidation.lost'));
+      try {
+        window.localStorage.removeItem(HOLD_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+    setHoldVerifiedAt(Math.floor(Date.now() / 1000));
+  }, [hold, holdsList.data, holdVerifiedAt, t]);
+  // Re-validate on every fresh hold (clear the verifiedAt mark when hold changes).
+  useEffect(() => {
+    if (!hold) {
+      setHoldVerifiedAt(null);
+      return;
+    }
+    setHoldVerifiedAt(null);
+  }, [hold?.holdId]);
 
   const watchedPhone = watch('phone');
   const watchedPhoneCountry = watch('phoneCountry');
@@ -932,6 +968,14 @@ export function ReservationNew() {
               </div>
             )}
             {holdError && <p className="mt-2 text-xs text-destructive">{holdError}</p>}
+            {holdValidationError && !hold && (
+              <p
+                className="mt-2 rounded-md border border-destructive/40 bg-danger-100/40 p-2 text-xs text-destructive"
+                role="alert"
+              >
+                {holdValidationError}
+              </p>
+            )}
             {tablesLoading ? (
               <p className="mt-3 text-muted-foreground">{t('common.loading')}</p>
             ) : tablesArray.length === 0 ? (
