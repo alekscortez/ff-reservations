@@ -7,9 +7,25 @@ Source for the `ff-reservations-api` Lambda — the single backend behind every 
 - `index.mjs` — Lambda handler: HTTP router + EventBridge dispatch + auth helpers + CORS allowlist
 - `lib/routes-*.mjs` — Per-domain route handlers
 - `lib/services-*.mjs` — Per-domain business logic (DDB writes, Square API calls, SMS, etc.)
-- `lib/core-utils.mjs` — Phone normalization, `httpError`, `json` response helpers
+- `lib/core-utils.mjs` — Phone normalization, currency helpers (`toMinorUnits` / `toMajorUnits` / `roundToCents`), `getBody`, `httpError`, `json` response helpers
+- `lib/services-rate-limit.mjs` — In-Lambda SMS rate-limit backstop for `/auth/customer/start` (Cloudflare WAF is the primary defense)
+- `lib/*.test.mjs` — Pure-function specs for the modules below; run with `npm run test:backend` from the repo root (uses Node 22 built-in `node:test`)
 - `table-template.json` — Static venue floor plan (table IDs, sections, prices)
 - `deploy.sh` — `aws lambda update-function-code` wrapper
+
+### Reservations/holds module split
+
+The old `services-reservations-holds.mjs` (~2.6k lines) was split on 2026-05-09 into four focused modules + a 67-line barrel:
+
+| Module | What it owns |
+|---|---|
+| `services-reservations-shared.mjs` | Constants (`AUTO_RELEASE_REASON`, `DEFAULT_DEADLINE_TZ`, etc.), pure utilities (`clampNumber`, `roundMoney`, time math), settings resolvers, `appendReservationHistory`, `tryEnsureCheckInPass`, `trySendCheckInPassSms`, read-only DDB queries (`queryReservationsForEventDate`, `getReservationById`), domain predicates (`isOverdueReservation`, `isFrequentAutoReservation`) |
+| `services-payment-recording.mjs` | `addReservationPayment` (full state machine including credit-redemption TransactWrite + `depositAmount` CAS for audit C3), `setReservationPaymentLinkWindow`, `setReservationCashAppLinkSession`, `revokeReservationCashAppLinkSession`, `markReservationCashAppLinkSessionUsed`, `markReservationPaymentLinkInactive` |
+| `services-reservations.mjs` | `createReservation` (hold→reserved TransactWrite + idempotent replay), `cancelReservation` (3 resolution paths: `CANCEL_NO_REFUND`, `RESCHEDULE_CREDIT`, `REFUND`), `releaseOverdueReservationsForEventDate` / `*ForAllActiveEvents` (cron sweep with concurrency cap 5), reschedule credit helpers (`assertRescheduleCreditAllowed`, `buildRescheduleCreditItem`, `markFrequentTableReleasedForEvent`), reservation reads |
+| `services-holds.mjs` | Hold lifecycle: `createHold` / `releaseHold` / `listHolds` / `listTableLocks` |
+| `services-reservations-holds.mjs` | **Barrel.** Composes the four above and exposes the same 16-method public surface that `index.mjs` has always seen. Edit this file ONLY when you're changing the public API contract. |
+
+Composition order in the barrel: `shared` → `paymentRecording` → `reservations` (uses `paymentRecording.revokeReservationCashAppLinkSession`) → `holds` (uses `reservations.releaseOverdueReservationsForEventDate`).
 
 ## Deploy
 
@@ -78,6 +94,7 @@ API Gateway uses **explicit per-route definitions** — no `$default` proxy. Add
 - **Dead-letter queue `ff-reservations-api-dlq`** (SQS, 14-day retention) catches failed async invocations (mostly the EventBridge cron) via `DeadLetterConfig`. Lambda role's inline `DeadLetterQueueAccess` policy grants `sqs:SendMessage` on the queue ARN only. Alarm `ff-res-lambda-dlq-depth` fires on ≥1 visible message in 5min. Inspect with `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1`.
 - **API Gateway stage throttle** on the `$default` stage: 200 burst / 100 RPS default-route. Per-route overrides via `aws apigatewayv2 update-route --route-settings`.
 - **Cloudflare proxy + WAF rate-limit** on `api.famosofuego.com` (Free plan). Custom rule `auth-customer-otp-bombing`: any IP >5 requests / 10s on `/auth/customer/*` → Block 10s. Free-tier rate-limit counters are per-edge, so effective threshold = 5/10s × N edges (≈2 for Houston-area users). AWS WAF v2 isn't available on HTTP APIs (v2), which is why we route through Cloudflare instead. Lambda sees Cloudflare's IP in `event.requestContext.http.sourceIp`; real client IP arrives in the `cf-connecting-ip` header.
+- **In-Lambda SMS rate-limit** (`services-rate-limit.mjs`, audit P-H1) — belt-and-suspenders backstop if the Cloudflare WAF is bypassed (e.g. direct API Gateway URL hit). Stored in `HOLDS_TABLE` under `PK="RATE", SK="SMS#{phoneE164}"` with a 10-min sliding window and cap of 5 starts per phone. Rows carry a `ttl` attribute so they auto-garbage-collect once DynamoDB TTL is enabled on the table; until then orphans get overwritten on the next attempt for the same phone.
 
 ## Verifying a deploy
 

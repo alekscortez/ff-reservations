@@ -18,12 +18,28 @@ src/app/
   features/     # public/, staff/, admin/ route groups (lazy-loaded)
   shared/       # components (table-map, page-header, confirm-dialog), models
 backend/lambda/
-  index.mjs                       # entry, auth helpers, CORS, router, EventBridge dispatch
-  lib/routes-*.mjs                # route handlers per domain
-  lib/services-*.mjs              # business logic per domain
-  lib/core-utils.mjs              # phone normalization, json/error helpers
-  table-template.json             # static venue floor plan
-  deploy.sh                       # `aws lambda update-function-code` wrapper
+  index.mjs                                # entry, auth helpers, CORS, router, EventBridge dispatch
+  lib/routes-*.mjs                         # route handlers per domain
+  lib/services-*.mjs                       # business logic per domain (see "reservations/holds module split" below)
+  lib/core-utils.mjs                       # phone normalization, money helpers, getBody, httpError
+  lib/services-rate-limit.mjs              # in-Lambda SMS rate-limit backstop (PR #3 / audit P-H1)
+  lib/*.test.mjs                           # node:test specs (run via `npm run test:backend`)
+  table-template.json                      # static venue floor plan
+  deploy.sh                                # `aws lambda update-function-code` wrapper
+
+# Reservations/holds module split (refactored 2026-05-09; was a single ~2.6k-line file)
+backend/lambda/lib/
+  services-reservations-shared.mjs         # constants, time/money utils, history writes,
+                                           # check-in pass orchestration, read-only DDB queries,
+                                           # domain predicates (isOverdueReservation, isFrequentAuto)
+  services-payment-recording.mjs           # addReservationPayment + payment-link / Cash App
+                                           # session state mutators (5 mutators)
+  services-reservations.mjs                # reservation CRUD, cancellation (3 resolution paths),
+                                           # cron overdue release, reschedule credit helpers
+  services-holds.mjs                       # hold lifecycle (createHold/releaseHold/listHolds)
+  services-reservations-holds.mjs          # 67-line BARREL — composes the four above and
+                                           # exposes the same 16-method public surface that
+                                           # index.mjs has always seen
 backend/cognito-pre-token-gen/    # separate Lambda — Cognito Pre Token Gen v2 trigger
   index.mjs                       # injects cognito:groups into access tokens
   README.md                       # one-time deploy commands
@@ -61,7 +77,7 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 ## Concurrency / data integrity
 
 - All DDB writes use `ConditionExpression` and `ExpressionAttributeNames`/`Values` (never string-built expressions).
-- Hold → reservation upgrade is a single `TransactWriteCommand` (`services-reservations-holds.mjs`).
+- Hold → reservation upgrade is a single `TransactWriteCommand` (`services-reservations.mjs:createReservation`).
 - **`POST /reservations` is idempotent on `holdId`** (audit M3): a duplicate request that loses the TransactWrite race triggers a GetItem on the hold; if it's already RESERVED with a `reservationId`, the existing reservation is returned with `idempotentReplay: true`. The route handler skips CRM upsert (which uses `ADD :amt :one` and would double-count) and auto-SMS on replay.
 - **5-second grace window** on the hold-to-reservation upgrade (audit M7): `expiresAt >= :now - 5` so a "Confirm" click within ~1-2s of expiry still succeeds. Same-owner only — the `holdId` match still has to hold.
 - Webhook idempotency: `addReservationPayment` deduplicates on `providerPaymentId` or `idempotencyKey` in the reservation's `payments[]`.
@@ -154,7 +170,12 @@ There is no per-environment config file yet.
 
 - Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public routes).**
 - Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards.
-- Touching reservation state → start with `services-reservations-holds.mjs` (the ~2400-line file). Read existing TransactWrite + ConditionExpression patterns before adding writes.
+- Touching reservation state → pick the right module (the old 2.6k-line monolith was split 2026-05-09):
+  - **`services-reservations.mjs`** — reservation CRUD (`createReservation`, `cancelReservation`, `releaseOverdueReservations*`, list / read history) + the 3 cancellation resolution paths
+  - **`services-payment-recording.mjs`** — `addReservationPayment` (the credit-redemption TransactWrite + `depositAmount` CAS for audit C3 lives here) + payment-link / Cash App session state mutators
+  - **`services-holds.mjs`** — `createHold` / `releaseHold` / `listHolds` (small, ~150 lines)
+  - **`services-reservations-shared.mjs`** — anything that's a pure utility, settings resolver, history-write helper, check-in-pass orchestrator, or read-only DDB query
+  - **`services-reservations-holds.mjs`** — 67-line barrel; only edit if you're changing the public surface seen by `index.mjs`. Read the existing TransactWrite + ConditionExpression patterns in `services-reservations.mjs` and `services-payment-recording.mjs` before adding new writes.
 - Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver.
 - Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin`.
 - "Did SMS X arrive?" → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure). Logs include `messageId`, `destination`, `providerResponse`, `dwellTimeMs`, `status`.
