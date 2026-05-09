@@ -15,8 +15,17 @@
   "auth": {
     "login": "Sign in",
     "logout": "Sign out",
+    "loginPrompt": "Sign in with your staff account.",
     "unauthorized": "You don't have access to this area.",
+    "unauthorizedTitle": "No access",
     "misconfigured": "Auth misconfigured",
-    "missingGroupsHelp": "Your access token is missing the cognito:groups claim."
+    "missingGroupsHelp": "Your access token is missing the cognito:groups claim.",
+    "callback": {
+      "completing": "Completing sign-in…"
+    }
+  },
+  "staff": {
+    "dashboardTitle": "Staff Dashboard",
+    "dashboardWelcome": "Phase 2 placeholder. Feature pages land in Phase 5."
   }
 }

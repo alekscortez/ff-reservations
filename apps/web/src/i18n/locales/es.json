@@ -15,8 +15,17 @@
   "auth": {
     "login": "Iniciar sesión",
     "logout": "Cerrar sesión",
+    "loginPrompt": "Inicia sesión con tu cuenta del personal.",
     "unauthorized": "No tienes acceso a esta sección.",
+    "unauthorizedTitle": "Sin acceso",
     "misconfigured": "Autenticación mal configurada",
-    "missingGroupsHelp": "Tu token de acceso no incluye el claim cognito:groups."
+    "missingGroupsHelp": "Tu token de acceso no incluye el claim cognito:groups.",
+    "callback": {
+      "completing": "Completando el inicio de sesión…"
+    }
+  },
+  "staff": {
+    "dashboardTitle": "Panel del personal",
+    "dashboardWelcome": "Marcador de la Fase 2. Las páginas de funcionalidades llegan en la Fase 5."
   }
 }

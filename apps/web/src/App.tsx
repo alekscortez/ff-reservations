@@ -1,24 +1,30 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-
-function HomePlaceholder() {
-  const { t } = useTranslation();
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-brand-50 p-8">
-      <div className="max-w-xl text-center">
-        <h1 className="text-3xl font-semibold text-brand-900">{t('app.title')}</h1>
-        <p className="mt-3 text-brand-700">{t('app.scaffoldNotice')}</p>
-      </div>
-    </main>
-  );
-}
+import { AuthHealthBanner } from '@/components/auth-health-banner';
+import { RequireStaffOrAdmin } from '@/components/route-guards';
+import { Login } from '@/features/auth/login';
+import { AuthCallback } from '@/features/auth/auth-callback';
+import { Unauthorized } from '@/features/auth/unauthorized';
+import { StaffDashboard } from '@/features/staff/dashboard';
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<HomePlaceholder />} />
-      <Route path="*" element={<HomePlaceholder />} />
-    </Routes>
+    <>
+      <AuthHealthBanner />
+      <Routes>
+        <Route path="/" element={<Navigate to="/staff/dashboard" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route
+          path="/staff/dashboard"
+          element={
+            <RequireStaffOrAdmin>
+              <StaffDashboard />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </>
   );
 }
