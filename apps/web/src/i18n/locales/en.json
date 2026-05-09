@@ -38,5 +38,12 @@
     "listTitle": "Frequent Clients",
     "listDescription": "Recurring guests with table-booking privileges.",
     "empty": "No frequent clients yet."
+  },
+  "reservations": {
+    "listTitle": "Reservations",
+    "listDescription": "View bookings for an event date.",
+    "filterByEvent": "Event date",
+    "empty": "No reservations for this event.",
+    "tableShort": "T"
   }
 }

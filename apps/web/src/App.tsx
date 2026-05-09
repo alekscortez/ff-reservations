@@ -7,6 +7,7 @@ import { Unauthorized } from '@/features/auth/unauthorized';
 import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { StaffFrequentClients } from '@/features/staff/frequent-clients';
+import { StaffReservations } from '@/features/staff/reservations';
 
 export function App() {
   return (
@@ -38,6 +39,14 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffFrequentClients />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/reservations"
+          element={
+            <RequireStaffOrAdmin>
+              <StaffReservations />
             </RequireStaffOrAdmin>
           }
         />

@@ -38,5 +38,12 @@
     "listTitle": "Clientes frecuentes",
     "listDescription": "Huéspedes recurrentes con privilegios de reserva.",
     "empty": "Aún no hay clientes frecuentes."
+  },
+  "reservations": {
+    "listTitle": "Reservaciones",
+    "listDescription": "Ver reservaciones para una fecha de evento.",
+    "filterByEvent": "Fecha del evento",
+    "empty": "No hay reservaciones para este evento.",
+    "tableShort": "M"
   }
 }

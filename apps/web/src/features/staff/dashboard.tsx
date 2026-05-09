@@ -57,6 +57,15 @@ export function StaffDashboard() {
               {t('frequentClients.listDescription')}
             </p>
           </Link>
+          <Link
+            to="/staff/reservations"
+            className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+          >
+            <h3 className="font-semibold text-brand-900">{t('reservations.listTitle')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('reservations.listDescription')}
+            </p>
+          </Link>
         </nav>
       </div>
     </main>
