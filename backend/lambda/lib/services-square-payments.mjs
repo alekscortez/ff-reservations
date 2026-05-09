@@ -2,6 +2,7 @@ import {
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { createHmac, timingSafeEqual } from "crypto";
+import { toMajorUnits, toMinorUnits } from "./core-utils.mjs";
 
 const SECRET_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_WEBHOOK_REPLAY_WINDOW_SECONDS = 10 * 60;
@@ -59,7 +60,7 @@ export function createSquarePaymentsService({
     if (!Number.isFinite(numeric) || numeric <= 0) {
       throw httpError(400, "amount must be > 0");
     }
-    return Math.round(numeric * 100);
+    return toMinorUnits(numeric);
   }
 
   function parseBooleanEnv(value, fallback = false) {
@@ -195,7 +196,7 @@ export function createSquarePaymentsService({
   function toMajorAmount(amountMinor) {
     const minor = Number(amountMinor ?? 0);
     if (!Number.isFinite(minor) || minor <= 0) return 0;
-    return Number((minor / 100).toFixed(2));
+    return toMajorUnits(minor);
   }
 
   function resolveWebhookReplayWindowSeconds() {

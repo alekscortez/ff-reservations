@@ -6,6 +6,7 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { roundToCents } from "./core-utils.mjs";
 
 export function createReservationsHoldsService({
   ddb,
@@ -59,9 +60,7 @@ export function createReservationsHoldsService({
   }
 
   function roundMoney(value) {
-    const parsed = Number(value ?? 0);
-    if (!Number.isFinite(parsed)) return 0;
-    return Number(parsed.toFixed(2));
+    return roundToCents(value ?? 0);
   }
 
   async function getRuntimeSettings() {
