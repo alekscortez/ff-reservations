@@ -133,6 +133,24 @@
       "from": "from"
     }
   },
+  "checkIn": {
+    "title": "Check-In",
+    "subtitle": "Validate entry at the door by scanning check-in passes.",
+    "scannerHeading": "Scanner",
+    "manualHeading": "Manual entry",
+    "manualPlaceholder": "Paste token or QR URL",
+    "verify": "Verify",
+    "startCamera": "Start camera",
+    "stop": "Stop",
+    "flipCamera": "Flip camera",
+    "cameraActive": "Camera active",
+    "cameraOff": "Camera off",
+    "cameraNotReady": "Scanner view is not ready yet.",
+    "cameraError": "Camera failed to start.",
+    "notSupported": "Camera scanning is not supported on this browser. Use manual input below.",
+    "noToken": "No token detected. Try scanning again.",
+    "usedAt": "Used at {{at}} by {{by}}"
+  },
   "checkInPassPage": {
     "heading": "THIS IS CONFIRMATION",
     "subheading": "Thank you for your reservation. Be ready for an unforgettable night.",

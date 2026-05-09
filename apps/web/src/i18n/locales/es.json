@@ -133,6 +133,24 @@
       "from": "de"
     }
   },
+  "checkIn": {
+    "title": "Check-In",
+    "subtitle": "Valida el ingreso en la puerta escaneando los pases.",
+    "scannerHeading": "Escáner",
+    "manualHeading": "Entrada manual",
+    "manualPlaceholder": "Pega el token o el URL del QR",
+    "verify": "Verificar",
+    "startCamera": "Iniciar cámara",
+    "stop": "Detener",
+    "flipCamera": "Cambiar cámara",
+    "cameraActive": "Cámara activa",
+    "cameraOff": "Cámara apagada",
+    "cameraNotReady": "El visor de la cámara no está listo todavía.",
+    "cameraError": "La cámara no pudo iniciar.",
+    "notSupported": "El escaneo con cámara no está soportado en este navegador. Usa la entrada manual.",
+    "noToken": "No se detectó token. Intenta escanear de nuevo.",
+    "usedAt": "Usado el {{at}} por {{by}}"
+  },
   "checkInPassPage": {
     "heading": "ESTA ES LA CONFIRMACIÓN",
     "subheading": "Gracias por tu reservación. Prepárate para una noche inolvidable.",

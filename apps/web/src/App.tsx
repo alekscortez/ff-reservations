@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AuthHealthBanner } from '@/components/auth-health-banner';
 import { RequireAdmin, RequireStaffOrAdmin } from '@/components/route-guards';
 import { StaffLayout } from '@/components/staff-layout';
@@ -6,7 +8,14 @@ import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
 import { PublicMap } from '@/features/public/map';
-import { CheckInPassPage } from '@/features/public/check-in-pass';
+
+// Lazy-loaded — heavy QR / camera deps shouldn't be in the main bundle.
+const CheckInPassPage = lazy(() =>
+  import('@/features/public/check-in-pass').then((m) => ({ default: m.CheckInPassPage }))
+);
+const StaffCheckIn = lazy(() =>
+  import('@/features/staff/check-in').then((m) => ({ default: m.StaffCheckIn }))
+);
 import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { EventForm } from '@/features/staff/event-form';
@@ -23,11 +32,20 @@ import { AdminUsers } from '@/features/admin/users';
 import { AdminUserForm } from '@/features/admin/user-form';
 import { AdminSettings } from '@/features/admin/settings';
 
+function LazyFallback() {
+  const { t } = useTranslation();
+  return (
+    <div className="p-6 text-sm text-muted-foreground">{t('common.loading')}</div>
+  );
+}
+
 function StaffShell() {
   return (
     <RequireStaffOrAdmin>
       <StaffLayout>
-        <Outlet />
+        <Suspense fallback={<LazyFallback />}>
+          <Outlet />
+        </Suspense>
       </StaffLayout>
     </RequireStaffOrAdmin>
   );
@@ -37,7 +55,9 @@ function AdminShell() {
   return (
     <RequireAdmin>
       <StaffLayout>
-        <Outlet />
+        <Suspense fallback={<LazyFallback />}>
+          <Outlet />
+        </Suspense>
       </StaffLayout>
     </RequireAdmin>
   );
@@ -54,7 +74,14 @@ export function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/map" element={<PublicMap />} />
         <Route path="/availability" element={<PublicMap />} />
-        <Route path="/check-in/pass" element={<CheckInPassPage />} />
+        <Route
+          path="/check-in/pass"
+          element={
+            <Suspense fallback={<LazyFallback />}>
+              <CheckInPassPage />
+            </Suspense>
+          }
+        />
 
         <Route element={<StaffShell />}>
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
@@ -78,6 +105,7 @@ export function App() {
           <Route path="/staff/packages/:packageId/edit" element={<PackageForm />} />
           <Route path="/staff/holds" element={<StaffHolds />} />
           <Route path="/staff/clients" element={<StaffClients />} />
+          <Route path="/staff/check-in" element={<StaffCheckIn />} />
         </Route>
 
         <Route element={<AdminShell />}>
