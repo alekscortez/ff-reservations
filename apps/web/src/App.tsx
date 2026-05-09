@@ -17,6 +17,7 @@ import { PackageForm } from '@/features/staff/package-form';
 import { StaffHolds } from '@/features/staff/holds';
 import { AdminUsers } from '@/features/admin/users';
 import { AdminUserForm } from '@/features/admin/user-form';
+import { AdminSettings } from '@/features/admin/settings';
 
 export function App() {
   return (
@@ -146,6 +147,14 @@ export function App() {
           element={
             <RequireAdmin>
               <AdminUserForm />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/settings"
+          element={
+            <RequireAdmin>
+              <AdminSettings />
             </RequireAdmin>
           }
         />

@@ -66,6 +66,49 @@
       "status": "Status"
     }
   },
+  "settings": {
+    "listTitle": "App Settings",
+    "listDescription": "Operating timezones, payment windows, customer-facing toggles.",
+    "saveCta": "Save settings",
+    "groups": {
+      "operations": "Operations",
+      "payments": "Payments",
+      "behavior": "Reservation behavior",
+      "customerFacing": "Customer-facing surfaces",
+      "audit": "Audit"
+    },
+    "field": {
+      "operatingTz": "Operating timezone (IANA)",
+      "operatingTzHint": "Used for deadlines and the business-day cutoff. Example: America/Chicago.",
+      "operatingDayCutoffHour": "Operating-day cutoff hour",
+      "operatingDayCutoffHourHint": "Hour at which a new business day starts (0–23). Reservations after midnight but before this hour count toward the prior calendar day.",
+      "holdTtlSeconds": "Hold TTL (seconds)",
+      "dashboardPollingSeconds": "Dashboard refresh (seconds)",
+      "tableAvailabilityPollingSeconds": "Table availability refresh (seconds)",
+      "clientAvailabilityPollingSeconds": "Public map refresh (seconds)",
+      "paymentLinkTtlMinutes": "Square payment link TTL (minutes)",
+      "frequentPaymentLinkTtlMinutes": "Frequent-client payment link TTL (minutes)",
+      "defaultPaymentDeadlineHour": "Default payment deadline hour",
+      "defaultPaymentDeadlineMinute": "Default payment deadline minute",
+      "rescheduleCutoffHour": "Reschedule cutoff hour",
+      "rescheduleCutoffMinute": "Reschedule cutoff minute",
+      "urgentPaymentWindowMinutes": "Urgent payment badge window (minutes)",
+      "maxPendingWindowMinutes": "Max PENDING window before auto-release (minutes)",
+      "autoSendSquareLinkSms": "Auto-send SMS when a Square payment link is created",
+      "autoSendSquareLinkSmsHint": "When on, creating a payment link triggers an SMS to the customer's phone immediately.",
+      "cashReceiptNumberRequired": "Require receipt number for cash payments",
+      "smsEnabled": "SMS sending enabled (master switch)",
+      "smsEnabledHint": "When off, no SMS messages will be sent regardless of other settings.",
+      "maxReservationsPerPhonePerEvent": "Max reservations per phone per event",
+      "checkInPassTtlDays": "Check-in pass TTL (days after event)",
+      "checkInPassBaseUrl": "Check-in pass base URL",
+      "allowPastEventEdits": "Allow edits to past events",
+      "allowPastEventPayments": "Allow payments on past events",
+      "showClientFacingMap": "Show public live map at /map",
+      "showClientFacingMapHint": "When off, /map and /availability return 404 to the public.",
+      "auditVerboseLogging": "Verbose audit logging"
+    }
+  },
   "publicMap": {
     "title": "Live Table Availability",
     "totalTables": "Total tables",

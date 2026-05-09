@@ -86,15 +86,28 @@ export function StaffDashboard() {
             </p>
           </Link>
           {showAdminLinks ? (
-            <Link
-              to="/admin/users"
-              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
-            >
-              <h3 className="font-semibold text-brand-900">{t('adminUsers.listTitle')}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t('adminUsers.listDescription')}
-              </p>
-            </Link>
+            <>
+              <Link
+                to="/admin/users"
+                className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+              >
+                <h3 className="font-semibold text-brand-900">
+                  {t('adminUsers.listTitle')}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t('adminUsers.listDescription')}
+                </p>
+              </Link>
+              <Link
+                to="/admin/settings"
+                className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+              >
+                <h3 className="font-semibold text-brand-900">{t('settings.listTitle')}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t('settings.listDescription')}
+                </p>
+              </Link>
+            </>
           ) : null}
         </nav>
       </div>

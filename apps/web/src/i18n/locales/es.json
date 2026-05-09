@@ -66,6 +66,49 @@
       "status": "Estado"
     }
   },
+  "settings": {
+    "listTitle": "Configuración",
+    "listDescription": "Zonas horarias, ventanas de pago, opciones públicas.",
+    "saveCta": "Guardar configuración",
+    "groups": {
+      "operations": "Operaciones",
+      "payments": "Pagos",
+      "behavior": "Comportamiento de reservaciones",
+      "customerFacing": "Páginas públicas",
+      "audit": "Auditoría"
+    },
+    "field": {
+      "operatingTz": "Zona horaria operativa (IANA)",
+      "operatingTzHint": "Usada para fechas límite y corte de día operativo. Ejemplo: America/Chicago.",
+      "operatingDayCutoffHour": "Hora de corte del día operativo",
+      "operatingDayCutoffHourHint": "Hora a la que inicia un nuevo día operativo (0–23). Reservaciones después de medianoche pero antes de esta hora cuentan al día anterior.",
+      "holdTtlSeconds": "TTL del apartado (segundos)",
+      "dashboardPollingSeconds": "Refresco del panel (segundos)",
+      "tableAvailabilityPollingSeconds": "Refresco de disponibilidad de mesas (segundos)",
+      "clientAvailabilityPollingSeconds": "Refresco del mapa público (segundos)",
+      "paymentLinkTtlMinutes": "TTL del link Square (minutos)",
+      "frequentPaymentLinkTtlMinutes": "TTL del link para clientes frecuentes (minutos)",
+      "defaultPaymentDeadlineHour": "Hora límite de pago por defecto",
+      "defaultPaymentDeadlineMinute": "Minuto límite de pago por defecto",
+      "rescheduleCutoffHour": "Hora límite para reprogramar",
+      "rescheduleCutoffMinute": "Minuto límite para reprogramar",
+      "urgentPaymentWindowMinutes": "Ventana de pago urgente (minutos)",
+      "maxPendingWindowMinutes": "Máxima ventana PENDING antes del auto-release (minutos)",
+      "autoSendSquareLinkSms": "Enviar SMS automáticamente al crear un link Square",
+      "autoSendSquareLinkSmsHint": "Cuando está activo, crear un link de pago dispara un SMS al cliente de inmediato.",
+      "cashReceiptNumberRequired": "Requerir número de recibo en pagos en efectivo",
+      "smsEnabled": "Envío de SMS activado (master)",
+      "smsEnabledHint": "Cuando está apagado, no se envían SMS sin importar otras opciones.",
+      "maxReservationsPerPhonePerEvent": "Máx. reservaciones por teléfono por evento",
+      "checkInPassTtlDays": "TTL del pase de entrada (días tras el evento)",
+      "checkInPassBaseUrl": "URL base del pase de entrada",
+      "allowPastEventEdits": "Permitir edición de eventos pasados",
+      "allowPastEventPayments": "Permitir pagos en eventos pasados",
+      "showClientFacingMap": "Mostrar mapa público en /map",
+      "showClientFacingMapHint": "Cuando está apagado, /map y /availability devuelven 404 al público.",
+      "auditVerboseLogging": "Logs de auditoría verbosos"
+    }
+  },
   "publicMap": {
     "title": "Disponibilidad de mesas en vivo",
     "totalTables": "Mesas totales",
