@@ -62,22 +62,21 @@ import {
   sumCreditsRemaining,
 } from './reservations-new-credits';
 import {
+  buildShareMessage,
+  CreatedReservationContext,
+  toCreatePaymentMethod,
+  toLinkMode,
+  toSmsRecipient,
+  toWhatsAppRecipient,
+  writeClipboard,
+} from './reservations-new-confirm';
+import {
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToE164,
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
-
-interface CreatedReservationContext {
-  reservationId: string;
-  eventDate: string;
-  tableId: string;
-  customerName: string;
-  phone: string;
-  amount: number;
-  linkMode: 'square' | 'client' | null;
-}
 
 @Component({
   selector: 'app-reservations-new',
@@ -589,7 +588,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     const createPaymentStatus = usingCredit ? 'PENDING' : paymentStatus;
     const createPaymentMethod = usingCredit
       ? null
-      : this.toCreatePaymentMethod(paymentMethod);
+      : toCreatePaymentMethod(paymentMethod);
     const createDepositAmount = usingCredit ? 0 : depositAmount;
     const needsDeadline = usingCredit
       ? this.creditNeedsDeadline()
@@ -658,7 +657,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               customerName: this.form.controls.customerName.value,
               phone,
               amount: creditRemainingAmount > 0 ? creditRemainingAmount : amountDue,
-              linkMode: creditRemainingAmount > 0 ? this.toLinkMode(remainingMethod) : null,
+              linkMode: creditRemainingAmount > 0 ? toLinkMode(remainingMethod) : null,
             };
 
             this.reservationsApi
@@ -1045,21 +1044,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.isSquareMethod() || this.isClientPayMethod();
   }
 
-  private toCreatePaymentMethod(
-    method: 'cash' | 'square' | 'client'
-  ): 'cash' | 'square' | 'cashapp' | null {
-    if (method === 'cash') return 'cash';
-    if (method === 'square') return 'square';
-    return 'cashapp';
-  }
-
-  private toLinkMode(
-    method: 'cash' | 'square' | 'client'
-  ): 'square' | 'client' | null {
-    if (method === 'square' || method === 'client') return method;
-    return null;
-  }
-
   private currentLinkModeFromForm(): 'square' | 'client' | null {
     if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
       const remainingMethod = this.form.controls.remainingMethod.value;
@@ -1144,7 +1128,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   copyGeneratedPaymentLink(): void {
     const url = String(this.paymentLinkUrl ?? '').trim();
     if (!url) return;
-    this.writeClipboard(url).then((ok) => {
+    writeClipboard(url).then((ok) => {
       this.paymentLinkNotice = ok
         ? 'Link copied.'
         : 'Copy failed. Please copy manually.';
@@ -1153,16 +1137,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   openSmsShareGenerated(): void {
     if (!this.createdReservation || !this.paymentLinkUrl) return;
-    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
-    const recipient = this.toSmsRecipient(this.createdReservation.phone);
+    const body = buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    const recipient = toSmsRecipient(this.createdReservation.phone);
     const target = recipient ? `sms:${recipient}?&body=${encodeURIComponent(body)}` : `sms:?&body=${encodeURIComponent(body)}`;
     window.open(target, '_blank');
   }
 
   openWhatsAppShareGenerated(): void {
     if (!this.createdReservation || !this.paymentLinkUrl) return;
-    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
-    const recipient = this.toWhatsAppRecipient(this.createdReservation.phone);
+    const body = buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    const recipient = toWhatsAppRecipient(this.createdReservation.phone);
     const target = recipient
       ? `https://wa.me/${recipient}?text=${encodeURIComponent(body)}`
       : `https://wa.me/?text=${encodeURIComponent(body)}`;
@@ -1171,7 +1155,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   shareGeneratedPaymentLink(): void {
     if (!this.createdReservation || !this.paymentLinkUrl) return;
-    const body = this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    const body = buildShareMessage(this.createdReservation, this.paymentLinkUrl);
     if (typeof navigator !== 'undefined' && navigator.share) {
       navigator
         .share({
@@ -1188,7 +1172,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   generatedLinkShareMessage(): string {
     if (!this.createdReservation || !this.paymentLinkUrl) return '';
-    return this.buildShareMessage(this.createdReservation, this.paymentLinkUrl);
+    return buildShareMessage(this.createdReservation, this.paymentLinkUrl);
   }
 
   linkCollectionTitle(): string {
@@ -1323,34 +1307,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
     if (!Number.isFinite(amountDue) || amountDue < 0) {
       this.form.controls.amountDue.setValue(this.selectedTable?.price ?? 0, { emitEvent: false });
-    }
-  }
-
-  private buildShareMessage(ctx: CreatedReservationContext, url: string): string {
-    return `Hi ${ctx.customerName}, here is your table link for ${ctx.eventDate} table ${ctx.tableId}: ${url}`;
-  }
-
-  private toSmsRecipient(phone: string | undefined): string {
-    const raw = String(phone ?? '').trim();
-    if (!raw) return '';
-    return raw.replace(/[^\d+]/g, '');
-  }
-
-  private toWhatsAppRecipient(phone: string | undefined): string {
-    const raw = String(phone ?? '').trim();
-    if (!raw) return '';
-    return raw.replace(/\D/g, '');
-  }
-
-  private async writeClipboard(text: string): Promise<boolean> {
-    const value = String(text ?? '').trim();
-    if (!value) return false;
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
-    try {
-      await navigator.clipboard.writeText(value);
-      return true;
-    } catch {
-      return false;
     }
   }
 
