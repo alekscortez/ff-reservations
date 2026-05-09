@@ -15,6 +15,7 @@ import {
   createReservationsShared,
 } from "./services-reservations-shared.mjs";
 import { createPaymentRecordingService } from "./services-payment-recording.mjs";
+import { createHoldsService } from "./services-holds.mjs";
 
 export function createReservationsHoldsService(deps) {
   const {
@@ -170,102 +171,6 @@ export function createReservationsHoldsService(deps) {
     };
 
     return credit;
-  }
-
-  async function listTableLocks(eventDate) {
-    requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
-    const pk = `EVENTDATE#${eventDate}`;
-    const res = await ddb.send(
-      new QueryCommand({
-        TableName: HOLDS_TABLE,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": pk,
-          ":sk": "TABLE#",
-        },
-      })
-    );
-    return res.Items ?? [];
-  }
-
-  async function createHold(payload, user) {
-    requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
-    const eventDate = String(payload?.eventDate ?? "").trim();
-    const tableId = String(payload?.tableId ?? "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
-      throw httpError(400, "eventDate must be YYYY-MM-DD");
-    }
-    if (!tableId) throw httpError(400, "tableId is required");
-    await releaseOverdueReservationsForEventDate(eventDate, DEFAULT_AUTO_RELEASE_USER);
-    const eventRecord = await getEventByDate(eventDate);
-    if (!eventRecord) throw httpError(404, "Event not found for date");
-    const disabledFromFrequent = await getDisabledTablesFromFrequent(eventRecord);
-    if (
-      disabledFromFrequent.has(tableId) ||
-      (eventRecord.disabledTables ?? []).includes(tableId)
-    ) {
-      throw httpError(409, "Table is disabled for this event");
-    }
-
-    const settings = await getRuntimeSettings();
-    const holdId = randomUUID();
-    const now = nowEpoch();
-    const expiresAt = now + resolveHoldTtlSeconds(settings);
-    const holdPhoneCountry = normalizePhoneCountry(payload?.phoneCountry ?? "US");
-    const holdPhone = normalizePhoneE164(payload?.phone ?? "", holdPhoneCountry);
-    const holdPhoneCountryFinal = holdPhone
-      ? detectPhoneCountryFromE164(holdPhone) ?? holdPhoneCountry
-      : null;
-    const item = {
-      PK: `EVENTDATE#${eventDate}`,
-      SK: `TABLE#${tableId}`,
-      lockType: "HOLD",
-      holdId,
-      expiresAt,
-      createdAt: now,
-      createdBy: user,
-      customerName: payload?.customerName ?? null,
-      phone: holdPhone || null,
-      phoneCountry: holdPhoneCountryFinal,
-    };
-
-    try {
-      await ddb.send(
-        new PutCommand({
-          TableName: HOLDS_TABLE,
-          Item: item,
-          ConditionExpression:
-            "attribute_not_exists(PK) AND attribute_not_exists(SK) OR (lockType = :hold AND expiresAt < :now)",
-          ExpressionAttributeValues: {
-            ":hold": "HOLD",
-            ":now": now,
-          },
-        })
-      );
-    } catch (err) {
-      if (err?.name === "ConditionalCheckFailedException") {
-        throw httpError(409, "Table is already held or reserved");
-      }
-      throw err;
-    }
-
-    return item;
-  }
-
-  async function releaseHold(eventDate, tableId) {
-    requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
-    await ddb.send(
-      new DeleteCommand({
-        TableName: HOLDS_TABLE,
-        Key: { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` },
-        ConditionExpression: "lockType = :hold",
-        ExpressionAttributeValues: { ":hold": "HOLD" },
-      })
-    );
-  }
-
-  async function listHolds(eventDate) {
-    return await listTableLocks(eventDate);
   }
 
   async function listReservations(eventDate) {
@@ -1222,6 +1127,14 @@ export function createReservationsHoldsService(deps) {
       checkInPass: checkInPass?.pass ?? null,
     };
   }
+
+  // Hold lifecycle extracted to services-holds.mjs. Wired in here so the
+  // closure can pass the local releaseOverdueReservationsForEventDate
+  // (createHold kicks an overdue sweep before allocating the lock).
+  const holds = createHoldsService(deps, shared, {
+    releaseOverdueReservationsForEventDate,
+  });
+  const { listTableLocks, createHold, releaseHold, listHolds } = holds;
 
   return {
     listTableLocks,
