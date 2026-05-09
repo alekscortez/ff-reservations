@@ -293,7 +293,7 @@
       "available": "Disponible — color por sección:",
       "unavailable": "Apartada / reservada / inhabilitada"
     },
-    "heldTable": "Apartando {{section}}-{{id}}",
+    "heldTable": "Apartando {{id}}",
     "holdExpired": "EXPIRADO — vuelve a elegir una mesa",
     "confirmRelease": "¿Liberar este apartado? Tendrás que elegir mesa otra vez.",
     "confirmSwitchEvent": "Cambiar de evento libera el apartado actual. ¿Continuar?",

@@ -293,7 +293,7 @@
       "available": "Available — color by section:",
       "unavailable": "Held / reserved / disabled"
     },
-    "heldTable": "Holding {{section}}-{{id}}",
+    "heldTable": "Holding {{id}}",
     "holdExpired": "EXPIRED — restart by picking a table",
     "confirmRelease": "Release this hold? You'll have to pick a table again.",
     "confirmSwitchEvent": "Switching events releases the current hold. Continue?",
