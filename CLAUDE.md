@@ -37,9 +37,16 @@ Note: `backend/` was historically gitignored; only `index.mjs` was tracked. Phas
 ```bash
 CI=true npm run build                    # prod build (warns on qrcode CommonJS — known)
 npx tsc -p tsconfig.app.json --noEmit    # typecheck
-npm run test -- --watch=false            # unit tests (vitest)
+npm run test -- --watch=false            # unit tests (Angular / Vitest, src/**/*.spec.ts)
+npm run test:backend                     # backend pure-fn tests (node:test, backend/**/*.test.mjs)
+npm run test:all                         # both, in sequence
 bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profile)
 ```
+
+> Backend tests use Node 22's built-in `node:test` runner (no extra runner
+> dep). `@aws-sdk/lib-dynamodb` is a devDep at the repo root so test files
+> can resolve modules that import it; the production Lambda doesn't bundle
+> it because the AWS Lambda nodejs22.x runtime ships @aws-sdk/* v3 modules.
 
 ## Auth model — read this before touching auth
 
