@@ -380,6 +380,9 @@
     "holdValidation": {
       "lost": "Tu apartado anterior expiró o se liberó en otro dispositivo. Elige una mesa de nuevo para continuar."
     },
+    "deadlineValidation": {
+      "past": "La fecha límite de pago debe ser futura ({{tz}})."
+    },
     "pastEvents": {
       "button": "Eventos pasados ({{count}})",
       "title": "Eventos pasados",

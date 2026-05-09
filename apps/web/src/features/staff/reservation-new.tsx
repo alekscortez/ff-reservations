@@ -50,6 +50,31 @@ function nextDayDateString(): string {
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
+
+// Build a YYYY-MM-DDTHH:mm:ss string representing "now" in the given IANA tz.
+// Used for string-comparison against staff-typed deadlines. Falls back to
+// Date#toISOString slice on tz errors.
+function nowInTimeZoneLocalIso(tz: string, when: Date = new Date()): string {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = Object.fromEntries(
+      fmt.formatToParts(when).map((p) => [p.type, p.value])
+    );
+    const hh = parts.hour === '24' ? '00' : parts.hour;
+    return `${parts.year}-${parts.month}-${parts.day}T${hh}:${parts.minute}:${parts.second}`;
+  } catch {
+    return when.toISOString().slice(0, 19);
+  }
+}
 const HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
 const FILTERS_STORAGE_KEY = 'ff_new_res_filters_v1';
 
@@ -613,9 +638,11 @@ export function ReservationNew() {
     }
   }
 
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
     setCreditApplyError(null);
+    setDeadlineError(null);
     // When applying a credit, the reservation is created as PENDING with no
     // deposit; the credit lands as a separate payment immediately after via
     // PUT /reservations/{id}/payment with method=credit. The remainder (if any)
@@ -628,6 +655,18 @@ export function ReservationNew() {
     const paymentDeadlineAt = wantsDeadline
       ? `${form.paymentDeadlineDate}T${form.paymentDeadlineTime}:00`
       : undefined;
+    // Pre-validate the deadline is in the future relative to the operating
+    // timezone. Backend will reject otherwise but we surface it inline so
+    // staff don't have to wait for the network round-trip.
+    if (paymentDeadlineAt) {
+      const nowIso = nowInTimeZoneLocalIso(operatingTz);
+      if (paymentDeadlineAt <= nowIso) {
+        setDeadlineError(
+          t('reservationNew.deadlineValidation.past', { tz: operatingTz })
+        );
+        return;
+      }
+    }
     const status: PaymentStatusChoice = useCredit
       ? 'PENDING'
       : isDigital
@@ -1467,6 +1506,14 @@ export function ReservationNew() {
                       time: `${pad2(defaultDeadlineHour)}:${pad2(defaultDeadlineMinute)}`,
                     })}
                   </p>
+                  {deadlineError && (
+                    <p
+                      className="col-span-2 text-xs text-destructive"
+                      role="alert"
+                    >
+                      {deadlineError}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

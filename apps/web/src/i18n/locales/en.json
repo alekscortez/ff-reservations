@@ -380,6 +380,9 @@
     "holdValidation": {
       "lost": "Your previous hold expired or was released on another device. Pick a table again to continue."
     },
+    "deadlineValidation": {
+      "past": "Payment deadline must be in the future ({{tz}})."
+    },
     "pastEvents": {
       "button": "Past events ({{count}})",
       "title": "Past events",
