@@ -16,6 +16,7 @@ const STAFF_NAV: NavEntry[] = [
   { to: '/staff/reservations', labelKey: 'reservations.listTitle' },
   { to: '/staff/holds', labelKey: 'holds.listTitle' },
   { to: '/staff/frequent-clients', labelKey: 'frequentClients.listTitle' },
+  { to: '/staff/clients', labelKey: 'clientsCrm.listTitle' },
   { to: '/staff/packages', labelKey: 'packages.listTitle' },
 ];
 

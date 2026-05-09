@@ -113,6 +113,26 @@
       "auditVerboseLogging": "Verbose audit logging"
     }
   },
+  "clientsCrm": {
+    "listTitle": "Customer CRM",
+    "searchPlaceholder": "Search by phone (digits only or +E.164)",
+    "searchCta": "Search",
+    "searchHint": "Type at least 3 digits and hit Search to find customers across all events.",
+    "selectHint": "Select a result on the left to see details.",
+    "noResults": "No customers match this phone.",
+    "field": {
+      "totalReservations": "Reservations",
+      "totalSpend": "Total spend",
+      "lastReservation": "Last reservation",
+      "country": "Country"
+    },
+    "credits": {
+      "heading": "Reschedule credits",
+      "empty": "No credits on file.",
+      "used": "{{used}} used",
+      "from": "from"
+    }
+  },
   "publicMap": {
     "title": "Live Table Availability",
     "totalTables": "Total tables",

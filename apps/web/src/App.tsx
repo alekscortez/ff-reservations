@@ -16,6 +16,7 @@ import { ReservationDetail } from '@/features/staff/reservation-detail';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
 import { StaffHolds } from '@/features/staff/holds';
+import { StaffClients } from '@/features/staff/clients';
 import { AdminUsers } from '@/features/admin/users';
 import { AdminUserForm } from '@/features/admin/user-form';
 import { AdminSettings } from '@/features/admin/settings';
@@ -72,6 +73,7 @@ export function App() {
           <Route path="/staff/packages/new" element={<PackageForm />} />
           <Route path="/staff/packages/:packageId/edit" element={<PackageForm />} />
           <Route path="/staff/holds" element={<StaffHolds />} />
+          <Route path="/staff/clients" element={<StaffClients />} />
         </Route>
 
         <Route element={<AdminShell />}>

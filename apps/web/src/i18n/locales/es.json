@@ -113,6 +113,26 @@
       "auditVerboseLogging": "Logs de auditoría verbosos"
     }
   },
+  "clientsCrm": {
+    "listTitle": "CRM de clientes",
+    "searchPlaceholder": "Buscar por teléfono (dígitos o +E.164)",
+    "searchCta": "Buscar",
+    "searchHint": "Escribe al menos 3 dígitos y presiona Buscar para encontrar clientes a través de todos los eventos.",
+    "selectHint": "Selecciona un resultado a la izquierda para ver los detalles.",
+    "noResults": "Ningún cliente coincide con este teléfono.",
+    "field": {
+      "totalReservations": "Reservaciones",
+      "totalSpend": "Total gastado",
+      "lastReservation": "Última reservación",
+      "country": "País"
+    },
+    "credits": {
+      "heading": "Créditos para reprogramar",
+      "empty": "Sin créditos en archivo.",
+      "used": "{{used}} usado",
+      "from": "de"
+    }
+  },
   "publicMap": {
     "title": "Disponibilidad de mesas en vivo",
     "totalTables": "Mesas totales",
