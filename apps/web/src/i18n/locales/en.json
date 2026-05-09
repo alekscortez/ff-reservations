@@ -349,6 +349,12 @@
       "searching": "Searching customers…",
       "noMatch": "No match found. This will create a new client."
     },
+    "credit": {
+      "applyToggle": "Apply reschedule credit ({{count}} available)",
+      "summary": "{{applied}} from credit · {{remaining}} remaining",
+      "remainderHint": "Pick a payment method below for the remainder; collect via Square link after create.",
+      "applyFailed": "Reservation created, but applying the credit failed: {{error}}"
+    },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation"
   },

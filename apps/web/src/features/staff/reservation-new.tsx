@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/lib/api-client';
+import { useApiClient } from '@/lib/use-api-client';
 import type { ReservationItem } from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
@@ -13,7 +14,12 @@ import {
   useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
-import { useCrmSearch, type CrmClient } from '@/lib/api/clients';
+import {
+  useCrmSearch,
+  useRescheduleCredits,
+  type CrmClient,
+  type RescheduleCredit,
+} from '@/lib/api/clients';
 import { TableMap } from '@/components/table-map';
 
 type PaymentMethodChoice = 'cash' | 'square' | 'cashapp';
@@ -199,6 +205,7 @@ export function ReservationNew() {
 
   const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
   const watchedPhone = watch('phone');
+  const watchedPhoneCountry = watch('phoneCountry');
   const [debouncedPhone, setDebouncedPhone] = useState('');
   useEffect(() => {
     const id = setTimeout(() => setDebouncedPhone(watchedPhone.trim()), 350);
@@ -210,6 +217,61 @@ export function ReservationNew() {
     debouncedPhone.replace(/\D/g, '').length >= 3 && !createdReservation;
   const noCrmMatch = showCrmPanel && !crmSearch.isLoading && crmMatches.length === 0;
 
+  // Credits lookup: only fires once we have a CRM-confirmed phone (i.e. at least
+  // one match in the search). Backend keys credits on (phone, phoneCountry).
+  const crmConfirmed = crmMatches.length > 0;
+  const creditsQuery = useRescheduleCredits(
+    crmConfirmed ? debouncedPhone : null,
+    watchedPhoneCountry
+  );
+  const availableCredits = useMemo<RescheduleCredit[]>(() => {
+    return (creditsQuery.data ?? []).filter((c) => {
+      if (c.status !== 'AVAILABLE') return false;
+      const remaining = Number(c.amount ?? 0) - Number(c.amountUsed ?? 0);
+      return remaining > 0.005;
+    });
+  }, [creditsQuery.data]);
+  const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
+  // Auto-select the largest credit when the panel first appears.
+  useEffect(() => {
+    if (availableCredits.length === 0) {
+      if (selectedCreditId) setSelectedCreditId(null);
+      return;
+    }
+    if (selectedCreditId && availableCredits.some((c) => c.creditId === selectedCreditId)) {
+      return;
+    }
+    const sorted = [...availableCredits].sort((a, b) => {
+      const ar = Number(a.amount ?? 0) - Number(a.amountUsed ?? 0);
+      const br = Number(b.amount ?? 0) - Number(b.amountUsed ?? 0);
+      return br - ar;
+    });
+    setSelectedCreditId(sorted[0].creditId);
+  }, [availableCredits, selectedCreditId]);
+  const selectedCredit = useMemo(
+    () => availableCredits.find((c) => c.creditId === selectedCreditId) ?? null,
+    [availableCredits, selectedCreditId]
+  );
+  const [creditEnabled, setCreditEnabled] = useState(false);
+  // If credits disappear (phone change), turn off the toggle.
+  useEffect(() => {
+    if (availableCredits.length === 0 && creditEnabled) setCreditEnabled(false);
+  }, [availableCredits.length, creditEnabled]);
+  const creditRemainingOnSelected = selectedCredit
+    ? Math.max(
+        0,
+        Number(selectedCredit.amount ?? 0) - Number(selectedCredit.amountUsed ?? 0)
+      )
+    : 0;
+  const creditApplied = creditEnabled && selectedCredit
+    ? Math.min(creditRemainingOnSelected, watchedAmountDue || 0)
+    : 0;
+  const creditRemainderDue = creditEnabled
+    ? Math.max(0, (watchedAmountDue || 0) - creditApplied)
+    : watchedAmountDue || 0;
+  const apiClient = useApiClient();
+  const [creditApplyError, setCreditApplyError] = useState<string | null>(null);
+
   function applyCrmMatch(client: CrmClient) {
     if (client.name) setValue('customerName', client.name, { shouldDirty: true });
     if (client.phone) setValue('phone', client.phone, { shouldDirty: true });
@@ -220,12 +282,24 @@ export function ReservationNew() {
 
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
-    const wantsDeadline =
-      paymentDeadlineEnabled || isDigital || cashRequiresDeadline;
+    setCreditApplyError(null);
+    // When applying a credit, the reservation is created as PENDING with no
+    // deposit; the credit lands as a separate payment immediately after via
+    // PUT /reservations/{id}/payment with method=credit. The remainder (if any)
+    // is collected through the post-create Square link panel.
+    const useCredit = creditEnabled && creditApplied > 0;
+    const amountDue = Number(form.amountDue) || 0;
+    const wantsDeadline = useCredit
+      ? amountDue - creditApplied > 0.005
+      : paymentDeadlineEnabled || isDigital || cashRequiresDeadline;
     const paymentDeadlineAt = wantsDeadline
       ? `${form.paymentDeadlineDate}T${form.paymentDeadlineTime}:00`
       : undefined;
-    const status: PaymentStatusChoice = isDigital ? 'PENDING' : form.paymentStatus;
+    const status: PaymentStatusChoice = useCredit
+      ? 'PENDING'
+      : isDigital
+        ? 'PENDING'
+        : form.paymentStatus;
     const created = await createReservation.mutateAsync({
       eventDate,
       tableId: hold.tableId,
@@ -235,14 +309,36 @@ export function ReservationNew() {
       phoneCountry: form.phoneCountry,
       paymentMethod: form.paymentMethod,
       paymentStatus: status,
-      amountDue: Number(form.amountDue) || 0,
-      depositAmount: Number(form.depositAmount) || 0,
+      amountDue,
+      depositAmount: useCredit ? 0 : Number(form.depositAmount) || 0,
       packageId: form.packageId || undefined,
       receiptNumber: form.receiptNumber.trim() || undefined,
       paymentDeadlineAt,
       paymentDeadlineTz: wantsDeadline ? DEFAULT_DEADLINE_TZ : undefined,
     });
-    setCreatedReservation(created);
+    if (useCredit && selectedCredit) {
+      try {
+        const res = await apiClient.put<{ item: ReservationItem }>(
+          `/reservations/${created.reservationId}/payment`,
+          {
+            eventDate,
+            amount: creditApplied,
+            method: 'credit',
+            creditId: selectedCredit.creditId,
+          }
+        );
+        setCreatedReservation(res.item ?? created);
+      } catch (err) {
+        const msg =
+          err instanceof ApiError
+            ? `${err.status}: ${err.message}`
+            : (err as Error)?.message ?? 'Failed to apply credit';
+        setCreditApplyError(msg);
+        setCreatedReservation(created);
+      }
+    } else {
+      setCreatedReservation(created);
+    }
     setHold(null);
   });
 
@@ -255,8 +351,9 @@ export function ReservationNew() {
       ? `${createHold.error.status}: ${createHold.error.message}`
       : null;
 
-  const depositValid =
-    isCash && watchedStatus === 'COURTESY'
+  const depositValid = creditEnabled
+    ? true
+    : isCash && watchedStatus === 'COURTESY'
       ? true
       : isCash && watchedStatus === 'PAID'
         ? Math.abs(watchedDeposit - watchedAmountDue) < 0.01
@@ -439,7 +536,11 @@ export function ReservationNew() {
                 reservation={createdReservation}
                 isDigital={
                   createdReservation.paymentMethod === 'square' ||
-                  createdReservation.paymentMethod === 'cashapp'
+                  createdReservation.paymentMethod === 'cashapp' ||
+                  // Backend nulls paymentMethod when status is PENDING (digital
+                  // flow + credit-with-remainder); fall back to the form choice.
+                  ((createdReservation.paymentMethod ?? null) === null &&
+                    (watchedMethod === 'square' || watchedMethod === 'cashapp'))
                 }
                 onDone={() =>
                   navigate(
@@ -531,6 +632,61 @@ export function ReservationNew() {
               </div>
             )}
 
+            {availableCredits.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+                <label className="flex items-start gap-2 text-brand-900">
+                  <input
+                    type="checkbox"
+                    checked={creditEnabled}
+                    onChange={(e) => setCreditEnabled(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border"
+                  />
+                  <span className="flex-1">
+                    <span className="font-semibold">
+                      {t('reservationNew.credit.applyToggle', {
+                        count: availableCredits.length,
+                      })}
+                    </span>
+                  </span>
+                </label>
+                {creditEnabled && (
+                  <div className="mt-2 space-y-2 pl-6">
+                    {availableCredits.length > 1 && (
+                      <select
+                        value={selectedCreditId ?? ''}
+                        onChange={(e) => setSelectedCreditId(e.target.value || null)}
+                        className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      >
+                        {availableCredits.map((c) => {
+                          const remaining =
+                            Number(c.amount ?? 0) - Number(c.amountUsed ?? 0);
+                          return (
+                            <option key={c.creditId} value={c.creditId}>
+                              {moneyFormatter.format(remaining)}
+                              {c.expiresAt ? ` · exp ${c.expiresAt}` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                    {selectedCredit && (
+                      <p className="text-xs text-brand-700">
+                        {t('reservationNew.credit.summary', {
+                          applied: moneyFormatter.format(creditApplied),
+                          remaining: moneyFormatter.format(creditRemainderDue),
+                        })}
+                      </p>
+                    )}
+                    {creditRemainderDue > 0.005 && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('reservationNew.credit.remainderHint')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {(packages ?? []).filter((p) => p.status === 'ACTIVE').length > 0 && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-brand-900" htmlFor="packageId">
@@ -605,7 +761,7 @@ export function ReservationNew() {
               </p>
             )}
 
-            {isCash && (
+            {isCash && !creditEnabled && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label
@@ -664,7 +820,7 @@ export function ReservationNew() {
               </div>
             )}
 
-            {isDigital && (
+            {isDigital && !creditEnabled && (
               <div>
                 <label
                   className="mb-1 block text-sm font-medium text-brand-900"
@@ -686,8 +842,8 @@ export function ReservationNew() {
               </div>
             )}
 
-            <div>
-              {!deadlineRequired && (
+            <div className={creditEnabled && creditRemainderDue <= 0.005 ? 'hidden' : ''}>
+              {!deadlineRequired && !creditEnabled && (
                 <label className="mb-2 flex items-center gap-2 text-sm text-brand-900">
                   <input
                     type="checkbox"
@@ -758,6 +914,11 @@ export function ReservationNew() {
                 {submitError}
               </p>
             )}
+            {creditApplyError && (
+              <p className="text-sm text-destructive" role="alert">
+                {t('reservationNew.credit.applyFailed', { error: creditApplyError })}
+              </p>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <button
@@ -810,9 +971,12 @@ function PostCreatePanel({
   );
 
   const linkUrl = createLink.data?.paymentLinkUrl ?? reservation.paymentLinkUrl ?? '';
+  const paidTotal = Array.isArray(reservation.payments)
+    ? reservation.payments.reduce((sum, p) => sum + (Number(p?.amount) || 0), 0)
+    : Number(reservation.depositAmount ?? 0);
   const remaining = Math.max(
     0,
-    Number(reservation.amountDue ?? 0) - Number(reservation.depositAmount ?? 0)
+    Number(reservation.amountDue ?? 0) - paidTotal
   );
 
   const message = t('reservationNew.share.message', {
