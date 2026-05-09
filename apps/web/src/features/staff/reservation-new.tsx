@@ -1299,38 +1299,32 @@ export function ReservationNew() {
           style={kbInset > 0 ? { paddingBottom: `${kbInset}px` } : undefined}
         >
           <div className="relative my-4 max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-background p-5 pb-28 shadow-xl sm:pb-5">
-            <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-3">
-              {hold && heldTable ? (
-                <div>
-                  <p className="text-sm font-semibold text-brand-900">
-                    {t('reservationNew.heldTable', {
-                      section: heldTable.section,
-                      id: heldTable.id,
-                    })}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
+            <header className="mb-4 flex items-start justify-between gap-3 pb-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {createdReservation
+                    ? t('reservationNew.postCreate.heading')
+                    : t('reservationNew.customerHeading')}
+                </h2>
+                {hold && heldTable && !createdReservation && (
+                  <p className="text-sm text-muted-foreground">
+                    {t('reservations.tableShort')} {heldTable.id} ·{' '}
                     {moneyFormatter.format(heldTable.price)}
                   </p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm font-semibold text-brand-900">
-                    {t('reservationNew.postCreate.heading')}
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 {hold && !createdReservation && (
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-mono ${
                       expired
                         ? 'border-destructive bg-danger-100/40 text-destructive'
-                        : 'border-border bg-muted/40 text-brand-900'
+                        : 'border-border bg-muted/40 text-foreground'
                     }`}
                   >
                     {expired
                       ? t('reservationNew.holdExpired')
-                      : `${Math.floor(remainingSec / 60)}m ${String(remainingSec % 60).padStart(2, '0')}s`}
+                      : `${Math.floor(remainingSec / 60)}:${String(remainingSec % 60).padStart(2, '0')}`}
                   </span>
                 )}
                 <button
@@ -1343,7 +1337,7 @@ export function ReservationNew() {
                     handleReleaseHold();
                   }}
                   aria-label={t('reservationNew.closeModal')}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm text-brand-900 hover:bg-muted"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm text-foreground hover:bg-muted"
                 >
                   ✕
                 </button>
@@ -1405,9 +1399,6 @@ export function ReservationNew() {
 
             {hold && heldTable && !expired && !createdReservation && (
               <form onSubmit={onSubmit} className="space-y-4">
-                <h2 className="text-lg font-semibold text-brand-900">
-                  {t('reservationNew.customerHeading')}
-                </h2>
             <div className="grid grid-cols-[120px_1fr] gap-3">
               <div>
                 <label
@@ -1450,38 +1441,42 @@ export function ReservationNew() {
               />
             </div>
 
-            {showCrmPanel && (
-              <div className="rounded-md border border-border bg-muted/30 p-2">
-                {crmSearch.isLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t('reservationNew.crm.searching')}
-                  </p>
-                ) : noCrmMatch ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t('reservationNew.crm.noMatch')}
-                  </p>
-                ) : (
-                  <ul className="space-y-1">
-                    {crmMatches.slice(0, 5).map((c) => (
-                      <li key={c.phone}>
-                        <button
-                          type="button"
-                          onClick={() => applyCrmMatch(c)}
-                          className="flex w-full items-baseline justify-between gap-2 rounded-md border border-border bg-background px-2 py-1 text-left text-sm hover:border-primary"
-                        >
-                          <span className="font-medium text-brand-900">
-                            {c.name ?? '—'}
-                          </span>
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {formatPhoneForDisplay(c.phone)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+            {/* Suppress the panel entirely when there's no actionable content
+                (loading, no-match notice, or actual matches). Without this it
+                renders as an empty grey strip while the user types 3-9 digits. */}
+            {showCrmPanel &&
+              (crmSearch.isLoading || noCrmMatch || crmMatches.length > 0) && (
+                <div className="rounded-md border border-border bg-muted/30 p-2">
+                  {crmSearch.isLoading ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('reservationNew.crm.searching')}
+                    </p>
+                  ) : noCrmMatch ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('reservationNew.crm.noMatch')}
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {crmMatches.slice(0, 5).map((c) => (
+                        <li key={c.phone}>
+                          <button
+                            type="button"
+                            onClick={() => applyCrmMatch(c)}
+                            className="flex w-full items-baseline justify-between gap-2 rounded-md border border-border bg-background px-2 py-1 text-left text-sm hover:border-primary"
+                          >
+                            <span className="font-medium text-brand-900">
+                              {c.name ?? '—'}
+                            </span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              {formatPhoneForDisplay(c.phone)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
             {availableCredits.length > 0 && (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -1818,17 +1813,7 @@ export function ReservationNew() {
               </p>
             )}
 
-            <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-col-reverse gap-2 border-t border-border bg-background px-5 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 sm:flex-row sm:items-center sm:justify-between">
-              {heldTable && (
-                <p className="text-xs text-muted-foreground">
-                  {t('reservationNew.heldTable', {
-                    section: heldTable.section,
-                    id: heldTable.id,
-                  })}
-                  {' · '}
-                  {moneyFormatter.format(Number(watchedAmountDue) || 0)}
-                </p>
-              )}
+            <div className="sticky bottom-0 -mx-5 -mb-5 flex justify-end border-t border-border bg-background px-5 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3">
               <button
                 type="submit"
                 disabled={
