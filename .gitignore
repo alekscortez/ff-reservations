@@ -52,6 +52,9 @@ backend/lambda/code_url.txt
 backend/cognito-pre-token-gen/function.zip
 backend/cognito-customer-auth/function.zip
 
+# Angular CLI build cache (per-project, regenerated on every build)
+.angular/
+
 # TypeScript incremental
 **/*.tsbuildinfo
 

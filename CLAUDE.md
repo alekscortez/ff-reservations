@@ -170,6 +170,13 @@ There is no per-environment config file yet.
 
 - Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public routes).**
 - Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards.
+- Touching `reservations-new.ts` (the staff Hold & Reserve page) → it was originally ~2k lines; pure helpers were extracted into 5 sibling modules (the old monolith is now ~1,683 lines of orchestration + UI):
+  - **`reservations-new-utils.ts`** — phone normalization, date/time formatters, hour/minute clamping, `normalizeSectionMapColors`. Template-bound functions (`isThisWeek`, `formatEventDate`) are re-exposed on the component as 1-line aliases.
+  - **`reservations-new-active-hold.ts`** — `ActiveHoldSession` interface + `localStorage` persistence (read/write/clear) + pure lookup helpers (`findActiveHoldLock`, `extractTableIdFromHoldLock`). Lets staff resume a hold after navigation/refresh.
+  - **`reservations-new-filters.ts`** — table list/map filter state: status enum + section + query, persistence in `localStorage`, pure `applyTableFilters`, label formatters.
+  - **`reservations-new-credits.ts`** — reschedule-credit math: total remaining (NaN-tolerant), label formatting, applied/remaining amount math with NaN guards.
+  - **`reservations-new-confirm.ts`** — `CreatedReservationContext` interface + payment-method/link-mode mappers + share-message builder + sms/wa.me phone normalizers + async `writeClipboard`. The 230-line orchestration body of `confirmReservation` stays in the component (validation preflight is interleaved with state mutations — extracting it would change visible side-effect order).
+  Each sibling has co-located `*.spec.ts` (Vitest, no Angular TestBed). Total: 130 specs covering the helper modules.
 - Touching reservation state → pick the right module (the old 2.6k-line monolith was split 2026-05-09):
   - **`services-reservations.mjs`** — reservation CRUD (`createReservation`, `cancelReservation`, `releaseOverdueReservations*`, list / read history) + the 3 cancellation resolution paths
   - **`services-payment-recording.mjs`** — `addReservationPayment` (the credit-redemption TransactWrite + `depositAmount` CAS for audit C3 lives here) + payment-link / Cash App session state mutators
