@@ -351,6 +351,7 @@
       "searching": "Buscando clientes…",
       "noMatch": "Sin coincidencias. Se creará un nuevo cliente."
     },
+    "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación"
   },
   "reservationDetail": {

@@ -320,45 +320,7 @@ export function ReservationNew() {
           )}
         </section>
 
-        {hold && heldTable ? (
-          <section
-            className={`rounded-lg border-2 p-4 ${
-              expired ? 'border-destructive bg-danger-100/40' : 'border-primary bg-primary/5'
-            }`}
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-brand-900">
-                  {t('reservationNew.heldTable', {
-                    section: heldTable.section,
-                    id: heldTable.id,
-                  })}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {moneyFormatter.format(heldTable.price)}
-                </p>
-              </div>
-              <div className="text-right text-sm">
-                {expired ? (
-                  <span className="font-semibold text-destructive">
-                    {t('reservationNew.holdExpired')}
-                  </span>
-                ) : (
-                  <span className="font-mono text-brand-900">
-                    {Math.floor(remainingSec / 60)}m {String(remainingSec % 60).padStart(2, '0')}s
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleReleaseHold}
-                  className="ml-3 text-xs text-destructive hover:underline"
-                >
-                  {t('holds.release')}
-                </button>
-              </div>
-            </div>
-          </section>
-        ) : eventDate ? (
+        {eventDate ? (
           <section className="rounded-lg border border-border bg-background p-4">
             <div className="flex items-baseline justify-between">
               <h2 className="text-sm font-semibold text-brand-900">
@@ -422,29 +384,89 @@ export function ReservationNew() {
           </section>
         ) : null}
 
-        {createdReservation && (
-          <PostCreatePanel
-            reservation={createdReservation}
-            isDigital={createdReservation.paymentMethod === 'square' || createdReservation.paymentMethod === 'cashapp'}
-            onDone={() =>
-              navigate(
-                `/staff/reservations/${createdReservation.eventDate}/${createdReservation.reservationId}`
-              )
-            }
-            onAnother={() => {
-              setCreatedReservation(null);
-            }}
-          />
-        )}
+      </div>
 
-        {hold && heldTable && !expired && !createdReservation && (
-          <form
-            onSubmit={onSubmit}
-            className="space-y-4 rounded-lg border border-border bg-background p-5"
-          >
-            <h2 className="text-lg font-semibold text-brand-900">
-              {t('reservationNew.customerHeading')}
-            </h2>
+      {(createdReservation || (hold && heldTable)) && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative my-4 w-full max-w-3xl rounded-2xl bg-background p-5 shadow-xl">
+            <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-3">
+              {hold && heldTable ? (
+                <div>
+                  <p className="text-sm font-semibold text-brand-900">
+                    {t('reservationNew.heldTable', {
+                      section: heldTable.section,
+                      id: heldTable.id,
+                    })}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {moneyFormatter.format(heldTable.price)}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-semibold text-brand-900">
+                    {t('reservationNew.postCreate.heading')}
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                {hold && !createdReservation && (
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-mono ${
+                      expired
+                        ? 'border-destructive bg-danger-100/40 text-destructive'
+                        : 'border-border bg-muted/40 text-brand-900'
+                    }`}
+                  >
+                    {expired
+                      ? t('reservationNew.holdExpired')
+                      : `${Math.floor(remainingSec / 60)}m ${String(remainingSec % 60).padStart(2, '0')}s`}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (createdReservation) {
+                      setCreatedReservation(null);
+                      return;
+                    }
+                    handleReleaseHold();
+                  }}
+                  aria-label={t('reservationNew.closeModal')}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm text-brand-900 hover:bg-muted"
+                >
+                  ✕
+                </button>
+              </div>
+            </header>
+
+            {createdReservation && (
+              <PostCreatePanel
+                reservation={createdReservation}
+                isDigital={
+                  createdReservation.paymentMethod === 'square' ||
+                  createdReservation.paymentMethod === 'cashapp'
+                }
+                onDone={() =>
+                  navigate(
+                    `/staff/reservations/${createdReservation.eventDate}/${createdReservation.reservationId}`
+                  )
+                }
+                onAnother={() => {
+                  setCreatedReservation(null);
+                }}
+              />
+            )}
+
+            {hold && heldTable && !expired && !createdReservation && (
+              <form onSubmit={onSubmit} className="space-y-4">
+                <h2 className="text-lg font-semibold text-brand-900">
+                  {t('reservationNew.customerHeading')}
+                </h2>
             <div>
               <label className="mb-1 block text-sm font-medium text-brand-900" htmlFor="customerName">
                 {t('reservationNew.field.customerName')} *
@@ -765,7 +787,9 @@ export function ReservationNew() {
             </div>
           </form>
         )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -351,6 +351,7 @@
       "searching": "Searching customers…",
       "noMatch": "No match found. This will create a new client."
     },
+    "closeModal": "Close",
     "confirmCta": "Confirm reservation"
   },
   "reservationDetail": {
