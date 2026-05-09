@@ -21,6 +21,7 @@
 // Deployment lives in this folder's README.md.
 
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import { randomInt, timingSafeEqual } from "node:crypto";
 
 const sns = new SNSClient({});
 
@@ -122,9 +123,20 @@ async function createAuthChallenge(event) {
 }
 
 function verifyAuthChallengeResponse(event) {
-  const expected = event.request.privateChallengeParameters?.answer;
-  const actual = event.request.challengeAnswer;
-  event.response.answerCorrect = Boolean(expected) && expected === actual;
+  const expected = String(event.request.privateChallengeParameters?.answer ?? "");
+  const actual = String(event.request.challengeAnswer ?? "");
+  // Constant-time compare. Cognito network round-trip dwarfs any timing
+  // signal in practice, but using timingSafeEqual costs nothing and keeps
+  // the comparison hygiene-correct for any future reuse of this Lambda.
+  if (!expected || expected.length !== actual.length) {
+    event.response.answerCorrect = false;
+    return event;
+  }
+  const expectedBuf = Buffer.from(expected, "utf8");
+  const actualBuf = Buffer.from(actual, "utf8");
+  event.response.answerCorrect =
+    expectedBuf.length === actualBuf.length &&
+    timingSafeEqual(expectedBuf, actualBuf);
   return event;
 }
 
@@ -137,7 +149,8 @@ function readPriorOtpFromSession(session) {
 }
 
 function generateOtp() {
-  return String(Math.floor(100_000 + Math.random() * 900_000));
+  // CSPRNG: Math.random() is predictable from a leaked output stream.
+  return String(randomInt(100_000, 1_000_000));
 }
 
 async function sendOtpSms(phone, code) {

@@ -1,12 +1,13 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, Renderer2, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { AuthService } from '../../auth/auth.service';
 import { Subscription, catchError, filter, map, of, switchMap } from 'rxjs';
 import { EventsService } from '../../http/events.service';
 import { ReservationsService } from '../../http/reservations.service';
 import { EventItem } from '../../../shared/models/event.model';
 import { ReservationItem } from '../../../shared/models/reservation.model';
+import { localIsoInTimeZoneToEpochMs } from '../../../shared/datetime';
 
 @Component({
   selector: 'app-topbar',
@@ -19,6 +20,9 @@ export class Topbar implements OnInit, OnDestroy {
   private router = inject(Router);
   private eventsApi = inject(EventsService);
   private reservationsApi = inject(ReservationsService);
+  private renderer = inject(Renderer2);
+  private doc = inject(DOCUMENT);
+  private mobileNavOpen = false;
 
   isAuthenticated$ = this.auth.isAuthenticated$();
 
@@ -68,8 +72,10 @@ export class Topbar implements OnInit, OnDestroy {
   }
 
   toggleMobileNav(): void {
-    document.body.classList.toggle('mobile-nav-open');
-    document.documentElement.classList.toggle('mobile-nav-open');
+    this.mobileNavOpen = !this.mobileNavOpen;
+    const apply = this.mobileNavOpen ? 'addClass' : 'removeClass';
+    this.renderer[apply](this.doc.body, 'mobile-nav-open');
+    this.renderer[apply](this.doc.documentElement, 'mobile-nav-open');
   }
 
   toggleQuickActions(): void {
@@ -211,8 +217,15 @@ export class Topbar implements OnInit, OnDestroy {
       if (status !== 'CONFIRMED') continue;
       if (paymentStatus !== 'PENDING' && paymentStatus !== 'PARTIAL') continue;
 
-      const deadlineMs = Date.parse(String(reservation?.paymentDeadlineAt ?? ''));
-      if (!Number.isFinite(deadlineMs)) continue;
+      // paymentDeadlineAt is a "local-ISO" string interpreted in
+      // paymentDeadlineTz (server-defined operating zone). Date.parse would
+      // interpret it in the *browser's* zone — wrong for any staff member
+      // not in CST. localIsoInTimeZoneToEpochMs respects the source zone.
+      const deadlineMs = localIsoInTimeZoneToEpochMs(
+        reservation?.paymentDeadlineAt ?? null,
+        reservation?.paymentDeadlineTz ?? null
+      );
+      if (deadlineMs === null) continue;
       const delta = deadlineMs - now;
       if (delta <= dueSoonWindowMs) count += 1;
     }
@@ -222,10 +235,15 @@ export class Topbar implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(
-      () => this.loadTopbarContext(),
-      this.topbarPollingSeconds * 1000
-    );
+    this.pollTimer = setInterval(() => {
+      // Skip ticks while the tab is hidden — staff is not looking at the
+      // banner, no point hitting the API. Next tick after the tab becomes
+      // visible runs normally.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      this.loadTopbarContext();
+    }, this.topbarPollingSeconds * 1000);
   }
 
   private stopPolling(): void {

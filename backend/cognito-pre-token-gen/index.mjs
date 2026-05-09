@@ -21,9 +21,15 @@ export const handler = async (event) => {
         .filter(Boolean)
     : [];
 
-  // The backend's getGroupsFromEvent (backend/lambda/index.mjs:97) accepts
+  // The backend's getGroupsFromEvent (backend/lambda/index.mjs:127) accepts
   // both arrays and JSON-string arrays. v2 triggers require string values
-  // in claimsToAddOrOverride, so we JSON-stringify.
+  // in claimsToAddOrOverride, so we JSON-stringify for the access token.
+  //
+  // We deliberately do NOT override idTokenGeneration: Cognito already
+  // populates cognito:groups on ID tokens as a native string array, and
+  // overriding here would clobber that with a JSON string and break any
+  // consumer that expects an array (the frontend reads ID-token claims
+  // directly in auth-callback.ts and auth.service.ts).
   const groupsClaim = JSON.stringify(groups);
 
   return {
@@ -31,11 +37,6 @@ export const handler = async (event) => {
     response: {
       claimsAndScopeOverrideDetails: {
         accessTokenGeneration: {
-          claimsToAddOrOverride: {
-            "cognito:groups": groupsClaim,
-          },
-        },
-        idTokenGeneration: {
           claimsToAddOrOverride: {
             "cognito:groups": groupsClaim,
           },

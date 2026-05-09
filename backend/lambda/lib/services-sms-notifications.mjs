@@ -213,7 +213,9 @@ export function createSmsNotificationsService({
         statusCode: providerStatus,
         message: providerMessage,
       });
-      throw httpError(providerStatus, `SMS provider error (${providerName}): ${providerMessage}`);
+      // Internal log keeps the provider detail; client gets a generic message
+      // so we don't leak SNS internals or imply staff misconfiguration.
+      throw httpError(502, "SMS service is temporarily unavailable. Try again in a moment.");
     }
   }
 
@@ -264,7 +266,7 @@ export function createSmsNotificationsService({
         statusCode: providerStatus,
         message: providerMessage,
       });
-      throw httpError(providerStatus, `SMS provider error (${providerName}): ${providerMessage}`);
+      throw httpError(502, "SMS service is temporarily unavailable. Try again in a moment.");
     }
   }
 
@@ -324,7 +326,7 @@ export function createSmsNotificationsService({
         statusCode: providerStatus,
         message: providerMessage,
       });
-      throw httpError(providerStatus, `SMS provider error (${providerName}): ${providerMessage}`);
+      throw httpError(502, "SMS service is temporarily unavailable. Try again in a moment.");
     }
   }
 

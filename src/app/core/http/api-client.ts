@@ -1,8 +1,20 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { retry, throwError, timer } from 'rxjs';
 import { APP_CONFIG } from '../config/app-config';
 
 type QueryParams = Record<string, string | number | boolean | null | undefined>;
+
+// Retry policy for idempotent verbs only. Lambda cold starts and DDB
+// transient throttling occasionally produce 5xx that succeed on second
+// try; that recovery shouldn't surface to staff. We never retry POST/PUT
+// because a 5xx with a body may have already mutated state.
+const RETRY_DELAY_MS = 200;
+const isTransient = (err: unknown): boolean => {
+  if (!(err instanceof HttpErrorResponse)) return false;
+  if (err.status === 0) return true; // network/CORS
+  return err.status >= 500 && err.status < 600;
+};
 
 @Injectable({ providedIn: 'root' })
 export class ApiClient {
@@ -10,7 +22,15 @@ export class ApiClient {
   private baseUrl = APP_CONFIG.apiBaseUrl;
 
   get<T>(path: string, params?: QueryParams) {
-    return this.http.get<T>(this.baseUrl + path, { params: this.toParams(params) });
+    return this.http
+      .get<T>(this.baseUrl + path, { params: this.toParams(params) })
+      .pipe(
+        retry({
+          count: 1,
+          delay: (err) =>
+            isTransient(err) ? timer(RETRY_DELAY_MS) : throwError(() => err),
+        })
+      );
   }
 
   post<T>(path: string, body?: unknown, params?: QueryParams) {

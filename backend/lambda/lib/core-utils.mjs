@@ -17,14 +17,19 @@ export function noContent(statusCode = 204, extraHeaders = {}) {
   };
 }
 
+// Distinguish "no body" (returns null — caller decides if that's a 400)
+// from "malformed JSON" (throws 400 here so we don't conflate the two).
+// Previously both returned null and route handlers couldn't tell.
 export function getBody(event) {
   if (!event.body) return null;
+  const raw = event.isBase64Encoded
+    ? Buffer.from(event.body, "base64").toString("utf8")
+    : String(event.body);
+  if (!raw.trim()) return null;
   try {
-    return event.isBase64Encoded
-      ? JSON.parse(Buffer.from(event.body, "base64").toString("utf8"))
-      : JSON.parse(event.body);
+    return JSON.parse(raw);
   } catch {
-    return null;
+    throw httpError(400, "Request body must be valid JSON");
   }
 }
 
@@ -36,6 +41,33 @@ export function httpError(statusCode, message) {
 
 export function nowEpoch() {
   return Math.floor(Date.now() / 1000);
+}
+
+// Currency helpers. All money in app code is dollars (number, 2 decimals);
+// Square API expects minor units. Naive `Math.round(n * 100)` hits the
+// classic float trap (e.g. `10.005 * 100` = 1000.4999...). Routing through
+// a base-10 exponent string sidesteps it: `Number("10.005e2")` parses to
+// 1000.5 exactly, which Math.round handles correctly.
+//
+// All call sites validate the amount is > 0 before reaching these, so the
+// half-toward-positive-infinity behavior of Math.round on negatives doesn't
+// matter in practice. If that ever changes, switch to half-away-from-zero.
+export function toMinorUnits(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(Number(`${n}e2`));
+}
+
+export function toMajorUnits(minorAmount) {
+  const n = Number(minorAmount);
+  if (!Number.isFinite(n)) return 0;
+  return Number((n / 100).toFixed(2));
+}
+
+export function roundToCents(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Number(n.toFixed(2));
 }
 
 const SUPPORTED_PHONE_COUNTRIES = new Set(["US", "MX"]);

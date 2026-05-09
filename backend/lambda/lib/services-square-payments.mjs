@@ -2,10 +2,16 @@ import {
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { createHmac, timingSafeEqual } from "crypto";
+import { toMajorUnits, toMinorUnits } from "./core-utils.mjs";
 
 const SECRET_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_WEBHOOK_REPLAY_WINDOW_SECONDS = 10 * 60;
 const MAX_FUTURE_CLOCK_SKEW_SECONDS = 2 * 60;
+// Per-request ceiling on Square API calls. Lambda's overall timeout is the
+// only other bound today, which lets a single hung Square request tie up
+// concurrency and inflate p95 across unrelated routes. 8s is comfortably
+// above Square's typical p99 (~1-2s) while still failing fast.
+const SQUARE_REQUEST_TIMEOUT_MS = 8000;
 
 export function createSquarePaymentsService({
   secretClient,
@@ -15,6 +21,23 @@ export function createSquarePaymentsService({
   randomUUID,
   fetchImpl = fetch,
 }) {
+  async function squareFetch(url, init) {
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      SQUARE_REQUEST_TIMEOUT_MS
+    );
+    try {
+      return await fetchImpl(url, { ...init, signal: controller.signal });
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        throw httpError(504, "Square request timed out");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   let cache = {
     secretArn: null,
     expiresAt: 0,
@@ -37,7 +60,7 @@ export function createSquarePaymentsService({
     if (!Number.isFinite(numeric) || numeric <= 0) {
       throw httpError(400, "amount must be > 0");
     }
-    return Math.round(numeric * 100);
+    return toMinorUnits(numeric);
   }
 
   function parseBooleanEnv(value, fallback = false) {
@@ -173,7 +196,7 @@ export function createSquarePaymentsService({
   function toMajorAmount(amountMinor) {
     const minor = Number(amountMinor ?? 0);
     if (!Number.isFinite(minor) || minor <= 0) return 0;
-    return Number((minor / 100).toFixed(2));
+    return toMajorUnits(minor);
   }
 
   function resolveWebhookReplayWindowSeconds() {
@@ -305,7 +328,7 @@ export function createSquarePaymentsService({
     const amountMinor = toAmountMoney(amount);
     const secret = await loadSquareSecret();
 
-    const response = await fetchImpl(`${apiBaseUrl}/v2/payments`, {
+    const response = await squareFetch(`${apiBaseUrl}/v2/payments`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret.SQUARE_ACCESS_TOKEN}`,
@@ -395,7 +418,7 @@ export function createSquarePaymentsService({
     const itemName = itemNameParts.join(" • ") || "Reservation Payment";
 
     async function requestPaymentLink(includePhone) {
-      const response = await fetchImpl(`${apiBaseUrl}/v2/online-checkout/payment-links`, {
+      const response = await squareFetch(`${apiBaseUrl}/v2/online-checkout/payment-links`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${secret.SQUARE_ACCESS_TOKEN}`,
@@ -492,7 +515,7 @@ export function createSquarePaymentsService({
     const amountMinor = toAmountMoney(amount);
     const secret = await loadSquareSecret();
 
-    const response = await fetchImpl(`${apiBaseUrl}/v2/refunds`, {
+    const response = await squareFetch(`${apiBaseUrl}/v2/refunds`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret.SQUARE_ACCESS_TOKEN}`,
@@ -539,7 +562,7 @@ export function createSquarePaymentsService({
     const apiVersion = String(env.SQUARE_API_VERSION ?? "2026-01-22").trim();
     const secret = await loadSquareSecret();
 
-    const response = await fetchImpl(
+    const response = await squareFetch(
       `${apiBaseUrl}/v2/online-checkout/payment-links/${encodeURIComponent(normalizedPaymentLinkId)}`,
       {
         method: "DELETE",
@@ -594,7 +617,7 @@ export function createSquarePaymentsService({
     const apiVersion = String(env.SQUARE_API_VERSION ?? "2026-01-22").trim();
     const secret = await loadSquareSecret();
 
-    const response = await fetchImpl(
+    const response = await squareFetch(
       `${apiBaseUrl}/v2/payments/${encodeURIComponent(normalizedPaymentId)}`,
       {
         method: "GET",

@@ -50,7 +50,8 @@ export async function handleAdminRoute(ctx) {
             tokenUse === "access" && !hasGroups,
         },
       },
-      cors
+      // Identity payload — keep intermediaries from caching it.
+      { ...cors, "cache-control": "no-store", pragma: "no-cache" }
     );
   }
 

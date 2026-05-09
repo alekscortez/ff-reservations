@@ -6,6 +6,7 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { roundToCents } from "./core-utils.mjs";
 
 export function createReservationsHoldsService({
   ddb,
@@ -59,9 +60,7 @@ export function createReservationsHoldsService({
   }
 
   function roundMoney(value) {
-    const parsed = Number(value ?? 0);
-    if (!Number.isFinite(parsed)) return 0;
-    return Number(parsed.toFixed(2));
+    return roundToCents(value ?? 0);
   }
 
   async function getRuntimeSettings() {
@@ -1058,6 +1057,56 @@ export function createReservationsHoldsService({
     return res.Attributes ?? null;
   }
 
+  async function revokeReservationCashAppLinkSession({
+    eventDate,
+    reservationId,
+    actor,
+  }) {
+    requiredEnv("RES_TABLE", RES_TABLE);
+    const normalizedEventDate = String(eventDate ?? "").trim();
+    const normalizedReservationId = String(reservationId ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedEventDate)) return null;
+    if (!normalizedReservationId) return null;
+
+    const now = nowEpoch();
+    const user = String(actor ?? "").trim() || "system";
+    try {
+      const res = await ddb.send(
+        new UpdateCommand({
+          TableName: RES_TABLE,
+          Key: {
+            PK: `EVENTDATE#${normalizedEventDate}`,
+            SK: `RES#${normalizedReservationId}`,
+          },
+          // Only flip ACTIVE → REVOKED. If it's already USED/REVOKED or
+          // never existed, leave it alone.
+          ConditionExpression: "#cashAppLinkStatus = :active",
+          UpdateExpression:
+            "SET #cashAppLinkStatus = :revoked, #cashAppLinkRevokedAt = :now, #cashAppLinkRevokedBy = :by, #updatedAt = :now, #updatedBy = :by REMOVE #cashAppLinkTokenHash",
+          ExpressionAttributeNames: {
+            "#cashAppLinkStatus": "cashAppLinkStatus",
+            "#cashAppLinkRevokedAt": "cashAppLinkRevokedAt",
+            "#cashAppLinkRevokedBy": "cashAppLinkRevokedBy",
+            "#cashAppLinkTokenHash": "cashAppLinkTokenHash",
+            "#updatedAt": "updatedAt",
+            "#updatedBy": "updatedBy",
+          },
+          ExpressionAttributeValues: {
+            ":active": "ACTIVE",
+            ":revoked": "REVOKED",
+            ":now": now,
+            ":by": user,
+          },
+          ReturnValues: "ALL_NEW",
+        })
+      );
+      return res.Attributes ?? null;
+    } catch (err) {
+      if (err?.name === "ConditionalCheckFailedException") return null;
+      throw err;
+    }
+  }
+
   async function markReservationCashAppLinkSessionUsed({
     eventDate,
     reservationId,
@@ -1187,6 +1236,13 @@ export function createReservationsHoldsService({
     }
   }
 
+  // Bounded concurrency for the cron sweep. With many active events, the
+  // serial loop is O(events) sequential DDB queries — a slow tail event
+  // delays the rest. Cap at 5 in flight: enough parallelism to amortize
+  // wall-clock without saturating Lambda's concurrent connection budget
+  // or starving normal request paths in the same execution.
+  const OVERDUE_SWEEP_CONCURRENCY = 5;
+
   async function releaseOverdueReservationsForAllActiveEvents(user = DEFAULT_AUTO_RELEASE_USER) {
     if (typeof listEvents !== "function") {
       throw httpError(500, "listEvents dependency is not configured");
@@ -1199,15 +1255,31 @@ export function createReservationsHoldsService({
 
     let releasedTotal = 0;
     const failures = [];
-    for (const eventDate of candidates) {
-      try {
-        const { released } = await releaseOverdueReservationsForEventDate(eventDate, user);
-        releasedTotal += Number(released ?? 0);
-      } catch (err) {
-        failures.push({
-          eventDate,
-          message: String(err?.message ?? err ?? ""),
-        });
+    for (let i = 0; i < candidates.length; i += OVERDUE_SWEEP_CONCURRENCY) {
+      const slice = candidates.slice(i, i + OVERDUE_SWEEP_CONCURRENCY);
+      const results = await Promise.all(
+        slice.map(async (eventDate) => {
+          try {
+            const { released } = await releaseOverdueReservationsForEventDate(
+              eventDate,
+              user
+            );
+            return { ok: true, eventDate, released };
+          } catch (err) {
+            return {
+              ok: false,
+              eventDate,
+              message: String(err?.message ?? err ?? ""),
+            };
+          }
+        })
+      );
+      for (const r of results) {
+        if (r.ok) {
+          releasedTotal += Number(r.released ?? 0);
+        } else {
+          failures.push({ eventDate: r.eventDate, message: r.message });
+        }
       }
     }
     return {
@@ -1646,6 +1718,29 @@ export function createReservationsHoldsService({
       paymentLinkId &&
       typeof sendPaymentLinkExpiredSms === "function";
 
+    // Revoke any active Cash App self-pay session so a stale link can't go
+    // through after the reservation is cancelled. The /cashapp/session/charge
+    // route also re-checks reservation status, but flipping the link state
+    // here keeps audits/reports consistent and the public pay page honest.
+    const cashAppLinkStatus = String(cancelled?.cashAppLinkStatus ?? "")
+      .trim()
+      .toUpperCase();
+    if (cashAppLinkStatus === "ACTIVE") {
+      try {
+        await revokeReservationCashAppLinkSession({
+          eventDate,
+          reservationId,
+          actor: user,
+        });
+      } catch (err) {
+        console.warn("cash_app_link_revoke_failed", {
+          reservationId,
+          eventDate,
+          message: String(err?.message ?? err ?? ""),
+        });
+      }
+    }
+
     if (paymentLinkId && typeof deactivateSquarePaymentLink === "function") {
       let inactiveStatus = "DEACTIVATED";
       let inactiveReason = cancelReason;
@@ -1891,6 +1986,10 @@ export function createReservationsHoldsService({
               paymentId: randomUUID(),
               amount: effectiveDeposit,
               method: effectivePaymentMethod,
+              // addReservationPayment tags every later row with `source` —
+              // tag the initial deposit too so reports / financial filters
+              // don't see a one-off untagged row.
+              source: "manual",
               note: "Initial payment",
               createdAt: now,
               createdBy: user,
@@ -2286,7 +2385,11 @@ export function createReservationsHoldsService({
                 Update: {
                   TableName: RES_TABLE,
                   Key: key,
-                  ConditionExpression: "#status = :confirmed",
+                  // Pin #depositAmount to :currentPaid so concurrent payment
+                  // recordings can't both compute nextPaid from the same
+                  // stale snapshot and overwrite each other (audit C3).
+                  ConditionExpression:
+                    "#status = :confirmed AND #depositAmount = :currentPaid",
                   UpdateExpression:
                     "SET #depositAmount = :paid, #paymentStatus = :paymentStatus, #paymentMethod = :paymentMethod, #paymentDeadlineAt = :deadline, #paymentDeadlineTz = :deadlineTz, #updatedAt = :now, #updatedBy = :by, #payments = list_append(if_not_exists(#payments, :empty), :newPayment)",
                   ExpressionAttributeNames: {
@@ -2302,6 +2405,7 @@ export function createReservationsHoldsService({
                   },
                   ExpressionAttributeValues: {
                     ":confirmed": "CONFIRMED",
+                    ":currentPaid": currentPaid,
                     ":paid": nextPaid,
                     ":paymentStatus": nextStatus,
                     ":paymentMethod": method,
@@ -2354,7 +2458,7 @@ export function createReservationsHoldsService({
         ) {
           throw httpError(
             409,
-            "Credit could not be applied due to concurrent update or invalid credit state"
+            "Credit could not be applied due to concurrent update or invalid credit state. Refresh and try again."
           );
         }
         throw err;
@@ -2372,40 +2476,57 @@ export function createReservationsHoldsService({
         payments: [...existingPayments, payment],
       };
     } else {
-      const res = await ddb.send(
-        new UpdateCommand({
-          TableName: RES_TABLE,
-          Key: key,
-          ConditionExpression: "#status = :confirmed",
-          UpdateExpression:
-            "SET #depositAmount = :paid, #paymentStatus = :paymentStatus, #paymentMethod = :paymentMethod, #paymentDeadlineAt = :deadline, #paymentDeadlineTz = :deadlineTz, #updatedAt = :now, #updatedBy = :by, #payments = list_append(if_not_exists(#payments, :empty), :newPayment)",
-          ExpressionAttributeNames: {
-            "#status": "status",
-            "#depositAmount": "depositAmount",
-            "#paymentStatus": "paymentStatus",
-            "#paymentMethod": "paymentMethod",
-            "#paymentDeadlineAt": "paymentDeadlineAt",
-            "#paymentDeadlineTz": "paymentDeadlineTz",
-            "#updatedAt": "updatedAt",
-            "#updatedBy": "updatedBy",
-            "#payments": "payments",
-          },
-          ExpressionAttributeValues: {
-            ":confirmed": "CONFIRMED",
-            ":paid": nextPaid,
-            ":paymentStatus": nextStatus,
-            ":paymentMethod": method,
-            ":deadline": nextDeadline,
-            ":deadlineTz": nextDeadlineTz,
-            ":now": now,
-            ":by": user,
-            ":empty": [],
-            ":newPayment": [payment],
-          },
-          ReturnValues: "ALL_NEW",
-        })
-      );
-      updated = res.Attributes ?? null;
+      try {
+        const res = await ddb.send(
+          new UpdateCommand({
+            TableName: RES_TABLE,
+            Key: key,
+            // Pin #depositAmount to :currentPaid so concurrent payment
+            // recordings can't both compute nextPaid from the same stale
+            // snapshot and overwrite each other (audit C3). On CCFE the
+            // caller can retry — the GET-then-update at the top of this
+            // function will refresh currentPaid.
+            ConditionExpression:
+              "#status = :confirmed AND #depositAmount = :currentPaid",
+            UpdateExpression:
+              "SET #depositAmount = :paid, #paymentStatus = :paymentStatus, #paymentMethod = :paymentMethod, #paymentDeadlineAt = :deadline, #paymentDeadlineTz = :deadlineTz, #updatedAt = :now, #updatedBy = :by, #payments = list_append(if_not_exists(#payments, :empty), :newPayment)",
+            ExpressionAttributeNames: {
+              "#status": "status",
+              "#depositAmount": "depositAmount",
+              "#paymentStatus": "paymentStatus",
+              "#paymentMethod": "paymentMethod",
+              "#paymentDeadlineAt": "paymentDeadlineAt",
+              "#paymentDeadlineTz": "paymentDeadlineTz",
+              "#updatedAt": "updatedAt",
+              "#updatedBy": "updatedBy",
+              "#payments": "payments",
+            },
+            ExpressionAttributeValues: {
+              ":confirmed": "CONFIRMED",
+              ":currentPaid": currentPaid,
+              ":paid": nextPaid,
+              ":paymentStatus": nextStatus,
+              ":paymentMethod": method,
+              ":deadline": nextDeadline,
+              ":deadlineTz": nextDeadlineTz,
+              ":now": now,
+              ":by": user,
+              ":empty": [],
+              ":newPayment": [payment],
+            },
+            ReturnValues: "ALL_NEW",
+          })
+        );
+        updated = res.Attributes ?? null;
+      } catch (err) {
+        if (err?.name === "ConditionalCheckFailedException") {
+          throw httpError(
+            409,
+            "Reservation changed concurrently — refresh and try again."
+          );
+        }
+        throw err;
+      }
     }
 
     if (updated) {
