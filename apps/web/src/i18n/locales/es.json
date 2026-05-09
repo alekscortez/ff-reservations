@@ -179,6 +179,30 @@
     "empty": "No hay reservaciones para este evento.",
     "tableShort": "M"
   },
+  "reservationNew": {
+    "cta": "Nueva reservación",
+    "title": "Nueva reservación",
+    "eventLabel": "Evento",
+    "minDeposit": "Depósito mínimo",
+    "pickTable": "Selecciona una mesa",
+    "section": "Sección {{section}}",
+    "heldTable": "Apartando {{section}}-{{id}}",
+    "holdExpired": "EXPIRADO — vuelve a elegir una mesa",
+    "confirmRelease": "¿Liberar este apartado? Tendrás que elegir mesa otra vez.",
+    "confirmSwitchEvent": "Cambiar de evento libera el apartado actual. ¿Continuar?",
+    "customerHeading": "Cliente y pago",
+    "field": {
+      "customerName": "Nombre del cliente",
+      "phone": "Teléfono",
+      "package": "Paquete (opcional)",
+      "noPackage": "— Sin paquete —",
+      "deposit": "Depósito (USD)",
+      "depositHint": "Mínimo {{min}}; mesa completa {{table}}.",
+      "paymentMethod": "Método de pago",
+      "receiptNumber": "Recibo #"
+    },
+    "confirmCta": "Confirmar reservación"
+  },
   "reservationDetail": {
     "notFound": "Reservación no encontrada.",
     "field": {

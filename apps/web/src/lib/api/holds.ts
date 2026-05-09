@@ -43,3 +43,28 @@ export function useReleaseHold(eventDate: string) {
     },
   });
 }
+
+export interface CreateHoldInput {
+  eventDate: string;
+  tableId: string;
+  contactName?: string;
+  contactPhone?: string;
+  phoneCountry?: 'US' | 'MX';
+  notes?: string;
+  chargeAmount?: number;
+}
+
+export function useCreateHold() {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateHoldInput) => {
+      const res = await api.post<{ item: Hold }>('/holds', input);
+      return res.item;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: listKey(vars.eventDate) });
+      qc.invalidateQueries({ queryKey: ['tables', 'for-event', vars.eventDate] });
+    },
+  });
+}

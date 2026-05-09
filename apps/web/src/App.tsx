@@ -13,6 +13,7 @@ import { StaffFrequentClients } from '@/features/staff/frequent-clients';
 import { FrequentClientForm } from '@/features/staff/frequent-client-form';
 import { StaffReservations } from '@/features/staff/reservations';
 import { ReservationDetail } from '@/features/staff/reservation-detail';
+import { ReservationNew } from '@/features/staff/reservation-new';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
 import { StaffHolds } from '@/features/staff/holds';
@@ -65,6 +66,7 @@ export function App() {
             element={<FrequentClientForm />}
           />
           <Route path="/staff/reservations" element={<StaffReservations />} />
+          <Route path="/staff/reservations/new" element={<ReservationNew />} />
           <Route
             path="/staff/reservations/:eventDate/:reservationId"
             element={<ReservationDetail />}

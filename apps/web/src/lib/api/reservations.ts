@@ -23,6 +23,40 @@ export function useReservationsList(eventDate: string | undefined) {
   });
 }
 
+export interface CreateReservationInput {
+  eventDate: string;
+  tableId: string;
+  holdId: string;
+  customerName: string;
+  phone: string;
+  phoneCountry: 'US' | 'MX';
+  depositAmount: number;
+  paymentMethod: 'cash' | 'square' | 'cashapp' | 'credit';
+  packageId?: string;
+  receiptNumber?: string;
+  creditId?: string;
+  paymentDeadlineAt?: string;
+  paymentDeadlineTz?: string;
+}
+
+export function useCreateReservation() {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateReservationInput) => {
+      const res = await api.post<{ item: ReservationItem; idempotentReplay?: boolean }>(
+        '/reservations',
+        input
+      );
+      return res.item;
+    },
+    onSuccess: (item) => {
+      qc.invalidateQueries({ queryKey: listKey(item.eventDate) });
+      qc.invalidateQueries({ queryKey: ['tables', 'for-event', item.eventDate] });
+    },
+  });
+}
+
 export function useReservation(eventDate: string | undefined, reservationId: string | undefined) {
   const list = useReservationsList(eventDate);
   return {

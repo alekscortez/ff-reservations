@@ -58,9 +58,17 @@ export function StaffReservations() {
   return (
     <main className="min-h-screen bg-brand-50 p-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-semibold text-brand-900">
-          {t('reservations.listTitle')}
-        </h1>
+        <div className="flex items-baseline justify-between">
+          <h1 className="text-3xl font-semibold text-brand-900">
+            {t('reservations.listTitle')}
+          </h1>
+          <Link
+            to="/staff/reservations/new"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            + {t('reservationNew.cta')}
+          </Link>
+        </div>
 
         <section className="mt-6 rounded-lg border border-border bg-background p-4">
           <label className="block text-sm font-medium text-brand-700" htmlFor="event-date-select">

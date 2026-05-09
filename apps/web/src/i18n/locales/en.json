@@ -179,6 +179,30 @@
     "empty": "No reservations for this event.",
     "tableShort": "T"
   },
+  "reservationNew": {
+    "cta": "New reservation",
+    "title": "New reservation",
+    "eventLabel": "Event",
+    "minDeposit": "Min deposit",
+    "pickTable": "Pick a table",
+    "section": "Section {{section}}",
+    "heldTable": "Holding {{section}}-{{id}}",
+    "holdExpired": "EXPIRED — restart by picking a table",
+    "confirmRelease": "Release this hold? You'll have to pick a table again.",
+    "confirmSwitchEvent": "Switching events releases the current hold. Continue?",
+    "customerHeading": "Customer + payment",
+    "field": {
+      "customerName": "Customer name",
+      "phone": "Phone",
+      "package": "Package (optional)",
+      "noPackage": "— No package —",
+      "deposit": "Deposit (USD)",
+      "depositHint": "Minimum {{min}}; full table is {{table}}.",
+      "paymentMethod": "Payment method",
+      "receiptNumber": "Receipt #"
+    },
+    "confirmCta": "Confirm reservation"
+  },
   "reservationDetail": {
     "notFound": "Reservation not found.",
     "field": {
