@@ -209,10 +209,10 @@ export function StaffReservations() {
                     onClick={() => selectEvent(e.eventDate)}
                     className={`rounded-2xl border p-4 text-left shadow-sm transition ${
                       selected
-                        ? 'border-2 border-foreground bg-muted/40'
+                        ? 'border-primary ring-1 ring-primary/40 bg-muted/30'
                         : thisWeek
                           ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
-                          : 'border-border bg-background hover:border-foreground/40'
+                          : 'border-border bg-background hover:border-foreground/30'
                     }`}
                   >
                     <p className="text-xl font-semibold text-foreground">
