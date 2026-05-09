@@ -6,6 +6,7 @@ import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
 import { PublicMap } from '@/features/public/map';
+import { CheckInPassPage } from '@/features/public/check-in-pass';
 import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { EventForm } from '@/features/staff/event-form';
@@ -53,6 +54,7 @@ export function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/map" element={<PublicMap />} />
         <Route path="/availability" element={<PublicMap />} />
+        <Route path="/check-in/pass" element={<CheckInPassPage />} />
 
         <Route element={<StaffShell />}>
           <Route path="/staff/dashboard" element={<StaffDashboard />} />

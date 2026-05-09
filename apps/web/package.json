@@ -12,8 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ff/core": "workspace:*",
     "@ff/config": "workspace:*",
+    "@ff/core": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-slot": "^1.2.4",
     "@tanstack/react-query": "^5.100.9",
@@ -23,6 +23,7 @@
     "i18next-browser-languagedetector": "^8.2.1",
     "lucide-react": "^1.14.0",
     "oidc-client-ts": "^3.5.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hook-form": "^7.75.0",
@@ -37,6 +38,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

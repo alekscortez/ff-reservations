@@ -133,6 +133,30 @@
       "from": "from"
     }
   },
+  "checkInPassPage": {
+    "heading": "THIS IS CONFIRMATION",
+    "subheading": "Thank you for your reservation. Be ready for an unforgettable night.",
+    "invalidTitle": "Pass link is invalid",
+    "invalidBody": "This check-in link does not include a token. Ask staff to resend your pass.",
+    "notFoundTitle": "Pass not found",
+    "notFoundBody": "We couldn't locate this pass. Ask staff to reissue it.",
+    "errorTitle": "Something went wrong",
+    "qrUnavailable": "QR unavailable on this device.",
+    "guestLabel": "GUEST",
+    "guestFallback": "Guest",
+    "eventLabel": "EVENT DATE",
+    "eventFallback": "your event date",
+    "checkCode": "CHECK CODE",
+    "statusLabel": "STATUS",
+    "tableLabel": "TABLE",
+    "contactNote": "Need to make a change? Contact staff before 10:00 PM on your reservation date.",
+    "status": {
+      "active": "VALID",
+      "consumed": "CHECKED-IN",
+      "expired": "EXPIRED",
+      "revoked": "VOID"
+    }
+  },
   "publicMap": {
     "title": "Live Table Availability",
     "totalTables": "Total tables",

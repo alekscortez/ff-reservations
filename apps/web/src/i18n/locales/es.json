@@ -133,6 +133,30 @@
       "from": "de"
     }
   },
+  "checkInPassPage": {
+    "heading": "ESTA ES LA CONFIRMACIÓN",
+    "subheading": "Gracias por tu reservación. Prepárate para una noche inolvidable.",
+    "invalidTitle": "El link del pase es inválido",
+    "invalidBody": "Este link no incluye un token. Pide al personal que te reenvíe el pase.",
+    "notFoundTitle": "Pase no encontrado",
+    "notFoundBody": "No pudimos localizar este pase. Pide al personal que lo reemita.",
+    "errorTitle": "Algo salió mal",
+    "qrUnavailable": "QR no disponible en este dispositivo.",
+    "guestLabel": "INVITADO",
+    "guestFallback": "Invitado",
+    "eventLabel": "FECHA DEL EVENTO",
+    "eventFallback": "tu fecha del evento",
+    "checkCode": "CÓDIGO",
+    "statusLabel": "ESTADO",
+    "tableLabel": "MESA",
+    "contactNote": "¿Necesitas cambios? Contáctanos antes de las 10:00 PM del día de tu reservación.",
+    "status": {
+      "active": "VÁLIDO",
+      "consumed": "USADO",
+      "expired": "EXPIRADO",
+      "revoked": "ANULADO"
+    }
+  },
   "publicMap": {
     "title": "Disponibilidad de mesas en vivo",
     "totalTables": "Mesas totales",
