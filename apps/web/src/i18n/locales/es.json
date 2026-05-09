@@ -356,7 +356,16 @@
       "applyFailed": "La reservación se creó, pero no se pudo aplicar el crédito: {{error}}"
     },
     "closeModal": "Cerrar",
-    "confirmCta": "Confirmar reservación"
+    "confirmCta": "Confirmar reservación",
+    "releaseConfirm": {
+      "title": "¿Liberar este apartado?",
+      "body": "La mesa volverá a estar disponible y se borrarán los datos del cliente que hayas capturado.",
+      "titleSwitch": "¿Cambiar de evento?",
+      "bodySwitch": "Cambiar de evento libera el apartado actual y borra los datos del cliente capturado.",
+      "continue": "Continuar reservación",
+      "release": "Liberar apartado",
+      "releaseAndSwitch": "Liberar y cambiar"
+    }
   },
   "reservationDetail": {
     "notFound": "Reservación no encontrada.",

@@ -356,7 +356,16 @@
       "applyFailed": "Reservation created, but applying the credit failed: {{error}}"
     },
     "closeModal": "Close",
-    "confirmCta": "Confirm reservation"
+    "confirmCta": "Confirm reservation",
+    "releaseConfirm": {
+      "title": "Release this hold?",
+      "body": "The table will become available again and your typed customer info will be cleared.",
+      "titleSwitch": "Switch events?",
+      "bodySwitch": "Switching events releases the current hold and clears your typed customer info.",
+      "continue": "Continue reservation",
+      "release": "Release hold",
+      "releaseAndSwitch": "Release and switch"
+    }
   },
   "reservationDetail": {
     "notFound": "Reservation not found.",

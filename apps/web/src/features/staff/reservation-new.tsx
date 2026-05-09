@@ -210,11 +210,29 @@ export function ReservationNew() {
     );
   }
 
+  type ReleaseIntent =
+    | { kind: 'release' }
+    | { kind: 'switchEvent'; nextEventDate: string };
+  const [releaseIntent, setReleaseIntent] = useState<ReleaseIntent | null>(null);
+
   function handleReleaseHold() {
-    if (!hold || !window.confirm(t('reservationNew.confirmRelease'))) return;
+    if (!hold) return;
+    setReleaseIntent({ kind: 'release' });
+  }
+
+  function confirmReleaseIntent() {
+    if (!hold || !releaseIntent) {
+      setReleaseIntent(null);
+      return;
+    }
+    const intent = releaseIntent;
     releaseHold.mutate(hold.tableId, {
-      onSuccess: () => setHold(null),
+      onSuccess: () => {
+        setHold(null);
+        if (intent.kind === 'switchEvent') setEventDate(intent.nextEventDate);
+      },
     });
+    setReleaseIntent(null);
   }
 
   const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
@@ -489,12 +507,12 @@ export function ReservationNew() {
             className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             value={eventDate}
             onChange={(e) => {
+              const next = e.target.value;
               if (hold) {
-                if (!window.confirm(t('reservationNew.confirmSwitchEvent'))) return;
-                releaseHold.mutate(hold.tableId);
-                setHold(null);
+                setReleaseIntent({ kind: 'switchEvent', nextEventDate: next });
+                return;
               }
-              setEventDate(e.target.value);
+              setEventDate(next);
             }}
             disabled={eventsLoading || sortedEvents.length === 0}
           >
@@ -1042,6 +1060,45 @@ export function ReservationNew() {
             </div>
           </form>
         )}
+          </div>
+        </div>
+      )}
+
+      {releaseIntent && hold && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-background p-5 shadow-xl">
+            <h2 className="text-base font-semibold text-brand-900">
+              {releaseIntent.kind === 'switchEvent'
+                ? t('reservationNew.releaseConfirm.titleSwitch')
+                : t('reservationNew.releaseConfirm.title')}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {releaseIntent.kind === 'switchEvent'
+                ? t('reservationNew.releaseConfirm.bodySwitch')
+                : t('reservationNew.releaseConfirm.body')}
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setReleaseIntent(null)}
+                className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-brand-900 hover:bg-muted"
+              >
+                {t('reservationNew.releaseConfirm.continue')}
+              </button>
+              <button
+                type="button"
+                onClick={confirmReleaseIntent}
+                className="inline-flex items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+              >
+                {releaseIntent.kind === 'switchEvent'
+                  ? t('reservationNew.releaseConfirm.releaseAndSwitch')
+                  : t('reservationNew.releaseConfirm.release')}
+              </button>
+            </div>
           </div>
         </div>
       )}
