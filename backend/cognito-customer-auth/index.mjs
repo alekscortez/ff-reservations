@@ -27,6 +27,7 @@ const sns = new SNSClient({});
 const SMS_SENDER_ID = process.env.SMS_SENDER_ID || "FFuego";
 const SMS_TYPE = process.env.SMS_TYPE || "Transactional";
 const SMS_MAX_PRICE_USD = process.env.SMS_MAX_PRICE_USD || "0.50";
+const CUSTOMER_CLIENT_ID = process.env.CUSTOMER_CLIENT_ID || "";
 const MAX_ATTEMPTS = 3;
 
 export const handler = async (event) => {
@@ -46,6 +47,16 @@ export const handler = async (event) => {
 };
 
 function preSignUp(event) {
+  // Gate auto-confirm to the customer App Client only. Staff Hosted UI
+  // signups (if anyone ever uses them) must keep their normal email-
+  // verification path — we don't want a random self-signup on the staff
+  // client to land as a confirmed user in the pool.
+  if (
+    CUSTOMER_CLIENT_ID &&
+    event.callerContext?.clientId !== CUSTOMER_CLIENT_ID
+  ) {
+    return event;
+  }
   event.response.autoConfirmUser = true;
   if (event.request.userAttributes?.phone_number) {
     event.response.autoVerifyPhone = true;

@@ -7,6 +7,32 @@ trigger slots on the existing `us-east-1_Upsi9Q2Tc` user pool.
 This is the auth foundation for Phase 3 of the migration — see
 `/CLAUDE.md` "Auth model" and "Implementation phases".
 
+## Pool constraint discovered during deploy
+
+The user pool was created with `UsernameAttributes: ["email"]` (locked at
+creation time — Cognito does not allow editing this). Phone-as-username
+SignUp is rejected with `"Username should be an email"`. The pool also
+requires `email` and `name` attributes on every user.
+
+**Workaround**: customers are signed up with a deterministic synthetic
+email derived from their E.164 phone:
+
+```
+phone     = +528991054670
+username  = customer-528991054670@customer.famosofuego.local
+phone_number attribute = +528991054670
+email attribute        = customer-528991054670@customer.famosofuego.local
+name attribute         = "Customer +528991054670"  (or whatever the app collects)
+```
+
+The synthetic email is never used for delivery — Cognito's customer App
+Client doesn't trigger email verification, and the customer flow uses
+phone OTP exclusively. Mobile app code that creates customers must
+compute this synthetic email deterministically so that re-signing-up an
+existing customer hits `UsernameExistsException` and falls through to
+sign-in (rather than creating a duplicate user under a different
+synthetic alias).
+
 ## What's needed end-to-end (deployment checklist)
 
 This folder ships the Lambda source. Deployment also requires:
@@ -22,6 +48,12 @@ This folder ships the Lambda source. Deployment also requires:
    - `PreventUserExistenceErrors: ENABLED`
    - `RefreshTokenValidity: 30 days`, access/id token validity 1 hour
 5. **SMS sandbox / production capacity** check — SNS or AWS End User Messaging needs origination identity. The toll-free `+18557656160` is registered (status PENDING per CLAUDE.md); production capacity may use shared shortcodes until approval lands.
+
+**Deployed values (post-deploy 2026-05-08):**
+- Lambda ARN: `arn:aws:lambda:us-east-1:908027422124:function:ff-reservations-customer-auth`
+- IAM role ARN: `arn:aws:iam::908027422124:role/ff-reservations-customer-auth-role`
+- Customer App Client ID: `21n3rd1sp4o9ka4l7tld45f0ka`
+- Lambda env: `SMS_SENDER_ID=FFuego`, `SMS_TYPE=Transactional`, `SMS_MAX_PRICE_USD=0.50`, `CUSTOMER_CLIENT_ID=21n3rd1sp4o9ka4l7tld45f0ka` (PreSignUp gates on this so staff Hosted UI signups still require email verification)
 
 ## Source build
 
@@ -135,34 +167,54 @@ Amplify env / Expo `app.json` extras as `VITE_COGNITO_CUSTOMER_CLIENT_ID` /
 ## Testing the flow from CLI (no mobile app needed)
 
 Once deployed and the customer App Client exists, you can drive the
-whole flow from `aws-cli`:
+whole flow from `aws-cli`. Replace `+15555550100` with a real E.164
+phone you can receive SMS on.
 
 ```bash
-# 1. Create a user (auto-confirmed by PreSignUp)
+PHONE=+15555550100
+DIGITS=${PHONE#+}
+SYNTH_EMAIL=customer-${DIGITS}@customer.famosofuego.local
+CLIENT_ID=21n3rd1sp4o9ka4l7tld45f0ka   # customer App Client (this pool)
+
+# 1. Create a user (PreSignUp Lambda autoconfirms + autoVerifyPhone)
 aws cognito-idp sign-up \
-  --client-id <CUSTOMER_CLIENT_ID> \
-  --username +15555550100 \
-  --password "Throwaway$(openssl rand -hex 6)!" \
-  --user-attributes Name=phone_number,Value=+15555550100 \
+  --client-id "$CLIENT_ID" \
+  --username "$SYNTH_EMAIL" \
+  --password "Throwaway$(openssl rand -hex 6)!Q1" \
+  --user-attributes \
+    Name=phone_number,Value="$PHONE" \
+    Name=email,Value="$SYNTH_EMAIL" \
+    Name=name,Value="Customer $PHONE" \
   --region us-east-1
-# Ignore UsernameExistsException on subsequent runs.
+# Ignore UsernameExistsException on subsequent runs (existing user just
+# proceeds to InitiateAuth below).
 
 # 2. Initiate auth — triggers DefineAuthChallenge → CreateAuthChallenge → SMS
-aws cognito-idp initiate-auth \
-  --client-id <CUSTOMER_CLIENT_ID> \
+SESSION=$(aws cognito-idp initiate-auth \
+  --client-id "$CLIENT_ID" \
   --auth-flow CUSTOM_AUTH \
-  --auth-parameters USERNAME=+15555550100 \
-  --region us-east-1
-# Capture Session from the response.
+  --auth-parameters USERNAME="$SYNTH_EMAIL" \
+  --region us-east-1 \
+  --query Session --output text)
 
 # 3. Respond with the OTP from the SMS
 aws cognito-idp respond-to-auth-challenge \
-  --client-id <CUSTOMER_CLIENT_ID> \
+  --client-id "$CLIENT_ID" \
   --challenge-name CUSTOM_CHALLENGE \
-  --challenge-responses USERNAME=+15555550100,ANSWER=123456 \
-  --session "<SESSION_FROM_INITIATE_AUTH>" \
+  --challenge-responses USERNAME="$SYNTH_EMAIL",ANSWER=275991 \
+  --session "$SESSION" \
   --region us-east-1
-# Returns AccessToken, IdToken, RefreshToken on success.
+# Returns AccessToken / IdToken / RefreshToken on success. The access
+# token has token_use=access, no cognito:groups, sub=customer's UUID.
+```
+
+Cleanup test users:
+
+```bash
+aws cognito-idp admin-delete-user \
+  --user-pool-id us-east-1_Upsi9Q2Tc \
+  --username "$SYNTH_EMAIL" \
+  --region us-east-1
 ```
 
 ## Observability
