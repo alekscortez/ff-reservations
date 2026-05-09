@@ -120,7 +120,11 @@
     "searchHint": "Type at least 3 digits and hit Search to find customers across all events.",
     "selectHint": "Select a result on the left to see details.",
     "noResults": "No customers match this phone.",
+    "browseAll": "Browse all (admin)",
+    "filterPlaceholder": "Filter by name or phone…",
+    "tooMany": "+ {{count}} more — narrow with the filter to see them.",
     "field": {
+      "name": "Name",
       "totalReservations": "Reservations",
       "totalSpend": "Total spend",
       "lastReservation": "Last reservation",

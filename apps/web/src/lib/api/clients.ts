@@ -30,6 +30,7 @@ export interface RescheduleCredit {
 }
 
 const searchKey = (phone: string) => ['clients', 'search', phone] as const;
+const fullListKey = ['clients', 'full-list'] as const;
 const creditsKey = (phone: string, country: string) =>
   ['clients', 'credits', phone, country] as const;
 
@@ -43,6 +44,18 @@ export function useCrmSearch(phone: string) {
       const res = await api.get<{ items: CrmClient[] }>('/clients/search', {
         phone: trimmed,
       });
+      return res.items;
+    },
+  });
+}
+
+export function useCrmFullList(enabled: boolean) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: fullListKey,
+    enabled,
+    queryFn: async () => {
+      const res = await api.get<{ items: CrmClient[] }>('/clients');
       return res.items;
     },
   });

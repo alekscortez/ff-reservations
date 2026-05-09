@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from 'react-oidc-context';
 import { ApiError } from '@/lib/api-client';
 import {
+  useCrmFullList,
   useCrmSearch,
   useRescheduleCredits,
   useUpdateCrmClient,
@@ -22,28 +23,42 @@ function formatEpoch(epoch: number | undefined, locale: string) {
 function ClientDetail({
   client,
   canEdit,
+  onSaved,
 }: {
   client: CrmClient;
   canEdit: boolean;
+  onSaved: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(client.name ?? '');
+  const [phone, setPhone] = useState(client.phone ?? '');
+  const [phoneCountry, setPhoneCountry] = useState<'US' | 'MX'>(
+    (client.phoneCountry as 'US' | 'MX') ?? 'MX'
+  );
   const updateMutation = useUpdateCrmClient();
-  const credits = useRescheduleCredits(client.phone, client.phoneCountry ?? 'MX');
+  const credits = useRescheduleCredits(client.phone, phoneCountry);
 
   const moneyFormatter = new Intl.NumberFormat(i18n.language, {
     style: 'currency',
     currency: 'USD',
   });
 
+  function reset() {
+    setName(client.name ?? '');
+    setPhone(client.phone ?? '');
+    setPhoneCountry((client.phoneCountry as 'US' | 'MX') ?? 'MX');
+    setEditing(false);
+  }
+
   async function handleSave() {
     if (!client.phone) return;
     await updateMutation.mutateAsync({
       phoneKey: client.phone,
-      patch: { name: name.trim() },
+      patch: { name: name.trim(), phone: phone.trim(), phoneCountry },
     });
     setEditing(false);
+    onSaved();
   }
 
   const updateError =
@@ -56,25 +71,44 @@ function ClientDetail({
       <header>
         <div className="flex items-baseline justify-between gap-3">
           {editing ? (
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-lg font-semibold text-brand-900"
-            />
+            <div className="flex-1 space-y-2">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('clientsCrm.field.name')}
+                className="w-full rounded-md border border-border bg-background px-2 py-1 text-lg font-semibold text-brand-900"
+              />
+              <div className="grid grid-cols-[1fr_120px] gap-2">
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+528991234567"
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm font-mono"
+                />
+                <select
+                  value={phoneCountry}
+                  onChange={(e) => setPhoneCountry(e.target.value as 'US' | 'MX')}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                >
+                  <option value="MX">MX</option>
+                  <option value="US">US</option>
+                </select>
+              </div>
+            </div>
           ) : (
-            <h2 className="text-lg font-semibold text-brand-900">
-              {client.name ?? '—'}
-            </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-brand-900">
+                {client.name ?? '—'}
+              </h2>
+              <p className="text-sm text-muted-foreground">{client.phone}</p>
+            </div>
           )}
           {canEdit ? (
             editing ? (
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditing(false);
-                    setName(client.name ?? '');
-                  }}
+                  onClick={reset}
                   className="text-xs text-muted-foreground hover:underline"
                 >
                   {t('common.cancel')}
@@ -82,7 +116,7 @@ function ClientDetail({
                 <button
                   type="button"
                   onClick={() => void handleSave()}
-                  disabled={updateMutation.isPending || !name.trim()}
+                  disabled={updateMutation.isPending || !name.trim() || !phone.trim()}
                   className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                   {updateMutation.isPending ? t('common.saving') : t('common.save')}
@@ -99,7 +133,6 @@ function ClientDetail({
             )
           ) : null}
         </div>
-        <p className="text-sm text-muted-foreground">{client.phone}</p>
       </header>
 
       {updateError && (
@@ -183,29 +216,61 @@ export function StaffClients() {
   const { t, i18n } = useTranslation();
   const auth = useAuth();
   const canEdit = isAdmin(getGroups(auth.user));
-  const [phone, setPhone] = useState('');
+  const [filter, setFilter] = useState('');
   const [submitted, setSubmitted] = useState('');
+  const [browseAll, setBrowseAll] = useState(false);
   const [selected, setSelected] = useState<CrmClient | null>(null);
 
-  const { data: results, isLoading, error } = useCrmSearch(submitted);
+  const search = useCrmSearch(submitted);
+  const fullList = useCrmFullList(canEdit && browseAll);
 
   const moneyFormatter = new Intl.NumberFormat(i18n.language, {
     style: 'currency',
     currency: 'USD',
   });
 
+  const allClients = browseAll ? fullList.data ?? [] : search.data ?? [];
+  const isLoading = browseAll ? fullList.isLoading : search.isLoading;
+  const error = browseAll ? fullList.error : search.error;
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return allClients;
+    return allClients.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(q) ||
+        c.phone?.toLowerCase().includes(q)
+    );
+  }, [allClients, filter]);
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted(phone.trim());
+    setSubmitted(filter.trim());
     setSelected(null);
   }
 
   return (
     <div className="p-6 sm:p-8">
       <div className="mx-auto max-w-3xl space-y-5">
-        <h1 className="text-3xl font-semibold text-brand-900">
-          {t('clientsCrm.listTitle')}
-        </h1>
+        <div className="flex items-baseline justify-between">
+          <h1 className="text-3xl font-semibold text-brand-900">
+            {t('clientsCrm.listTitle')}
+          </h1>
+          {canEdit && (
+            <label className="flex items-center gap-2 text-xs text-brand-700">
+              <input
+                type="checkbox"
+                checked={browseAll}
+                onChange={(e) => {
+                  setBrowseAll(e.target.checked);
+                  setSelected(null);
+                }}
+                className="h-4 w-4 rounded border-border"
+              />
+              {t('clientsCrm.browseAll')}
+            </label>
+          )}
+        </div>
 
         <form
           onSubmit={handleSearch}
@@ -213,22 +278,29 @@ export function StaffClients() {
         >
           <input
             type="search"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder={t('clientsCrm.searchPlaceholder')}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={
+              browseAll
+                ? t('clientsCrm.filterPlaceholder')
+                : t('clientsCrm.searchPlaceholder')
+            }
             className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
-          <button
-            type="submit"
-            disabled={phone.trim().length < 3}
-            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {t('clientsCrm.searchCta')}
-          </button>
+          {!browseAll && (
+            <button
+              type="submit"
+              disabled={filter.trim().length < 3}
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {t('clientsCrm.searchCta')}
+            </button>
+          )}
         </form>
 
-        {!submitted ? (
+        {browseAll && fullList.isLoading ? (
+          <p className="text-muted-foreground">{t('common.loading')}</p>
+        ) : !browseAll && !submitted ? (
           <p className="text-sm text-muted-foreground">{t('clientsCrm.searchHint')}</p>
         ) : isLoading ? (
           <p className="text-muted-foreground">{t('common.loading')}</p>
@@ -238,12 +310,12 @@ export function StaffClients() {
               ? `${error.status}: ${error.message}`
               : t('common.error')}
           </p>
-        ) : !results || results.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <p className="text-muted-foreground">{t('clientsCrm.noResults')}</p>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             <ul className="space-y-2">
-              {results.map((c) => {
+              {filtered.slice(0, 100).map((c) => {
                 const isSelected = selected?.phone === c.phone;
                 return (
                   <li key={c.phone}>
@@ -266,11 +338,23 @@ export function StaffClients() {
                   </li>
                 );
               })}
+              {filtered.length > 100 && (
+                <li className="text-xs text-muted-foreground">
+                  {t('clientsCrm.tooMany', { count: filtered.length - 100 })}
+                </li>
+              )}
             </ul>
 
             <div>
               {selected ? (
-                <ClientDetail client={selected} canEdit={canEdit} />
+                <ClientDetail
+                  client={selected}
+                  canEdit={canEdit}
+                  onSaved={() => {
+                    void search.refetch();
+                    void fullList.refetch();
+                  }}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {t('clientsCrm.selectHint')}

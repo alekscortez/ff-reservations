@@ -120,7 +120,11 @@
     "searchHint": "Escribe al menos 3 dígitos y presiona Buscar para encontrar clientes a través de todos los eventos.",
     "selectHint": "Selecciona un resultado a la izquierda para ver los detalles.",
     "noResults": "Ningún cliente coincide con este teléfono.",
+    "browseAll": "Ver todos (admin)",
+    "filterPlaceholder": "Filtrar por nombre o teléfono…",
+    "tooMany": "+ {{count}} más — usa el filtro para reducir.",
     "field": {
+      "name": "Nombre",
       "totalReservations": "Reservaciones",
       "totalSpend": "Total gastado",
       "lastReservation": "Última reservación",
