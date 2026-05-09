@@ -357,6 +357,13 @@
     },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation",
+    "pastEvents": {
+      "button": "Past events ({{count}})",
+      "title": "Past events",
+      "searchPlaceholder": "Search by name or date (YYYY-MM-DD)…",
+      "noMatch": "No past events match.",
+      "tag": "past"
+    },
     "releaseConfirm": {
       "title": "Release this hold?",
       "body": "The table will become available again and your typed customer info will be cleared.",

@@ -357,6 +357,13 @@
     },
     "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación",
+    "pastEvents": {
+      "button": "Eventos pasados ({{count}})",
+      "title": "Eventos pasados",
+      "searchPlaceholder": "Buscar por nombre o fecha (AAAA-MM-DD)…",
+      "noMatch": "Sin coincidencias.",
+      "tag": "pasado"
+    },
     "releaseConfirm": {
       "title": "¿Liberar este apartado?",
       "body": "La mesa volverá a estar disponible y se borrarán los datos del cliente que hayas capturado.",

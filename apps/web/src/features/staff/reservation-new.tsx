@@ -83,6 +83,25 @@ export function ReservationNew() {
       .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
   }, [events]);
 
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const pastEvents = useMemo(() => {
+    if (!events) return [];
+    return [...events]
+      .filter((e) => e.eventDate < todayStr)
+      .sort((a, b) => b.eventDate.localeCompare(a.eventDate));
+  }, [events, todayStr]);
+  const [pastModalOpen, setPastModalOpen] = useState(false);
+  const [pastSearch, setPastSearch] = useState('');
+  const filteredPast = useMemo(() => {
+    const q = pastSearch.trim().toLowerCase();
+    if (!q) return pastEvents;
+    return pastEvents.filter(
+      (e) =>
+        e.eventName.toLowerCase().includes(q) ||
+        e.eventDate.includes(q)
+    );
+  }, [pastEvents, pastSearch]);
+
   useEffect(() => {
     if (eventDate || sortedEvents.length === 0) return;
     // Deep-link: ?eventDate=YYYY-MM-DD takes priority over the auto-pick if it
@@ -106,8 +125,11 @@ export function ReservationNew() {
   }, []);
 
   const selectedEvent = useMemo(
-    () => sortedEvents.find((e) => e.eventDate === eventDate) ?? null,
-    [sortedEvents, eventDate]
+    () =>
+      sortedEvents.find((e) => e.eventDate === eventDate) ??
+      (events ?? []).find((e) => e.eventDate === eventDate) ??
+      null,
+    [sortedEvents, events, eventDate]
   );
 
   const tablesArray = tablesData?.tables ?? [];
@@ -518,9 +540,20 @@ export function ReservationNew() {
         </div>
 
         <section className="rounded-lg border border-border bg-background p-4">
-          <label className="block text-sm font-medium text-brand-700" htmlFor="evt">
-            {t('reservationNew.eventLabel')}
-          </label>
+          <div className="flex items-baseline justify-between">
+            <label className="block text-sm font-medium text-brand-700" htmlFor="evt">
+              {t('reservationNew.eventLabel')}
+            </label>
+            {pastEvents.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPastModalOpen(true)}
+                className="text-xs text-muted-foreground hover:text-brand-900"
+              >
+                {t('reservationNew.pastEvents.button', { count: pastEvents.length })}
+              </button>
+            )}
+          </div>
           <select
             id="evt"
             className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -546,6 +579,17 @@ export function ReservationNew() {
                   {evt.eventName}
                 </option>
               ))
+            )}
+            {/* Synthetic option for a past/inactive event back-fill so the
+                select reflects what's actually loaded. */}
+            {eventDate && !sortedEvents.some((e) => e.eventDate === eventDate) && (
+              <option value={eventDate}>
+                {dateFormatter.format(new Date(eventDate + 'T00:00:00'))}
+                {(() => {
+                  const ev = (events ?? []).find((e) => e.eventDate === eventDate);
+                  return ev ? ` — ${ev.eventName} (${t('reservationNew.pastEvents.tag')})` : '';
+                })()}
+              </option>
             )}
           </select>
           {selectedEvent && (
@@ -1079,6 +1123,73 @@ export function ReservationNew() {
             </div>
           </form>
         )}
+          </div>
+        </div>
+      )}
+
+      {pastModalOpen && (
+        <div
+          className="fixed inset-0 z-[55] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="my-4 w-full max-w-lg rounded-2xl bg-background p-5 shadow-xl">
+            <header className="mb-3 flex items-baseline justify-between gap-3 border-b border-border pb-3">
+              <h2 className="text-base font-semibold text-brand-900">
+                {t('reservationNew.pastEvents.title')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setPastModalOpen(false);
+                  setPastSearch('');
+                }}
+                aria-label={t('reservationNew.closeModal')}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-sm text-brand-900 hover:bg-muted"
+              >
+                ✕
+              </button>
+            </header>
+            <input
+              type="search"
+              value={pastSearch}
+              onChange={(e) => setPastSearch(e.target.value)}
+              placeholder={t('reservationNew.pastEvents.searchPlaceholder')}
+              className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+            {filteredPast.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t('reservationNew.pastEvents.noMatch')}
+              </p>
+            ) : (
+              <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
+                {filteredPast.map((e) => (
+                  <li key={e.eventId}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (hold) {
+                          setReleaseIntent({
+                            kind: 'switchEvent',
+                            nextEventDate: e.eventDate,
+                          });
+                        } else {
+                          setEventDate(e.eventDate);
+                        }
+                        setPastModalOpen(false);
+                        setPastSearch('');
+                      }}
+                      className="flex w-full items-baseline justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary"
+                    >
+                      <span className="font-medium text-brand-900">{e.eventName}</span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {e.eventDate}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
