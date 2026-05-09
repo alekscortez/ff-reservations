@@ -123,6 +123,17 @@
 }
 
 @layer base {
+  /* Tailwind 4 dropped the v3 default border-color (`gray-200`); bare
+     `border` utilities resolve to `currentColor`. shadcn ui components
+     use bare `border` extensively, so without this every card/table/
+     input gets a near-black outline from the text color. Restore the
+     v3-style default to our `--color-border` token. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
   html,
   body {
     height: 100%;
