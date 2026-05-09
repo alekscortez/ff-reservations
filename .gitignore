@@ -4,9 +4,7 @@
 **/dist
 **/dist-ssr
 **/build
-**/.vite
 **/coverage
-**/web-build
 
 # Node
 **/node_modules
@@ -14,23 +12,10 @@ npm-debug.log
 yarn-error.log
 pnpm-debug.log
 
-# Lockfiles: keep pnpm-lock.yaml; ignore others if they appear by mistake.
-package-lock.json
-yarn.lock
-
 # Local env
 **/.env
 **/.env.local
 **/.env.*.local
-
-# Vite local cache
-**/.vite
-
-# Expo / React Native
-**/.expo
-**/.expo-shared
-apps/mobile/ios
-apps/mobile/android
 
 # IDEs and editors
 .idea/
@@ -65,11 +50,12 @@ Thumbs.db
 backend/lambda/function.zip
 backend/lambda/code_url.txt
 
-# TypeScript incremental + Vite generated config artifacts
+# TypeScript incremental
 **/*.tsbuildinfo
-apps/web/vite.config.d.ts
-apps/web/vite.config.js
 
 # Live-diff temp screenshots from chrome-devtools-mcp (keep .audit/.live-diff
 # markdown notes; just exclude binary screenshots).
 .tmp-*.png
+
+# Unattended-session log (local only)
+UNATTENDED_LOG.md

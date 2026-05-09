@@ -27,9 +27,15 @@ export const appConfig: ApplicationConfig = {
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
-      return new Promise<void>((resolve, reject) => {
+      // Always resolve so a flaky OIDC discovery call doesn't brick the
+      // entire app boot. Worst case the user lands on /login, which is
+      // exactly where authGuard would route them anyway.
+      return new Promise<void>((resolve) => {
         oidc.checkAuth().subscribe({
-          error: (e) => reject(e),
+          error: (e) => {
+            console.warn('oidc_checkauth_failed_at_bootstrap', e);
+            resolve();
+          },
           complete: () => resolve(),
         });
       });

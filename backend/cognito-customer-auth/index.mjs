@@ -21,6 +21,7 @@
 // Deployment lives in this folder's README.md.
 
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import { randomInt } from "node:crypto";
 
 const sns = new SNSClient({});
 
@@ -137,7 +138,8 @@ function readPriorOtpFromSession(session) {
 }
 
 function generateOtp() {
-  return String(Math.floor(100_000 + Math.random() * 900_000));
+  // CSPRNG: Math.random() is predictable from a leaked output stream.
+  return String(randomInt(100_000, 1_000_000));
 }
 
 async function sendOtpSms(phone, code) {

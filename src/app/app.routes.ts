@@ -1,10 +1,14 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
 import { roleGuard } from './core/guards/role.guard';
 import { Shell } from './core/layout/shell/shell';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'login' },
+  // /home is referenced by topbar; alias to /login rather than loading the
+  // Login component a second time.
+  { path: 'home', pathMatch: 'full', redirectTo: 'login' },
 
   // Public
   {
@@ -27,11 +31,6 @@ export const routes: Routes = [
       ),
   },
   {
-    path: 'home',
-    loadComponent: () =>
-      import('./features/public/login/login').then((m) => m.Login),
-  },
-  {
     path: 'check-in/pass',
     loadComponent: () =>
       import('./features/public/check-in-pass/check-in-pass').then(
@@ -46,19 +45,7 @@ export const routes: Routes = [
       ),
   },
   {
-    path: 'availability',
-    loadComponent: () =>
-      import('./features/public/availability/availability').then(
-        (m) => m.PublicAvailability
-      ),
-  },
-  {
     path: 'pay',
-    loadComponent: () =>
-      import('./features/public/pay/pay').then((m) => m.PublicPayPage),
-  },
-  {
-    path: 'public/pay',
     loadComponent: () =>
       import('./features/public/pay/pay').then((m) => m.PublicPayPage),
   },
@@ -107,7 +94,7 @@ export const routes: Routes = [
   {
     path: 'admin',
     component: Shell,
-    canMatch: [authGuard, roleGuard(['Admin'])],
+    canMatch: [authGuard, adminGuard],
     children: [
       {
         path: '',

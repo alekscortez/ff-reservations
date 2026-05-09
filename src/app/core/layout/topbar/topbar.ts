@@ -7,6 +7,7 @@ import { EventsService } from '../../http/events.service';
 import { ReservationsService } from '../../http/reservations.service';
 import { EventItem } from '../../../shared/models/event.model';
 import { ReservationItem } from '../../../shared/models/reservation.model';
+import { localIsoInTimeZoneToEpochMs } from '../../../shared/datetime';
 
 @Component({
   selector: 'app-topbar',
@@ -211,8 +212,15 @@ export class Topbar implements OnInit, OnDestroy {
       if (status !== 'CONFIRMED') continue;
       if (paymentStatus !== 'PENDING' && paymentStatus !== 'PARTIAL') continue;
 
-      const deadlineMs = Date.parse(String(reservation?.paymentDeadlineAt ?? ''));
-      if (!Number.isFinite(deadlineMs)) continue;
+      // paymentDeadlineAt is a "local-ISO" string interpreted in
+      // paymentDeadlineTz (server-defined operating zone). Date.parse would
+      // interpret it in the *browser's* zone — wrong for any staff member
+      // not in CST. localIsoInTimeZoneToEpochMs respects the source zone.
+      const deadlineMs = localIsoInTimeZoneToEpochMs(
+        reservation?.paymentDeadlineAt ?? null,
+        reservation?.paymentDeadlineTz ?? null
+      );
+      if (deadlineMs === null) continue;
       const delta = deadlineMs - now;
       if (delta <= dueSoonWindowMs) count += 1;
     }

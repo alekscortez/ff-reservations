@@ -40,6 +40,12 @@ import crypto from "node:crypto";
 const cognito = new CognitoIdentityProviderClient({});
 const SYNTH_EMAIL_DOMAIN = "customer.famosofuego.local";
 
+// Tokens / identity must never be cached by intermediaries.
+const NO_STORE_HEADERS = Object.freeze({
+  "cache-control": "no-store",
+  pragma: "no-cache",
+});
+
 function syntheticEmailFromPhone(phoneE164) {
   const digits = String(phoneE164 || "").replace(/^\+/, "").replace(/\D/g, "");
   return `customer-${digits}@${SYNTH_EMAIL_DOMAIN}`;
@@ -202,7 +208,7 @@ export async function handleCustomerAuthRoute(ctx) {
         expiresIn: auth.ExpiresIn,
         tokenType: auth.TokenType ?? "Bearer",
       },
-      cors
+      { ...cors, ...NO_STORE_HEADERS }
     );
   }
 

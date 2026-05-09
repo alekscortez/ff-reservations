@@ -14,6 +14,9 @@ export const authConfig: PassedInitialConfig = {
     postLoginRoute: '/auth/callback',
     silentRenew: true,
     useRefreshToken: true,
-    renewTimeBeforeTokenExpiresInSeconds: 30,
+    // 30s was tight enough that a slow refresh round-trip could let a token
+    // expire mid-flight; 90s gives us comfortable headroom without burning
+    // the refresh token any noticeably faster.
+    renewTimeBeforeTokenExpiresInSeconds: 90,
   },
 };

@@ -95,7 +95,52 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const cognito = new CognitoIdentityProviderClient({});
 const secretsManager = new SecretsManagerClient({});
 const sns = new SNSClient({});
+
+// Bounded LRU for the username → display-name cache. Map preserves insertion
+// order, so deleting the first key on overflow approximates LRU. Reads bump
+// the entry to "newest" by re-inserting. TTL still enforced at read site.
+const USER_CACHE_MAX = 256;
 const userCache = new Map();
+function userCacheGet(key) {
+  if (!userCache.has(key)) return undefined;
+  const value = userCache.get(key);
+  userCache.delete(key);
+  userCache.set(key, value);
+  return value;
+}
+function userCacheSet(key, value) {
+  if (userCache.has(key)) userCache.delete(key);
+  userCache.set(key, value);
+  while (userCache.size > USER_CACHE_MAX) {
+    const oldest = userCache.keys().next().value;
+    if (oldest === undefined) break;
+    userCache.delete(oldest);
+  }
+}
+
+// Cold-start visibility: structured warning for any unset env var that the
+// router or one of the services treats as required. Doesn't throw — each
+// route still calls requiredEnv() lazily — but surfaces config drift before
+// the first request lands.
+(function logUnsetCriticalEnv() {
+  const expected = [
+    "EVENTS_TABLE",
+    "HOLDS_TABLE",
+    "RES_TABLE",
+    "FREQUENT_CLIENTS_TABLE",
+    "CLIENTS_TABLE",
+    "CHECKIN_PASSES_TABLE",
+    "SETTINGS_TABLE",
+    "USER_POOL_ID",
+    "SQUARE_SECRET_ARN",
+    "SQUARE_ENV",
+    "SQUARE_LOCATION_ID",
+  ];
+  const missing = expected.filter((name) => !String(process.env[name] ?? "").trim());
+  if (missing.length > 0) {
+    console.warn("lambda_cold_start_missing_env", { missing });
+  }
+})();
 
 const envAutoSendSquareLinkSmsEnabled =
   String(AUTO_SEND_SQUARE_LINK_SMS ?? "false").trim().toLowerCase() === "true";
@@ -164,8 +209,8 @@ async function getUserLabel(event) {
 async function fetchUserNameFromCognito(username) {
   if (!USER_POOL_ID || !username) return null;
 
-  const cached = userCache.get(username);
   const now = Date.now();
+  const cached = userCacheGet(username);
   if (cached && now - cached.ts < 5 * 60 * 1000) {
     return cached.value;
   }
@@ -181,10 +226,10 @@ async function fetchUserNameFromCognito(username) {
     const nameAttr = attrs.find((a) => a.Name === "name");
     const emailAttr = attrs.find((a) => a.Name === "email");
     const value = nameAttr?.Value || emailAttr?.Value || null;
-    userCache.set(username, { value, ts: now });
+    userCacheSet(username, { value, ts: now });
     return value;
   } catch {
-    userCache.set(username, { value: null, ts: now });
+    userCacheSet(username, { value: null, ts: now });
     return null;
   }
 }
@@ -426,7 +471,8 @@ export const handler = async (event) => {
     return noContent(204, {
       ...cors,
       "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "access-control-allow-headers": "authorization,content-type",
+      "access-control-allow-headers": "authorization,content-type,idempotency-key",
+      "access-control-max-age": "600",
     });
   }
 
@@ -627,6 +673,7 @@ export const handler = async (event) => {
       appendReservationHistory: reservationsHoldsService.appendReservationHistory,
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,
+      refundSquarePayment: squarePaymentsService.refundPayment,
       sendPaymentLinkSms: smsNotificationsService.sendPaymentLinkSms,
       cancelReservation: reservationsHoldsService.cancelReservation,
       getRuntimeSettingsSubset: async () =>
@@ -659,8 +706,32 @@ export const handler = async (event) => {
 
     return json(404, { message: "Route not found", method, path }, cors);
   } catch (err) {
-    console.error("ERROR", err);
-    const status = Number(err?.statusCode) || 500;
-    return json(status, { message: err?.message || "Internal error" }, cors);
+    const requestId = String(
+      event?.requestContext?.requestId ??
+        event?.requestContext?.http?.requestId ??
+        ""
+    ).trim() || null;
+    const intentional = Number(err?.statusCode) > 0;
+    console.error("router_error", {
+      requestId,
+      method,
+      path,
+      intentional,
+      name: err?.name ?? null,
+      message: String(err?.message ?? err ?? ""),
+      stack: intentional ? null : err?.stack ?? null,
+    });
+    if (intentional) {
+      return json(Number(err.statusCode), { message: String(err.message ?? "Error") }, cors);
+    }
+    // Unknown error: don't echo internals to the client.
+    return json(
+      500,
+      {
+        message: "Internal error",
+        requestId,
+      },
+      cors
+    );
   }
 };

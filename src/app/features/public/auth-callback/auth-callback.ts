@@ -1,6 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
+import { decodeJwt, normalizeGroupsClaim } from '../../../core/auth/jwt';
 
 @Component({
   selector: 'app-auth-callback',
@@ -21,7 +22,8 @@ export class AuthCallback implements OnInit {
 
       // Use ID token groups to decide where to send the user
       this.oidc.getIdToken().subscribe((token) => {
-        const groups: string[] = decodeGroups(token);
+        const claims = decodeJwt(token);
+        const groups = normalizeGroupsClaim(claims?.['cognito:groups']);
 
         if (groups.includes('Admin') || groups.includes('Staff')) {
           this.router.navigateByUrl('/staff/dashboard');
@@ -31,22 +33,5 @@ export class AuthCallback implements OnInit {
         this.router.navigateByUrl('/unauthorized');
       });
     });
-  }
-}
-
-function decodeGroups(token: string | null | undefined): string[] {
-  const claims = decodeClaims(token);
-  return claims?.['cognito:groups'] ?? [];
-}
-
-function decodeClaims(token: string | null | undefined): any {
-  if (!token) return null;
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-  try {
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
   }
 }

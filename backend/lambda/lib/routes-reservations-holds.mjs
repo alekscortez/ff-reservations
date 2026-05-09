@@ -30,6 +30,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     appendReservationHistory,
     createSquarePayment,
     createSquarePaymentLink,
+    refundSquarePayment,
     sendPaymentLinkSms,
     cancelReservation,
     getRuntimeSettingsSubset,
@@ -39,6 +40,102 @@ export async function handleReservationsAndHoldsRoute(ctx) {
   } = ctx;
 
   const DEFAULT_CASH_APP_LINK_TTL_MINUTES = 10;
+
+  // After a Square charge succeeds, addReservationPayment may still reject
+  // (e.g. another payment landed first and remainingAmount is now 0). The
+  // money is already at Square; we MUST refund automatically or the customer
+  // is double-charged. Idempotency key is stable (per Square paymentId) so
+  // retries are safe and Square will return the existing refund.
+  const autoRefundAfterRecordFailure = async ({
+    paymentId,
+    amount,
+    eventDate,
+    reservationId,
+    recordError,
+    actor,
+  }) => {
+    if (typeof refundSquarePayment !== "function") {
+      console.error("auto_refund_skipped_no_refund_service", {
+        reservationId,
+        eventDate,
+        paymentId,
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      return { refunded: false, reason: "refund_service_unavailable" };
+    }
+    if (!paymentId || !(amount > 0)) {
+      return { refunded: false, reason: "missing_payment_or_amount" };
+    }
+    try {
+      const refund = await refundSquarePayment({
+        paymentId,
+        amount,
+        idempotencyKey: `auto-refund-${paymentId}`,
+        reason: "Reservation update failed after charge — auto refund",
+      });
+      console.warn("auto_refund_after_record_failure", {
+        reservationId,
+        eventDate,
+        paymentId,
+        refundId: refund?.refund?.id ?? null,
+        amount,
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      if (typeof appendReservationHistory === "function") {
+        await appendReservationHistory({
+          eventDate,
+          reservationId,
+          eventType: "AUTO_REFUND_AFTER_RECORD_FAILURE",
+          actor: String(actor ?? "").trim() || "system",
+          source: "system",
+          details: {
+            paymentId,
+            refundId: refund?.refund?.id ?? null,
+            amount,
+            recordErrorMessage: String(recordError?.message ?? recordError ?? "").slice(0, 256),
+          },
+        });
+      }
+      return {
+        refunded: true,
+        refundId: refund?.refund?.id ?? null,
+        refundStatus: refund?.refund?.status ?? null,
+      };
+    } catch (refundErr) {
+      console.error("auto_refund_failed", {
+        reservationId,
+        eventDate,
+        paymentId,
+        amount,
+        refundError: String(refundErr?.message ?? refundErr ?? ""),
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      if (typeof appendReservationHistory === "function") {
+        try {
+          await appendReservationHistory({
+            eventDate,
+            reservationId,
+            eventType: "AUTO_REFUND_FAILED",
+            actor: String(actor ?? "").trim() || "system",
+            source: "system",
+            details: {
+              paymentId,
+              amount,
+              refundErrorMessage: String(refundErr?.message ?? refundErr ?? "").slice(0, 256),
+              recordErrorMessage: String(recordError?.message ?? recordError ?? "").slice(0, 256),
+            },
+          });
+        } catch {
+          // Best-effort history write.
+        }
+      }
+      return {
+        refunded: false,
+        reason: "refund_failed",
+        refundErrorMessage: String(refundErr?.message ?? refundErr ?? "Refund failed"),
+      };
+    }
+  };
 
   const clampInt = (value, min, max, fallback) => {
     const parsed = Number(value);
@@ -604,27 +701,47 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       .trim()
       .toUpperCase();
     const recordedMethod = squareSourceType === "CASH_APP" ? "cashapp" : "square";
+    const squarePaymentId = String(square?.payment?.id ?? "").trim();
 
-    const item = await addReservationPayment(
-      reservationId,
-      {
-        eventDate,
-        amount,
-        method: recordedMethod,
-        source: "square-direct",
-        note,
-        provider: {
-          providerPaymentId: square.payment?.id,
-          providerStatus: square.payment?.status,
-          receiptUrl: square.payment?.receipt_url,
-          orderId: square.payment?.order_id,
-          sourceType: square.payment?.source_type,
-          idempotencyKey: square.idempotencyKey,
-          amountMoney: square.payment?.amount_money ?? null,
+    let item;
+    try {
+      item = await addReservationPayment(
+        reservationId,
+        {
+          eventDate,
+          amount,
+          method: recordedMethod,
+          source: "square-direct",
+          note,
+          provider: {
+            providerPaymentId: squarePaymentId || null,
+            providerStatus: square.payment?.status,
+            receiptUrl: square.payment?.receipt_url,
+            orderId: square.payment?.order_id,
+            sourceType: square.payment?.source_type,
+            idempotencyKey: square.idempotencyKey,
+            amountMoney: square.payment?.amount_money ?? null,
+          },
         },
-      },
-      user
-    );
+        user
+      );
+    } catch (recordErr) {
+      // Square already took the money. Auto-refund and surface a clear error.
+      const refund = await autoRefundAfterRecordFailure({
+        paymentId: squarePaymentId,
+        amount,
+        eventDate,
+        reservationId,
+        recordError: recordErr,
+        actor: user,
+      });
+      const baseMessage =
+        String(recordErr?.message ?? "Failed to record payment after charge");
+      const message = refund.refunded
+        ? `${baseMessage}. The Square charge has been refunded automatically (refund ${refund.refundId ?? "issued"}).`
+        : `${baseMessage}. Auto-refund FAILED — manual reconciliation required for Square payment ${squarePaymentId || "(unknown)"}.`;
+      throw httpError(refund.refunded ? 409 : 502, message);
+    }
 
     return json(
       200,
@@ -632,7 +749,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         item,
         square: {
           method: recordedMethod,
-          paymentId: square.payment?.id,
+          paymentId: squarePaymentId || null,
           status: square.payment?.status,
           receiptUrl: square.payment?.receipt_url ?? null,
           orderId: square.payment?.order_id ?? null,
@@ -1418,27 +1535,48 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       .trim()
       .toUpperCase();
     const recordedMethod = squareSourceType === "CASH_APP" ? "cashapp" : "square";
+    const squarePaymentId = String(square?.payment?.id ?? "").trim();
 
-    const item = await addReservationPayment(
-      context.reservationId,
-      {
-        eventDate: context.eventDate,
-        amount: context.chargeAmount,
-        method: recordedMethod,
-        source: "square-direct",
-        note: "Client self-service Cash App link",
-        provider: {
-          providerPaymentId: square.payment?.id,
-          providerStatus: square.payment?.status,
-          receiptUrl: square.payment?.receipt_url,
-          orderId: square.payment?.order_id,
-          sourceType: square.payment?.source_type,
-          idempotencyKey: square.idempotencyKey,
-          amountMoney: square.payment?.amount_money ?? null,
+    let item;
+    try {
+      item = await addReservationPayment(
+        context.reservationId,
+        {
+          eventDate: context.eventDate,
+          amount: context.chargeAmount,
+          method: recordedMethod,
+          source: "square-direct",
+          note: "Client self-service Cash App link",
+          provider: {
+            providerPaymentId: squarePaymentId || null,
+            providerStatus: square.payment?.status,
+            receiptUrl: square.payment?.receipt_url,
+            orderId: square.payment?.order_id,
+            sourceType: square.payment?.source_type,
+            idempotencyKey: square.idempotencyKey,
+            amountMoney: square.payment?.amount_money ?? null,
+          },
         },
-      },
-      "system:cashapp-link"
-    );
+        "system:cashapp-link"
+      );
+    } catch (recordErr) {
+      // Customer already paid via Cash App link. Auto-refund and surface a
+      // clear error to the public pay page.
+      const refund = await autoRefundAfterRecordFailure({
+        paymentId: squarePaymentId,
+        amount: context.chargeAmount,
+        eventDate: context.eventDate,
+        reservationId: context.reservationId,
+        recordError: recordErr,
+        actor: "system:cashapp-link",
+      });
+      const baseMessage =
+        String(recordErr?.message ?? "Could not apply payment to reservation");
+      const message = refund.refunded
+        ? `${baseMessage}. Your charge has been refunded automatically.`
+        : `${baseMessage}. Please contact the venue — payment id ${squarePaymentId || "(unknown)"}.`;
+      throw httpError(refund.refunded ? 409 : 502, message);
+    }
 
     await markReservationCashAppLinkSessionUsed({
       eventDate: context.eventDate,
