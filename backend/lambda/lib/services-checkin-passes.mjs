@@ -5,7 +5,16 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { createHash } from "crypto";
+
+import {
+  buildPassUrlFromBaseUrl,
+  hashToken,
+  isPassActive,
+  normalizePassForRead,
+  normalizeTokenInput,
+  sanitizeHistoryValue,
+  toHistorySk,
+} from "./services-checkin-passes-pure.mjs";
 
 const DEFAULT_PASS_TTL_DAYS = 2;
 
@@ -27,38 +36,6 @@ export function createCheckInPassesService({
 
   function requiredReservationsTableName() {
     return String(requiredEnv("RES_TABLE", RES_TABLE) ?? "").trim();
-  }
-
-  function normalizeTokenInput(value) {
-    const raw = String(value ?? "").trim();
-    if (!raw) return "";
-    if (/^ffr-checkin:/i.test(raw)) {
-      return raw.replace(/^ffr-checkin:/i, "").trim();
-    }
-
-    if (!raw.includes("://")) {
-      const match = raw.match(/(?:^|[?&])token=([^&]+)/i);
-      if (match) {
-        try {
-          return decodeURIComponent(match[1]);
-        } catch {
-          return match[1];
-        }
-      }
-      return raw;
-    }
-
-    try {
-      const parsed = new URL(raw);
-      const queryToken = String(parsed.searchParams.get("token") ?? "").trim();
-      return queryToken || raw;
-    } catch {
-      return raw;
-    }
-  }
-
-  function hashToken(token) {
-    return createHash("sha256").update(String(token ?? ""), "utf8").digest("hex");
   }
 
   function generateToken() {
@@ -84,33 +61,6 @@ export function createCheckInPassesService({
 
   function resolvePassBaseUrl() {
     return String(env.CHECKIN_PASS_BASE_URL ?? "").trim();
-  }
-
-  function sanitizeHistoryValue(value) {
-    if (value === null) return null;
-    const valueType = typeof value;
-    if (valueType === "string" || valueType === "number" || valueType === "boolean") {
-      return value;
-    }
-    if (Array.isArray(value)) {
-      return value
-        .map((item) => sanitizeHistoryValue(item))
-        .filter((item) => item !== undefined);
-    }
-    if (valueType === "object") {
-      const out = {};
-      for (const [k, v] of Object.entries(value)) {
-        const cleaned = sanitizeHistoryValue(v);
-        if (cleaned !== undefined) out[k] = cleaned;
-      }
-      return out;
-    }
-    return undefined;
-  }
-
-  function toHistorySk(reservationId, at, eventId) {
-    const ts = String(Number(at ?? 0) || 0).padStart(12, "0");
-    return `HIST#${reservationId}#${ts}#${eventId}`;
   }
 
   async function appendReservationHistory({
@@ -164,21 +114,7 @@ export function createCheckInPassesService({
   }
 
   function buildPassUrl(token) {
-    const baseUrl = resolvePassBaseUrl();
-    if (!baseUrl) return null;
-
-    if (baseUrl.includes("{token}")) {
-      return baseUrl.replace("{token}", encodeURIComponent(token));
-    }
-
-    try {
-      const parsed = new URL(baseUrl);
-      parsed.searchParams.set("token", token);
-      return parsed.toString();
-    } catch {
-      const joiner = baseUrl.includes("?") ? "&" : "?";
-      return `${baseUrl}${joiner}token=${encodeURIComponent(token)}`;
-    }
+    return buildPassUrlFromBaseUrl(resolvePassBaseUrl(), token);
   }
 
   function toPassResponse(item, includeToken = false) {
@@ -203,31 +139,6 @@ export function createCheckInPassesService({
       url: token ? buildPassUrl(token) : null,
       qrPayload: token ? `ffr-checkin:${token}` : null,
     };
-  }
-
-  function isPassActive(item, now = nowEpoch()) {
-    if (!item) return false;
-    if (String(item.status ?? "").toUpperCase() !== "ISSUED") return false;
-    const expiresAt = Number(item.expiresAt ?? 0);
-    return Number.isFinite(expiresAt) && expiresAt > now;
-  }
-
-  function normalizePassForRead(item, now = nowEpoch()) {
-    if (!item) return null;
-    const status = String(item.status ?? "").toUpperCase();
-    const expiresAt = Number(item.expiresAt ?? 0);
-    if (
-      status === "ISSUED" &&
-      Number.isFinite(expiresAt) &&
-      expiresAt > 0 &&
-      expiresAt <= now
-    ) {
-      return {
-        ...item,
-        status: "EXPIRED",
-      };
-    }
-    return item;
   }
 
   async function listReservationPasses(reservationId) {
