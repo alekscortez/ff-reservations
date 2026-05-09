@@ -98,17 +98,32 @@ function nowInTimeZoneLocalIso(tz: string, when: Date = new Date()): string {
 const HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
 const FILTERS_STORAGE_KEY = 'ff_new_res_filters_v1';
 
+type TableStatusFilter =
+  | 'ALL'
+  | 'AVAILABLE'
+  | 'HOLD'
+  | 'PENDING_PAYMENT'
+  | 'RESERVED'
+  | 'DISABLED';
+
+const STATUS_FILTER_VALUES: TableStatusFilter[] = [
+  'ALL',
+  'AVAILABLE',
+  'HOLD',
+  'PENDING_PAYMENT',
+  'RESERVED',
+  'DISABLED',
+];
+
 interface TableFilters {
   search: string;
-  showAvailable: boolean;
-  showUnavailable: boolean;
+  status: TableStatusFilter;
   sections: string[]; // empty = all
 }
 
 const DEFAULT_FILTERS: TableFilters = {
   search: '',
-  showAvailable: true,
-  showUnavailable: true,
+  status: 'ALL',
   sections: [],
 };
 
@@ -250,10 +265,17 @@ export function ReservationNew() {
           ? window.localStorage.getItem(FILTERS_STORAGE_KEY)
           : null;
       if (!raw) return DEFAULT_FILTERS;
-      const parsed = JSON.parse(raw) as Partial<TableFilters>;
+      const parsed = JSON.parse(raw) as Partial<TableFilters & { showAvailable?: boolean; showUnavailable?: boolean }>;
+      // Migrate legacy showAvailable/showUnavailable booleans → status enum.
+      let status: TableStatusFilter = 'ALL';
+      if (typeof parsed.status === 'string' && STATUS_FILTER_VALUES.includes(parsed.status as TableStatusFilter)) {
+        status = parsed.status as TableStatusFilter;
+      } else if (parsed.showAvailable === true && parsed.showUnavailable === false) {
+        status = 'AVAILABLE';
+      }
       return {
-        ...DEFAULT_FILTERS,
-        ...parsed,
+        search: typeof parsed.search === 'string' ? parsed.search : '',
+        status,
         sections: Array.isArray(parsed.sections) ? parsed.sections : [],
       };
     } catch {
@@ -269,16 +291,13 @@ export function ReservationNew() {
   }, [filters]);
   const activeFiltersCount =
     (filters.search.trim().length > 0 ? 1 : 0) +
-    (!filters.showAvailable ? 1 : 0) +
-    (!filters.showUnavailable ? 1 : 0) +
+    (filters.status !== 'ALL' ? 1 : 0) +
     (filters.sections.length > 0 ? 1 : 0);
   const filtersActive = activeFiltersCount > 0;
   const filteredTables = useMemo(() => {
     const q = filters.search.trim().toUpperCase();
     return tablesArray.filter((tb) => {
-      const isAvail = tb.status === 'AVAILABLE';
-      if (isAvail && !filters.showAvailable) return false;
-      if (!isAvail && !filters.showUnavailable) return false;
+      if (filters.status !== 'ALL' && tb.status !== filters.status) return false;
       if (filters.sections.length > 0 && !filters.sections.includes(tb.section)) {
         return false;
       }
@@ -1043,32 +1062,24 @@ export function ReservationNew() {
                     <span className="text-brand-700">
                       {t('reservationNew.filters.status')}
                     </span>
-                    <div className="flex gap-3">
-                      <label className="inline-flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={filters.showAvailable}
-                          onChange={(e) =>
-                            setFilters((f) => ({ ...f, showAvailable: e.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-border"
-                        />
-                        {t('reservationNew.filters.available')}
-                      </label>
-                      <label className="inline-flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={filters.showUnavailable}
-                          onChange={(e) =>
-                            setFilters((f) => ({
-                              ...f,
-                              showUnavailable: e.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-border"
-                        />
-                        {t('reservationNew.filters.unavailable')}
-                      </label>
+                    <div className="flex flex-wrap gap-1">
+                      {STATUS_FILTER_VALUES.map((s) => {
+                        const on = filters.status === s;
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setFilters((f) => ({ ...f, status: s }))}
+                            className={`rounded-md border px-2 py-0.5 text-xs ${
+                              on
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-background text-brand-900 hover:bg-muted'
+                            }`}
+                          >
+                            {t(`reservationNew.filters.statusValues.${s}`)}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -2028,6 +2039,26 @@ function TableListView({
             {arr.map((tb) => {
               const avail = tb.status === 'AVAILABLE';
               const isSelected = selectedTableId === tb.id;
+              // Per-status row chrome — keeps the at-a-glance scanability the
+              // Angular original had. AVAILABLE rows use the section accent
+              // border; status'd rows use a status-specific border + tint.
+              const statusClasses: Record<string, string> = {
+                HOLD: 'border-amber-300 bg-amber-50 text-amber-900',
+                PENDING_PAYMENT: 'border-orange-300 bg-orange-50 text-orange-900',
+                RESERVED: 'border-rose-300 bg-rose-50 text-rose-900',
+                DISABLED: 'border-border bg-muted/40 text-muted-foreground',
+                UNAVAILABLE: 'border-border bg-muted/40 text-muted-foreground',
+              };
+              const statusPillClasses: Record<string, string> = {
+                AVAILABLE: 'bg-success-100 text-success-700',
+                HOLD: 'bg-amber-200 text-amber-900',
+                PENDING_PAYMENT: 'bg-orange-200 text-orange-900',
+                RESERVED: 'bg-rose-200 text-rose-900',
+                DISABLED: 'bg-muted text-muted-foreground',
+                UNAVAILABLE: 'bg-muted text-muted-foreground',
+              };
+              const statusClass = statusClasses[tb.status] ?? '';
+              const pillClass = statusPillClasses[tb.status] ?? 'bg-muted text-muted-foreground';
               return (
                 <li key={tb.id}>
                   <button
@@ -2035,13 +2066,13 @@ function TableListView({
                     disabled={!avail || disabled}
                     onClick={() => avail && onSelect(tb)}
                     aria-pressed={isSelected}
-                    aria-label={`${tb.id} ${avail ? moneyFormatter.format(tb.price) : tb.status.replace(/_/g, ' ')}`}
+                    aria-label={`${tb.id} ${moneyFormatter.format(tb.price)} ${tb.status.replace(/_/g, ' ')}`}
                     className={`flex w-full items-baseline justify-between rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-primary ${
                       isSelected
                         ? 'border-primary bg-primary/10 ring-2 ring-primary'
                         : avail
                           ? 'border-border bg-background hover:border-primary'
-                          : 'cursor-not-allowed border-border bg-muted/40 opacity-60'
+                          : `cursor-not-allowed ${statusClass}`
                     }`}
                     style={
                       avail && !isSelected
@@ -2049,16 +2080,18 @@ function TableListView({
                         : undefined
                     }
                   >
-                    <span className="font-mono font-semibold text-brand-900">
+                    <span className="font-mono font-semibold">
                       {tb.id}
                     </span>
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{moneyFormatter.format(tb.price)}</span>
-                      {!avail && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
-                          {tb.status.replace(/_/g, ' ')}
-                        </span>
-                      )}
+                    <span className="flex items-center gap-2 text-xs">
+                      <span className={avail ? 'text-muted-foreground' : 'opacity-90'}>
+                        {moneyFormatter.format(tb.price)}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${pillClass}`}>
+                        {t(`reservationNew.list.status.${tb.status}`, {
+                          defaultValue: tb.status.replace(/_/g, ' '),
+                        })}
+                      </span>
                     </span>
                   </button>
                 </li>

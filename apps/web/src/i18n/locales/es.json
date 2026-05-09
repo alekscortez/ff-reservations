@@ -378,12 +378,28 @@
       "available": "Disponible",
       "unavailable": "No disponible",
       "sections": "Secciones",
-      "reset": "Limpiar filtros"
+      "reset": "Limpiar filtros",
+      "statusValues": {
+        "ALL": "Todas",
+        "AVAILABLE": "Disponible",
+        "HOLD": "Apartada",
+        "PENDING_PAYMENT": "Pago pendiente",
+        "RESERVED": "Reservada",
+        "DISABLED": "Inhabilitada"
+      }
     },
     "list": {
       "empty": "Ninguna mesa coincide con los filtros.",
       "heading": "Lista de mesas",
-      "results": "{{count}} resultados"
+      "results": "{{count}} resultados",
+      "status": {
+        "AVAILABLE": "Disponible",
+        "HOLD": "Apartada",
+        "PENDING_PAYMENT": "Pago pendiente",
+        "RESERVED": "Reservada",
+        "DISABLED": "Inhabilitada",
+        "UNAVAILABLE": "No disponible"
+      }
     },
     "cta": {
       "selectPrompt": "Selecciona una mesa",

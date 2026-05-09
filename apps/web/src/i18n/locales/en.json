@@ -378,12 +378,28 @@
       "available": "Available",
       "unavailable": "Unavailable",
       "sections": "Sections",
-      "reset": "Clear filters"
+      "reset": "Clear filters",
+      "statusValues": {
+        "ALL": "All",
+        "AVAILABLE": "Available",
+        "HOLD": "Hold",
+        "PENDING_PAYMENT": "Pending Payment",
+        "RESERVED": "Reserved",
+        "DISABLED": "Disabled"
+      }
     },
     "list": {
       "empty": "No tables match your filters.",
       "heading": "Table list",
-      "results": "{{count}} results"
+      "results": "{{count}} results",
+      "status": {
+        "AVAILABLE": "Available",
+        "HOLD": "Hold",
+        "PENDING_PAYMENT": "Pending Payment",
+        "RESERVED": "Reserved",
+        "DISABLED": "Disabled",
+        "UNAVAILABLE": "Unavailable"
+      }
     },
     "cta": {
       "selectPrompt": "Select a table",
