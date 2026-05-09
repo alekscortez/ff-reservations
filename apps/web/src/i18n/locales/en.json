@@ -354,8 +354,11 @@
     "credit": {
       "applyToggle": "Apply reschedule credit ({{count}} available)",
       "summary": "{{applied}} from credit · {{remaining}} remaining",
-      "remainderHint": "Pick a payment method below for the remainder; collect via Square link after create.",
-      "applyFailed": "Reservation created, but applying the credit failed: {{error}}"
+      "remainderHint": "Remainder will be collected via the payment link after create.",
+      "remainderCashHint": "Remainder will be recorded as a cash payment immediately after the credit applies.",
+      "remainingMethod": "Remaining payment method",
+      "applyFailed": "Reservation created, but applying the credit failed: {{error}}",
+      "remainderFailed": "Credit applied, but the cash remainder payment failed: {{error}}"
     },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation",

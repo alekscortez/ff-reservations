@@ -354,8 +354,11 @@
     "credit": {
       "applyToggle": "Aplicar crédito de reagendamiento ({{count}} disponible(s))",
       "summary": "{{applied}} del crédito · {{remaining}} restante",
-      "remainderHint": "Elige un método de pago para el restante; cobra el link de Square después de crear.",
-      "applyFailed": "La reservación se creó, pero no se pudo aplicar el crédito: {{error}}"
+      "remainderHint": "El restante se cobra con el link de pago tras crear.",
+      "remainderCashHint": "El restante se registra como pago en efectivo justo después del crédito.",
+      "remainingMethod": "Método del pago restante",
+      "applyFailed": "La reservación se creó, pero no se pudo aplicar el crédito: {{error}}",
+      "remainderFailed": "Crédito aplicado, pero falló el pago en efectivo del restante: {{error}}"
     },
     "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación",

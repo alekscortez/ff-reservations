@@ -707,6 +707,10 @@ export function ReservationNew() {
     [availableCredits, selectedCreditId]
   );
   const [creditEnabled, setCreditEnabled] = useState(false);
+  // When credit covers part of the amount, staff pre-declares how the
+  // remainder is being paid: cash → fire a second addPayment after credit;
+  // square/cashapp → handled by the post-create link panel.
+  const [remainingMethod, setRemainingMethod] = useState<PaymentMethodChoice>('cash');
   // If credits disappear (phone change), turn off the toggle.
   useEffect(() => {
     if (availableCredits.length === 0 && creditEnabled) setCreditEnabled(false);
@@ -934,7 +938,38 @@ export function ReservationNew() {
             creditId: selectedCredit.creditId,
           }
         );
-        setCreatedReservation(res.item ?? created);
+        let latest = res.item ?? created;
+        // If the staff pre-declared the cash remainder, fire a second
+        // addPayment immediately so the reservation is fully paid before
+        // surfacing the post-create panel. Square/cashapp remainders flow
+        // through the link panel.
+        const remainderAmount = Math.max(
+          0,
+          Number((amountDue - creditApplied).toFixed(2))
+        );
+        if (remainderAmount > 0.005 && remainingMethod === 'cash') {
+          try {
+            const cashRes = await apiClient.put<{ item: ReservationItem }>(
+              `/reservations/${created.reservationId}/payment`,
+              {
+                eventDate,
+                amount: remainderAmount,
+                method: 'cash',
+                note: 'Remaining balance after credit',
+              }
+            );
+            latest = cashRes.item ?? latest;
+          } catch (cashErr) {
+            const msg =
+              cashErr instanceof ApiError
+                ? `${cashErr.status}: ${cashErr.message}`
+                : (cashErr as Error)?.message ?? 'Failed to apply remainder';
+            setCreditApplyError(
+              t('reservationNew.credit.remainderFailed', { error: msg })
+            );
+          }
+        }
+        setCreatedReservation(latest);
       } catch (err) {
         const msg =
           err instanceof ApiError
@@ -1527,9 +1562,35 @@ export function ReservationNew() {
                       </p>
                     )}
                     {creditRemainderDue > 0.005 && (
-                      <p className="text-xs text-muted-foreground">
-                        {t('reservationNew.credit.remainderHint')}
-                      </p>
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor="remainingMethod"
+                          className="text-xs text-brand-700"
+                        >
+                          {t('reservationNew.credit.remainingMethod')}
+                        </label>
+                        <select
+                          id="remainingMethod"
+                          value={remainingMethod}
+                          onChange={(e) =>
+                            setRemainingMethod(e.target.value as PaymentMethodChoice)
+                          }
+                          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        >
+                          <option value="cash">{t('reservationNew.method.cash')}</option>
+                          <option value="square">
+                            {t('reservationNew.method.square')}
+                          </option>
+                          <option value="cashapp">
+                            {t('reservationNew.method.cashapp')}
+                          </option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          {remainingMethod === 'cash'
+                            ? t('reservationNew.credit.remainderCashHint')
+                            : t('reservationNew.credit.remainderHint')}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
