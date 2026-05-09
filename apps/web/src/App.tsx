@@ -8,6 +8,8 @@ import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { StaffFrequentClients } from '@/features/staff/frequent-clients';
 import { StaffReservations } from '@/features/staff/reservations';
+import { StaffPackages } from '@/features/staff/packages';
+import { PackageForm } from '@/features/staff/package-form';
 
 export function App() {
   return (
@@ -47,6 +49,30 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffReservations />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/packages"
+          element={
+            <RequireStaffOrAdmin>
+              <StaffPackages />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/packages/new"
+          element={
+            <RequireStaffOrAdmin>
+              <PackageForm />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/packages/:packageId/edit"
+          element={
+            <RequireStaffOrAdmin>
+              <PackageForm />
             </RequireStaffOrAdmin>
           }
         />

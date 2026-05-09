@@ -66,6 +66,15 @@ export function StaffDashboard() {
               {t('reservations.listDescription')}
             </p>
           </Link>
+          <Link
+            to="/staff/packages"
+            className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+          >
+            <h3 className="font-semibold text-brand-900">{t('packages.listTitle')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('packages.listDescription')}
+            </p>
+          </Link>
         </nav>
       </div>
     </main>

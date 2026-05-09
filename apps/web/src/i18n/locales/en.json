@@ -5,11 +5,14 @@
   },
   "common": {
     "loading": "Loading…",
+    "saving": "Saving…",
     "error": "Something went wrong",
     "retry": "Retry",
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
+    "deactivate": "Deactivate",
+    "edit": "Edit",
     "confirm": "Confirm"
   },
   "auth": {
@@ -45,5 +48,28 @@
     "filterByEvent": "Event date",
     "empty": "No reservations for this event.",
     "tableShort": "T"
+  },
+  "packages": {
+    "listTitle": "Birthday Packages",
+    "listDescription": "Add-ons offered to customers booking a table.",
+    "empty": "No packages yet. Create the first one.",
+    "newCta": "New package",
+    "newTitle": "New birthday package",
+    "editTitle": "Edit birthday package",
+    "displayOrderShort": "Order",
+    "confirmSoftDelete": "Deactivate \"{{name}}\"? It will hide from public browse but stay editable.",
+    "confirmHardDelete": "Permanently delete \"{{name}}\"? This cannot be undone.",
+    "field": {
+      "name": "Name",
+      "description": "Description",
+      "priceUSD": "Price (USD)",
+      "displayOrder": "Display order",
+      "inclusions": "Inclusions",
+      "inclusionsHint": "One bullet per line.",
+      "imageUrl": "Image URL",
+      "spanishOverride": "Spanish translation (optional)",
+      "spanishHint": "Leave blank to use the English copy for all locales.",
+      "status": "Status"
+    }
   }
 }

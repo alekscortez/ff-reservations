@@ -5,11 +5,14 @@
   },
   "common": {
     "loading": "Cargando…",
+    "saving": "Guardando…",
     "error": "Algo salió mal",
     "retry": "Reintentar",
     "cancel": "Cancelar",
     "save": "Guardar",
     "delete": "Eliminar",
+    "deactivate": "Desactivar",
+    "edit": "Editar",
     "confirm": "Confirmar"
   },
   "auth": {
@@ -45,5 +48,28 @@
     "filterByEvent": "Fecha del evento",
     "empty": "No hay reservaciones para este evento.",
     "tableShort": "M"
+  },
+  "packages": {
+    "listTitle": "Paquetes de cumpleaños",
+    "listDescription": "Complementos disponibles al reservar una mesa.",
+    "empty": "Aún no hay paquetes. Crea el primero.",
+    "newCta": "Nuevo paquete",
+    "newTitle": "Nuevo paquete de cumpleaños",
+    "editTitle": "Editar paquete de cumpleaños",
+    "displayOrderShort": "Orden",
+    "confirmSoftDelete": "¿Desactivar \"{{name}}\"? Dejará de aparecer en el sitio público pero seguirá editable.",
+    "confirmHardDelete": "¿Eliminar \"{{name}}\" permanentemente? No se puede deshacer.",
+    "field": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "priceUSD": "Precio (USD)",
+      "displayOrder": "Orden de visualización",
+      "inclusions": "Incluye",
+      "inclusionsHint": "Una viñeta por línea.",
+      "imageUrl": "URL de imagen",
+      "spanishOverride": "Traducción al español (opcional)",
+      "spanishHint": "Déjalo en blanco para usar el inglés en todos los idiomas.",
+      "status": "Estado"
+    }
   }
 }
