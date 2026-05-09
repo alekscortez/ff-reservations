@@ -1,0 +1,23 @@
+### Customer self-service routes (/me/*)
+###
+### These require a CUSTOMER access token (issued by the customer App
+### Client via /auth/customer/verify). The staff authorizer rejects
+### customer tokens, and the customer authorizer rejects staff tokens
+### — defense in depth on the audience boundary.
+###
+### Requires: {{baseUrl}} and {{customerAccessToken}} in http-client env.
+
+### GET /me/profile — read your identity + CRM summary
+### → 200 { sub, phone, phoneVerified, name, crm }
+###    where crm is { totalReservations, totalSpend, lastReservationAt,
+###    lastEventDate, lastTableId } or null when there's no ff-clients
+###    record for the customer's phone.
+GET {{baseUrl}}/me/profile
+Authorization: Bearer {{customerAccessToken}}
+
+### Without auth → 401
+GET {{baseUrl}}/me/profile
+
+### Staff endpoints reject the customer token (audience mismatch) → 401
+GET {{baseUrl}}/events
+Authorization: Bearer {{customerAccessToken}}
