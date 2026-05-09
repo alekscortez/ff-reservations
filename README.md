@@ -48,7 +48,7 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 - Check-in pass is one-time use.
 
 ## Repository layout
-- `/src` Angular app
+- `/src` Angular app. The staff Hold & Reserve page (`src/app/features/staff/reservations-new/`) had its pure helpers extracted into 5 sibling modules on 2026-05-09 — see `CLAUDE.md` "Where to look first" for the per-module breakdown.
 - `/backend/lambda` Lambda handler and service modules (the reservations/holds domain was split into 4 focused service modules + a 67-line barrel on 2026-05-09 — see `/backend/lambda/README.md`)
 - `/http` HTTP client requests for smoke/debug testing
 - `/src/assets/maps/FF_Reservations_Map.normalized.svg` live table map asset
