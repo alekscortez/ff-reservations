@@ -35,7 +35,19 @@
     "listTitle": "Eventos",
     "listDescription": "Explora el catálogo de eventos.",
     "empty": "Aún no hay eventos.",
-    "minDeposit": "Depósito mínimo"
+    "minDeposit": "Depósito mínimo",
+    "newCta": "Nuevo evento",
+    "newTitle": "Nuevo evento",
+    "editTitle": "Editar evento",
+    "activate": "Activar",
+    "confirmDelete": "¿Eliminar el evento \"{{name}}\"? No se puede deshacer.",
+    "field": {
+      "name": "Nombre del evento",
+      "date": "Fecha del evento",
+      "minDeposit": "Depósito mínimo (USD)",
+      "status": "Estado",
+      "statusHint": "Desactivar un evento ACTIVO libera el bloqueo de fecha para que un nuevo evento ocupe esa fecha."
+    }
   },
   "frequentClients": {
     "listTitle": "Clientes frecuentes",

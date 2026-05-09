@@ -1,11 +1,34 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useEventsList } from '@/lib/api/events';
+import { useDeleteEvent, useEventsList, useUpdateEvent } from '@/lib/api/events';
 import { ApiError } from '@/lib/api-client';
+
+function ToggleStatusButton({
+  eventId,
+  currentStatus,
+}: {
+  eventId: string;
+  currentStatus: 'ACTIVE' | 'INACTIVE';
+}) {
+  const { t } = useTranslation();
+  const update = useUpdateEvent(eventId);
+  const next = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  return (
+    <button
+      type="button"
+      onClick={() => update.mutate({ status: next })}
+      disabled={update.isPending}
+      className="text-xs text-primary hover:underline disabled:opacity-50"
+    >
+      {next === 'INACTIVE' ? t('common.deactivate') : t('events.activate')}
+    </button>
+  );
+}
 
 export function StaffEvents() {
   const { t, i18n } = useTranslation();
   const { data: events, isLoading, error } = useEventsList();
+  const deleteMutation = useDeleteEvent();
 
   const dateFormatter = new Intl.DateTimeFormat(i18n.language, {
     year: 'numeric',
@@ -16,6 +39,11 @@ export function StaffEvents() {
     style: 'currency',
     currency: 'USD',
   });
+
+  function handleDelete(eventId: string, eventName: string) {
+    if (!window.confirm(t('events.confirmDelete', { name: eventName }))) return;
+    deleteMutation.mutate(eventId);
+  }
 
   return (
     <main className="min-h-screen bg-brand-50 p-8">
@@ -29,7 +57,16 @@ export function StaffEvents() {
           </Link>
         </header>
 
-        <section className="mt-6">
+        <div className="mt-4 flex justify-end">
+          <Link
+            to="/staff/events/new"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            + {t('events.newCta')}
+          </Link>
+        </div>
+
+        <section className="mt-4">
           {isLoading ? (
             <p className="text-muted-foreground">{t('common.loading')}</p>
           ) : error ? (
@@ -52,19 +89,41 @@ export function StaffEvents() {
                         {dateFormatter.format(new Date(evt.eventDate + 'T00:00:00'))}
                       </p>
                     </div>
-                    <div className="text-right text-sm">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-xs ${
-                          evt.status === 'ACTIVE'
-                            ? 'bg-success-100 text-success-700'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {evt.status}
-                      </span>
-                      <p className="mt-1 text-muted-foreground">
-                        {t('events.minDeposit')}: {moneyFormatter.format(evt.minDeposit)}
-                      </p>
+                    <div className="flex flex-col items-end gap-2 text-right text-sm">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                            evt.status === 'ACTIVE'
+                              ? 'bg-success-100 text-success-700'
+                              : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {evt.status}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {t('events.minDeposit')}: {moneyFormatter.format(evt.minDeposit)}
+                        </span>
+                      </div>
+                      <div className="flex gap-3">
+                        <Link
+                          to={`/staff/events/${evt.eventId}/edit`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          {t('common.edit')}
+                        </Link>
+                        <ToggleStatusButton
+                          eventId={evt.eventId}
+                          currentStatus={evt.status}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(evt.eventId, evt.eventName)}
+                          disabled={deleteMutation.isPending}
+                          className="text-xs text-destructive hover:underline disabled:opacity-50"
+                        >
+                          {t('common.delete')}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </li>

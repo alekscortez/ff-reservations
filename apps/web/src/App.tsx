@@ -6,6 +6,7 @@ import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
 import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
+import { EventForm } from '@/features/staff/event-form';
 import { StaffFrequentClients } from '@/features/staff/frequent-clients';
 import { StaffReservations } from '@/features/staff/reservations';
 import { StaffPackages } from '@/features/staff/packages';
@@ -33,6 +34,22 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffEvents />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/events/new"
+          element={
+            <RequireStaffOrAdmin>
+              <EventForm />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/events/:eventId/edit"
+          element={
+            <RequireStaffOrAdmin>
+              <EventForm />
             </RequireStaffOrAdmin>
           }
         />

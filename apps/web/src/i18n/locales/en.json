@@ -35,7 +35,19 @@
     "listTitle": "Events",
     "listDescription": "Browse the events catalog.",
     "empty": "No events yet.",
-    "minDeposit": "Min deposit"
+    "minDeposit": "Min deposit",
+    "newCta": "New event",
+    "newTitle": "New event",
+    "editTitle": "Edit event",
+    "activate": "Activate",
+    "confirmDelete": "Delete event \"{{name}}\"? This cannot be undone.",
+    "field": {
+      "name": "Event name",
+      "date": "Event date",
+      "minDeposit": "Min deposit (USD)",
+      "status": "Status",
+      "statusHint": "Deactivating an ACTIVE event releases its date lock so a new event can take that slot."
+    }
   },
   "frequentClients": {
     "listTitle": "Frequent Clients",
