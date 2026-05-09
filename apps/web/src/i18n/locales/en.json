@@ -329,6 +329,24 @@
       "lock": "Lock"
     },
     "digitalNotice": "Reservation creates as PENDING. Customer pays the full amount via {{method}} link after create.",
+    "postCreate": {
+      "heading": "Reservation created",
+      "another": "Another reservation",
+      "viewDetail": "View detail",
+      "linkHeading": "Square payment link",
+      "linkHint": "Generate the link, then copy / SMS / WhatsApp it to the customer.",
+      "generate": "Generate link",
+      "regenerate": "Regenerate",
+      "copy": "Copy",
+      "sms": "Send SMS",
+      "smsSent": "SMS sent.",
+      "whatsApp": "WhatsApp",
+      "share": "Share",
+      "cashSummary": "Reservation saved with the cash flow you selected. No further action needed."
+    },
+    "share": {
+      "message": "Hi {{name}}, your Famoso Fuego reservation for table {{table}} is confirmed. Please complete payment of {{amount}}: {{url}}"
+    },
     "confirmCta": "Confirm reservation"
   },
   "reservationDetail": {

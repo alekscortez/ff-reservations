@@ -3,10 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/lib/api-client';
+import type { ReservationItem } from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
 import { useCreateHold, useReleaseHold, type Hold } from '@/lib/api/holds';
-import { useCreateReservation } from '@/lib/api/reservations';
+import {
+  useCreateReservation,
+  useCreateSquarePaymentLink,
+  useSendSquareLinkSms,
+} from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
 import { TableMap } from '@/components/table-map';
 
@@ -193,6 +198,8 @@ export function ReservationNew() {
     });
   }
 
+  const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
+
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
     const wantsDeadline =
@@ -217,7 +224,8 @@ export function ReservationNew() {
       paymentDeadlineAt,
       paymentDeadlineTz: wantsDeadline ? DEFAULT_DEADLINE_TZ : undefined,
     });
-    navigate(`/staff/reservations/${created.eventDate}/${created.reservationId}`);
+    setCreatedReservation(created);
+    setHold(null);
   });
 
   const submitError =
@@ -394,7 +402,22 @@ export function ReservationNew() {
           </section>
         ) : null}
 
-        {hold && heldTable && !expired && (
+        {createdReservation && (
+          <PostCreatePanel
+            reservation={createdReservation}
+            isDigital={createdReservation.paymentMethod === 'square' || createdReservation.paymentMethod === 'cashapp'}
+            onDone={() =>
+              navigate(
+                `/staff/reservations/${createdReservation.eventDate}/${createdReservation.reservationId}`
+              )
+            }
+            onAnother={() => {
+              setCreatedReservation(null);
+            }}
+          />
+        )}
+
+        {hold && heldTable && !expired && !createdReservation && (
           <form
             onSubmit={onSubmit}
             className="space-y-4 rounded-lg border border-border bg-background p-5"
@@ -691,5 +714,183 @@ export function ReservationNew() {
         )}
       </div>
     </div>
+  );
+}
+
+function PostCreatePanel({
+  reservation,
+  isDigital,
+  onDone,
+  onAnother,
+}: {
+  reservation: ReservationItem;
+  isDigital: boolean;
+  onDone: () => void;
+  onAnother: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const moneyFormatter = new Intl.NumberFormat(i18n.language, {
+    style: 'currency',
+    currency: 'USD',
+  });
+  const createLink = useCreateSquarePaymentLink(
+    reservation.reservationId,
+    reservation.eventDate
+  );
+  const sendSms = useSendSquareLinkSms(
+    reservation.reservationId,
+    reservation.eventDate
+  );
+
+  const linkUrl = createLink.data?.paymentLinkUrl ?? reservation.paymentLinkUrl ?? '';
+  const remaining = Math.max(
+    0,
+    Number(reservation.amountDue ?? 0) - Number(reservation.depositAmount ?? 0)
+  );
+
+  const message = t('reservationNew.share.message', {
+    name: reservation.customerName,
+    table: reservation.tableId,
+    amount: moneyFormatter.format(remaining || (reservation.amountDue ?? 0)),
+    url: linkUrl,
+  });
+
+  function copyLink() {
+    if (!linkUrl) return;
+    void navigator.clipboard.writeText(linkUrl);
+  }
+  function openWhatsApp() {
+    if (!linkUrl) return;
+    const phone = String(reservation.phone ?? '').replace(/\D/g, '');
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  }
+  function nativeShare() {
+    if (!linkUrl) return;
+    if (navigator.share) {
+      void navigator.share({ text: message, url: linkUrl });
+    } else {
+      copyLink();
+    }
+  }
+
+  const apiError = createLink.error ?? sendSms.error;
+  const errorMessage =
+    apiError && 'status' in apiError && 'message' in apiError
+      ? `${(apiError as { status: number }).status}: ${(apiError as { message: string }).message}`
+      : null;
+
+  return (
+    <article className="rounded-lg border-2 border-success-200 bg-success-100/40 p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-success-700">
+            {t('reservationNew.postCreate.heading')}
+          </h2>
+          <p className="text-sm text-brand-700">
+            {reservation.customerName} · {t('reservations.tableShort')}{' '}
+            {reservation.tableId} · {moneyFormatter.format(reservation.amountDue ?? 0)}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onAnother}
+            className="inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted"
+          >
+            {t('reservationNew.postCreate.another')}
+          </button>
+          <button
+            type="button"
+            onClick={onDone}
+            className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            {t('reservationNew.postCreate.viewDetail')}
+          </button>
+        </div>
+      </div>
+
+      {isDigital && remaining > 0 && (
+        <div className="mt-4 space-y-3 rounded-md border border-border bg-background p-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-semibold text-brand-900">
+              {t('reservationNew.postCreate.linkHeading')}
+            </p>
+            <button
+              type="button"
+              onClick={() => createLink.mutate({ eventDate: reservation.eventDate })}
+              disabled={createLink.isPending}
+              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {createLink.isPending
+                ? t('common.saving')
+                : linkUrl
+                  ? t('reservationNew.postCreate.regenerate')
+                  : t('reservationNew.postCreate.generate')}
+            </button>
+          </div>
+
+          {linkUrl ? (
+            <>
+              <input
+                type="text"
+                readOnly
+                value={linkUrl}
+                className="w-full rounded-md border border-border bg-muted/40 px-2 py-1 text-xs font-mono text-brand-900"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  className="inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted"
+                >
+                  {t('reservationNew.postCreate.copy')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendSms.mutate()}
+                  disabled={sendSms.isPending}
+                  className="inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted disabled:opacity-50"
+                >
+                  {sendSms.isPending
+                    ? t('common.saving')
+                    : t('reservationNew.postCreate.sms')}
+                </button>
+                <button
+                  type="button"
+                  onClick={openWhatsApp}
+                  className="inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted"
+                >
+                  {t('reservationNew.postCreate.whatsApp')}
+                </button>
+                <button
+                  type="button"
+                  onClick={nativeShare}
+                  className="inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted"
+                >
+                  {t('reservationNew.postCreate.share')}
+                </button>
+              </div>
+              {sendSms.isSuccess && (
+                <p className="text-xs text-success-700">
+                  {t('reservationNew.postCreate.smsSent')}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t('reservationNew.postCreate.linkHint')}
+            </p>
+          )}
+          {errorMessage && <p className="text-xs text-destructive">{errorMessage}</p>}
+        </div>
+      )}
+
+      {!isDigital && (
+        <p className="mt-4 text-sm text-brand-700">
+          {t('reservationNew.postCreate.cashSummary')}
+        </p>
+      )}
+    </article>
   );
 }

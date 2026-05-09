@@ -329,6 +329,24 @@
       "lock": "Bloquear"
     },
     "digitalNotice": "La reservación se crea PENDIENTE. El cliente paga el total por el link de {{method}} tras crear.",
+    "postCreate": {
+      "heading": "Reservación creada",
+      "another": "Otra reservación",
+      "viewDetail": "Ver detalle",
+      "linkHeading": "Link de pago Square",
+      "linkHint": "Genera el link y luego copia / envía por SMS / WhatsApp al cliente.",
+      "generate": "Generar link",
+      "regenerate": "Regenerar",
+      "copy": "Copiar",
+      "sms": "Enviar SMS",
+      "smsSent": "SMS enviado.",
+      "whatsApp": "WhatsApp",
+      "share": "Compartir",
+      "cashSummary": "Reservación guardada con el flujo en efectivo. No requiere acción adicional."
+    },
+    "share": {
+      "message": "Hola {{name}}, tu reservación en Famoso Fuego para la mesa {{table}} está confirmada. Completa tu pago de {{amount}}: {{url}}"
+    },
     "confirmCta": "Confirmar reservación"
   },
   "reservationDetail": {
