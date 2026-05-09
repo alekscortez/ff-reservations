@@ -41,6 +41,13 @@ import {
   todayString,
 } from './reservations-new-utils';
 import {
+  ActiveHoldSession,
+  clearActiveHoldSessionStorage,
+  findActiveHoldLock,
+  readActiveHoldSession,
+  writeActiveHoldSession,
+} from './reservations-new-active-hold';
+import {
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToE164,
@@ -58,27 +65,6 @@ interface CreatedReservationContext {
   linkMode: 'square' | 'client' | null;
 }
 
-interface ActiveHoldSession {
-  eventDate: string;
-  tableId: string;
-  holdId: string;
-  holdExpiresAt: number | null;
-  holdCreatedByMe: boolean;
-  showReservationModal: boolean;
-  customerName: string;
-  phone: string;
-  phoneCountry: 'US' | 'MX';
-  amountDue: number;
-  depositAmount: number;
-  paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY';
-  paymentMethod: 'cash' | 'square' | 'client';
-  allowCustomDeposit: boolean;
-  paymentDeadlineEnabled: boolean;
-  paymentDeadlineDate: string;
-  paymentDeadlineTime: string;
-  savedAt: number;
-}
-
 @Component({
   selector: 'app-reservations-new',
   imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap],
@@ -87,7 +73,6 @@ interface ActiveHoldSession {
 })
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
   private readonly filterStorageKey = 'ff_new_res_filters_v1';
-  private readonly holdSessionStorageKey = 'ff_new_res_active_hold_v1';
   private readonly sidebarModalLockClass = 'reservations-new-modal-open';
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
   private sidebarModalLockActive = false;
@@ -206,7 +191,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   ngOnInit(): void {
     this.restoreSavedFilters();
-    this.activeHoldSession = this.readActiveHoldSession();
+    this.activeHoldSession = readActiveHoldSession();
     this.loadRuntimeContext();
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1706,7 +1691,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.holdsApi.listLocks(this.eventDate).subscribe({
       next: (items) => {
         this.holdRestoreInFlight = false;
-        const lock = this.findActiveHoldLock(items, session);
+        const lock = findActiveHoldLock(items, session);
         if (!lock) {
           this.clearActiveHoldSession();
           return;
@@ -1744,34 +1729,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     });
   }
 
-  private findActiveHoldLock(
-    items: HoldLockItem[],
-    session: ActiveHoldSession
-  ): { expiresAt: number | null } | null {
-    const now = Math.floor(Date.now() / 1000);
-    for (const item of items ?? []) {
-      const lockType = String(item.lockType ?? '').toUpperCase();
-      if (lockType !== 'HOLD') continue;
-      const holdId = String(item.holdId ?? '').trim();
-      if (!holdId || holdId !== session.holdId) continue;
-      const tableId = this.extractTableIdFromHoldLock(item);
-      if (tableId && tableId !== session.tableId) continue;
-      const expiresRaw = Number(item.expiresAt ?? 0);
-      const expiresAt =
-        Number.isFinite(expiresRaw) && expiresRaw > 0 ? Math.floor(expiresRaw) : null;
-      if (expiresAt !== null && expiresAt <= now) continue;
-      return { expiresAt };
-    }
-    return null;
-  }
-
-  private extractTableIdFromHoldLock(item: HoldLockItem): string | null {
-    const sk = String(item?.SK ?? '').trim();
-    if (!sk.startsWith('TABLE#')) return null;
-    const tableId = sk.slice('TABLE#'.length).trim();
-    return tableId || null;
-  }
-
   private saveActiveHoldSessionIfNeeded(): void {
     if (!this.eventDate || !this.selectedTable?.id || !this.holdId) return;
     const session: ActiveHoldSession = {
@@ -1795,70 +1752,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       savedAt: Date.now(),
     };
     this.activeHoldSession = session;
-    this.writeActiveHoldSession(session);
+    writeActiveHoldSession(session);
   }
 
   private clearActiveHoldSession(): void {
     this.activeHoldSession = null;
-    try {
-      localStorage.removeItem(this.holdSessionStorageKey);
-    } catch {
-      // Ignore local storage failures in restricted environments.
-    }
-  }
-
-  private readActiveHoldSession(): ActiveHoldSession | null {
-    try {
-      const raw = localStorage.getItem(this.holdSessionStorageKey);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Partial<ActiveHoldSession>;
-      const eventDate = String(parsed.eventDate ?? '').trim();
-      const tableId = String(parsed.tableId ?? '').trim();
-      const holdId = String(parsed.holdId ?? '').trim();
-      if (!eventDate || !tableId || !holdId) return null;
-      const phoneCountry = normalizePhoneCountry(parsed.phoneCountry);
-      const paymentStatus = String(parsed.paymentStatus ?? '').trim().toUpperCase();
-      const paymentMethod = String(parsed.paymentMethod ?? '').trim().toLowerCase();
-      const validStatuses = ['PAID', 'PARTIAL', 'PENDING', 'COURTESY'];
-      const validMethods = ['cash', 'square', 'client'];
-      return {
-        eventDate,
-        tableId,
-        holdId,
-        holdExpiresAt: Number.isFinite(Number(parsed.holdExpiresAt))
-          ? Number(parsed.holdExpiresAt)
-          : null,
-        holdCreatedByMe: parsed.holdCreatedByMe !== false,
-        showReservationModal: parsed.showReservationModal !== false,
-        customerName: String(parsed.customerName ?? ''),
-        phone: String(parsed.phone ?? ''),
-        phoneCountry,
-        amountDue: Number.isFinite(Number(parsed.amountDue)) ? Number(parsed.amountDue) : 0,
-        depositAmount: Number.isFinite(Number(parsed.depositAmount))
-          ? Number(parsed.depositAmount)
-          : 0,
-        paymentStatus: (
-          validStatuses.includes(paymentStatus) ? paymentStatus : 'PAID'
-        ) as 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY',
-        paymentMethod: (
-          validMethods.includes(paymentMethod) ? paymentMethod : 'square'
-        ) as 'cash' | 'square' | 'client',
-        allowCustomDeposit: parsed.allowCustomDeposit === true,
-        paymentDeadlineEnabled: parsed.paymentDeadlineEnabled === true,
-        paymentDeadlineDate: String(parsed.paymentDeadlineDate ?? ''),
-        paymentDeadlineTime: String(parsed.paymentDeadlineTime ?? '00:00'),
-        savedAt: Number.isFinite(Number(parsed.savedAt)) ? Number(parsed.savedAt) : Date.now(),
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private writeActiveHoldSession(session: ActiveHoldSession): void {
-    try {
-      localStorage.setItem(this.holdSessionStorageKey, JSON.stringify(session));
-    } catch {
-      // Ignore local storage failures in restricted environments.
-    }
+    clearActiveHoldSessionStorage();
   }
 }
