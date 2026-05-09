@@ -278,9 +278,36 @@
   "reservations": {
     "listTitle": "Reservations",
     "listDescription": "View bookings for an event date.",
+    "subtitle": "View and manage reservations by date.",
     "filterByEvent": "Event date",
+    "selectEvent": "Select Event",
+    "refresh": "Refresh events",
+    "manualLookup": "Manual Date Lookup",
+    "eventDate": "Event Date",
+    "load": "Load",
+    "clear": "Clear",
     "empty": "No reservations for this event.",
-    "tableShort": "T"
+    "tableShort": "T",
+    "takePayment": "Take Payment",
+    "cancelledLine": "Reservation cancelled",
+    "courtesyLine": "Courtesy reservation",
+    "metaLine": "{{status}} {{amount}}",
+    "col": {
+      "reservation": "Reservation",
+      "payment": "Payment",
+      "remaining": "Remaining",
+      "deadline": "Deadline",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "paymentStatus": {
+      "PAID": "Paid",
+      "PARTIAL": "Partial",
+      "PENDING": "Pending",
+      "COURTESY": "Courtesy",
+      "REFUNDED": "Refunded",
+      "CANCELLED": "Cancelled"
+    }
   },
   "reservationNew": {
     "cta": "New reservation",

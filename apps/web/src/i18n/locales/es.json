@@ -278,9 +278,36 @@
   "reservations": {
     "listTitle": "Reservaciones",
     "listDescription": "Ver reservaciones para una fecha de evento.",
+    "subtitle": "Consulta y administra reservaciones por fecha.",
     "filterByEvent": "Fecha del evento",
+    "selectEvent": "Selecciona evento",
+    "refresh": "Actualizar eventos",
+    "manualLookup": "Búsqueda manual por fecha",
+    "eventDate": "Fecha del evento",
+    "load": "Cargar",
+    "clear": "Limpiar",
     "empty": "No hay reservaciones para este evento.",
-    "tableShort": "M"
+    "tableShort": "M",
+    "takePayment": "Tomar pago",
+    "cancelledLine": "Reservación cancelada",
+    "courtesyLine": "Reservación de cortesía",
+    "metaLine": "{{status}} {{amount}}",
+    "col": {
+      "reservation": "Reservación",
+      "payment": "Pago",
+      "remaining": "Restante",
+      "deadline": "Fecha límite",
+      "updated": "Actualizado",
+      "actions": "Acciones"
+    },
+    "paymentStatus": {
+      "PAID": "Pagada",
+      "PARTIAL": "Parcial",
+      "PENDING": "Pendiente",
+      "COURTESY": "Cortesía",
+      "REFUNDED": "Reembolsada",
+      "CANCELLED": "Cancelada"
+    }
   },
   "reservationNew": {
     "cta": "Nueva reservación",
