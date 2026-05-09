@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "pnpm --filter @ff/web dev",
     "dev:mobile": "pnpm --filter @ff/mobile start",
-    "build": "pnpm -r --filter './packages/*' run build && pnpm --filter @ff/web run build",
+    "build": "pnpm --filter @ff/web run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",
