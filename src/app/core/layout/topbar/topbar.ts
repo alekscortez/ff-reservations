@@ -230,10 +230,15 @@ export class Topbar implements OnInit, OnDestroy {
 
   private startPolling(): void {
     this.stopPolling();
-    this.pollTimer = setInterval(
-      () => this.loadTopbarContext(),
-      this.topbarPollingSeconds * 1000
-    );
+    this.pollTimer = setInterval(() => {
+      // Skip ticks while the tab is hidden — staff is not looking at the
+      // banner, no point hitting the API. Next tick after the tab becomes
+      // visible runs normally.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      this.loadTopbarContext();
+    }, this.topbarPollingSeconds * 1000);
   }
 
   private stopPolling(): void {

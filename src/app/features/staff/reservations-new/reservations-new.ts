@@ -340,6 +340,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.pollSub = interval(this.tablePollingSeconds * 1000).subscribe(() => {
       if (!this.eventDate) return;
       if (this.showReservationModal) return;
+      // Skip ticks while the tab is hidden — staff isn't watching the
+      // table availability map. Resumes on next tick once the tab is
+      // visible again.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
       this.loadTables(this.eventDate, { silent: true });
     });
   }
