@@ -1,0 +1,79 @@
+<section class="min-h-screen w-full bg-black px-4 py-8 text-white">
+  <div class="mx-auto w-full max-w-xl">
+    <h1 class="text-center text-3xl font-black tracking-wide">THIS IS CONFIRMATION</h1>
+    <p class="mt-1 text-center text-sm text-white/80">
+      Thank you for your reservation. Be ready for an unforgettable night.
+    </p>
+
+    <ng-container *ngIf="token(); else missingToken">
+      <article class="relative mt-5 overflow-hidden rounded-3xl bg-white text-black shadow-2xl">
+        <div class="p-5 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <img src="/assets/ff-logo.svg" alt="Famoso Fuego logo" class="h-12 w-auto" />
+            <div class="text-right">
+              <p class="text-[11px] font-semibold tracking-[0.14em] text-black/50">CHECK CODE</p>
+              <p class="text-xl font-extrabold leading-none">{{ checkCode() }}</p>
+            </div>
+          </div>
+
+          <div class="mt-4 flex justify-center">
+            <img
+              *ngIf="qrDataUrl(); else qrErrorBlock"
+              [src]="qrDataUrl()"
+              alt="Check-in QR code"
+              class="h-72 w-72 rounded-lg border border-black/10 bg-white p-2"
+            />
+          </div>
+          <ng-template #qrErrorBlock>
+            <p class="mt-2 text-center text-xs text-danger-700">
+              {{ qrError() || 'QR unavailable on this device.' }}
+            </p>
+          </ng-template>
+
+          <div class="mt-4">
+            <p class="text-[11px] font-semibold tracking-[0.14em] text-black/50">NAME</p>
+            <p class="text-3xl font-black leading-tight">{{ guestName() }}</p>
+            <p class="mt-3 text-[11px] font-semibold tracking-[0.14em] text-black/50">EVENT DATE</p>
+            <p class="text-lg font-extrabold">{{ confirmedDateLabel() }}</p>
+          </div>
+        </div>
+
+        <div class="relative border-t-2 border-dashed border-black/20 px-5 py-5 sm:px-6">
+          <span class="absolute -left-4 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-black"></span>
+          <span class="absolute -right-4 top-1/2 h-8 w-8 -translate-y-1/2 rounded-full bg-black"></span>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-[11px] font-semibold tracking-[0.14em] text-black/50">STATUS</p>
+              <p class="text-4xl font-black leading-none">{{ passStatusLabel() | uppercase }}</p>
+            </div>
+            <div class="text-right">
+              <p class="text-[11px] font-semibold tracking-[0.14em] text-black/50">TABLE</p>
+              <p class="text-5xl font-black leading-none">{{ confirmedTable() }}</p>
+            </div>
+          </div>
+
+          <p class="mt-4 text-center text-sm text-black/70">
+            Any questions? WhatsApp or text us at
+            <span class="font-semibold text-black">(956) 919-81-36</span>
+          </p>
+          <p class="mt-2 text-center text-xs text-black/60">
+            Need to make a change? We are happy to help. Please contact us before 10:00 PM on
+            your reservation date.
+          </p>
+        </div>
+      </article>
+    </ng-container>
+  </div>
+</section>
+
+<ng-template #missingToken>
+  <section class="mx-auto grid min-h-screen w-full max-w-xl place-content-center gap-4 px-4 py-8">
+    <article class="rounded-2xl border border-danger-200 bg-danger-50 p-5">
+      <h1 class="text-xl font-semibold text-danger-800">Pass link is invalid</h1>
+      <p class="mt-2 text-sm text-danger-700">
+        This check-in link does not include a token. Ask staff to resend your pass.
+      </p>
+    </article>
+  </section>
+</ng-template>

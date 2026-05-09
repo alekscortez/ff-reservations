@@ -3,29 +3,25 @@
 Nightclub reservations platform with role-aware staff/admin web app, serverless API, payment links, SMS notifications, check-in passes, and public live table map.
 
 ## Stack
-- Web app: Vite 8 + React 19.2 + TypeScript 5.9 + Tailwind 4 (CSS-first `@theme`, no config file) + shadcn/ui + react-oidc-context + Zod 4 + react-i18next 17 (EN+ES) (`apps/web`)
-- Mobile app (customer-facing, in development): Expo SDK 55 + React Native 0.83 + expo-router + NativeWind 4 (Tailwind 3 LTS — NativeWind v5 / Tailwind 4 still pre-release) + react-native-reusables (`apps/mobile`)
-- Shared library: typed models + phone normalization + design tokens (`packages/core`); runtime config helpers (`packages/config`)
-- Backend: AWS Lambda Node.js 22 (ESM) (`backend/lambda` for the API; `backend/cognito-pre-token-gen` and `backend/cognito-customer-auth` for the user-pool triggers)
+- Frontend: Angular 21 + Tailwind (`/src`)
+- Backend: AWS Lambda Node.js 22 (ESM) (`/backend/lambda`)
 - API: API Gateway HTTP API (`$default` stage)
 - Data: DynamoDB
-- Auth: Cognito Hosted UI for staff/admin; Cognito Custom Auth phone OTP for customers (deployed — mobile consumes `/auth/customer/{start,verify}` + `/me/*`)
-- Hosting: Amplify (web); EAS Build (mobile)
-- Payments: Square payment links (web) + Square In-App Payments SDK (mobile, planned)
+- Auth: Cognito Hosted UI + JWT authorizer
+- Hosting: Amplify (web)
+- Payments: Square (payment links + webhook handling)
 - Messaging: Amazon SNS (SMS)
+- Scanner: ZXing for QR check-in flow
 
 ## Current AWS context
 - API base URL: `https://api.famosofuego.com` (custom domain mapped to API Gateway HTTP API `oxk1adhl3a`)
 - Cognito user pool: `us-east-1_Upsi9Q2Tc`
-- App clients: staff/admin `1kdkvis45qo915plp7lvj03u16` (Hosted UI + code/PKCE), customer `21n3rd1sp4o9ka4l7tld45f0ka` (`ALLOW_CUSTOM_AUTH`, no client secret).
-- API Gateway authorizers: `5ea6tk` (staff audience) on staff/admin routes; `lngm05` (customer audience) on `/me/*`. Customer tokens 401 against staff routes; staff tokens 401 against `/me/*`.
+- Cognito app client: `1kdkvis45qo915plp7lvj03u16`
 - Amplify URL: `https://main.d1gxn3rvy5gfn4.amplifyapp.com`
 - Pre Token Generation v2 Lambda `ff-reservations-pretoken` is wired on the user pool — required for `cognito:groups` to land in the access token (source under `backend/cognito-pre-token-gen/`).
-- Customer custom-auth Lambda `ff-reservations-customer-auth` handles four user-pool triggers (PreSignUp / DefineAuthChallenge / CreateAuthChallenge / VerifyAuthChallengeResponse) for the customer App Client phone-OTP flow. Source under `backend/cognito-customer-auth/`.
 - EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
 - Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Failed scheduled invocations land here; `ff-res-lambda-dlq-depth` alarm pages on ≥1 visible message in 5min.
 - API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides).
-- Cloudflare (Free) proxies `api.famosofuego.com` with TLS Full (strict). WAF rate-limit rule `auth-customer-otp-bombing` blocks any IP making >5 requests / 10s to `/auth/customer/*`, for 10s. Free tier counts per-edge, so effective threshold scales with the number of CF edges serving the client (typically ~2 in Houston-area). AWS WAF v2 doesn't support API Gateway HTTP APIs — Cloudflare is the chosen alternative for L7 / per-IP rate limiting.
 - CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth.
 
 For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
@@ -52,47 +48,29 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 - Check-in pass is one-time use.
 
 ## Repository layout
-- `apps/web/` — Vite + React staff/admin web app
-- `apps/mobile/` — Expo + React Native customer mobile app
-- `packages/core/` — shared types, models, phone normalization, design tokens (consumed by both web `@theme` and mobile Tailwind config)
-- `packages/config/` — runtime config helpers
-- `backend/lambda/` — Lambda handler and service modules (deployed independently)
-- `backend/cognito-pre-token-gen/` — Cognito Pre Token Generation v2 trigger (injects `cognito:groups` into access tokens)
-- `backend/cognito-customer-auth/` — Cognito custom-auth Lambda for the customer App Client phone-OTP flow (4 trigger handlers in one function, routed by `event.triggerSource`)
-- `http/` — HTTP client requests for smoke/debug testing
-- `apps/web/public/maps/FF_Reservations_Map.normalized.svg` — live table map asset
+- `/src` Angular app
+- `/backend/lambda` Lambda handler and service modules
+- `/http` HTTP client requests for smoke/debug testing
+- `/src/assets/maps/FF_Reservations_Map.normalized.svg` live table map asset
 
 ## Local development
 
 ### Prerequisites
-- Node.js 22+ (root `package.json` engines pin)
-- pnpm 11+ via Corepack (`corepack enable`); root `package.json` declares `packageManager: pnpm@11.0.9`
+- Node.js 20+ (frontend)
+- npm 11+
 - AWS CLI configured for deployment/testing
-- Xcode + iOS Simulator (for mobile development on macOS)
-- Android Studio + Android Emulator (for mobile development)
 
-### Install
+### Frontend
 ```bash
-pnpm install
+npm install
+npm start
 ```
+App runs at `http://localhost:4200`.
 
-### Web (Vite)
-```bash
-pnpm dev
-```
-Runs at `http://localhost:4200`. Optionally copy `apps/web/.env.example` to `apps/web/.env.local` to override the defaults.
+Config lives in:
+- `/src/app/core/config/app-config.ts`
 
-### Mobile (Expo)
-```bash
-pnpm dev:mobile
-```
-Press `i` for iOS simulator, `a` for Android emulator, or scan the QR with Expo Go.
-
-### Typecheck and tests
-```bash
-pnpm typecheck
-pnpm test
-```
+If you need a different API/Cognito setup (dev/staging/prod), update that config file before build/deploy.
 
 ### Lambda (manual deploy script)
 From `/backend/lambda`:
@@ -120,9 +98,7 @@ Main expected keys:
 - `CLIENTS_TABLE`
 - `CHECKIN_PASSES_TABLE`
 - `SETTINGS_TABLE`
-- `PACKAGES_TABLE`
 - `USER_POOL_ID`
-- `CUSTOMER_CLIENT_ID` (gates `/auth/customer/{start,verify}`; routes no-op if unset)
 - `SQUARE_SECRET_ARN`
 - `SQUARE_ENV`
 - `SQUARE_LOCATION_ID`
@@ -139,12 +115,10 @@ Main expected keys:
 - `SQUARE_CURRENCY`
 
 ## Required IAM highlights (Lambda role)
-- DynamoDB read/write/query/update/txn on all project tables + indexes (including the `ff-reservations.byCustomerSub` GSI used by `/me/reservations`). Phase 4 added inline policy `packages-table` granting Get/Put/Update/Delete/Query/Scan on `ff-packages`.
-- Cognito on user pool: `AdminGetUser` (existing) + `AdminCreateUser` / `AdminAddUserToGroup` / `AdminEnableUser` / `AdminDisableUser` / `AdminListGroupsForUser` / `AdminResetUserPassword` / `ListUsers` (existing). Phase 3 added inline policies `customer-auth-cognito-public-api` (`SignUp` / `InitiateAuth` / `RespondToAuthChallenge` for `/auth/customer/*`) and `me-routes-cognito-admin` (`AdminDeleteUser` for `DELETE /me`).
+- DynamoDB read/write/query/update/txn on all project tables + indexes.
+- `cognito-idp:AdminGetUser` on user pool.
 - `secretsmanager:GetSecretValue` on Square secret ARN.
 - `sns:Publish` for SMS sends.
-
-The customer custom-auth Lambda runs on its own role `ff-reservations-customer-auth-role` (basic execution + `sns:Publish`).
 
 ## HTTP smoke/debug requests
 Use files in `/http`:
@@ -159,10 +133,6 @@ Use files in `/http`:
 - `square-webhook.http`
 - `smoke-debug.http`
 - `public-availability.http`
-- `admin.http` (`/admin/whoami` for the staff `AuthHealthBanner`)
-- `customer-auth.http` (`POST /auth/customer/{start,verify}` mediator routes — public, no auth)
-- `packages.http` (admin CRUD on `/packages*` + public browse on `/public/packages*`)
-- `me.http` (`GET /me/profile`, `GET /me/reservations`, `DELETE /me` — customer access token via `customerAccessToken` env var)
 
 Environment variables for `.http` runs should be kept local (not committed), for example:
 - `/http-client/http-client.private.env.json`
@@ -182,14 +152,14 @@ Environment variables for `.http` runs should be kept local (not committed), for
 - SMS not delivered: query CloudWatch log group `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure) for the recipient phone — these were enabled at 100% sample rate.
 - Cron sweep status: `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance" --region us-east-1`.
 - Lambda DLQ has messages (`ff-res-lambda-dlq-depth` alarm fired): `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1` to inspect the failed async invocation payloads. Investigate before redriving — the same code path is still scheduled to run.
-- `429 Too Many Requests`: distinguish source by response shape. Cloudflare → short HTML body, `server: cloudflare` header, no `cf-cache-status` (rate-limit rule on `/auth/customer/*`); tune in Cloudflare dashboard → Security → WAF → Rate limiting rules. API Gateway → JSON `{"message":"Too Many Requests"}` (stage throttle 200 burst / 100 RPS); bump via `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...`.
+- `429 Too Many Requests` from API Gateway: stage throttle is 200 burst / 100 RPS by default. Bump in `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...` if a real workload outgrows it.
 - Reservation history rows missing in audit log: `ff-res-history-write-errors-5m` alarm + filter-log-events on `"reservation_history_write_error"` will surface the cause (IAM, throttling, schema).
 
 ## Build and test
 ```bash
-pnpm build       # builds packages/* then apps/web
-pnpm test        # vitest across all workspaces
-pnpm typecheck   # tsc --noEmit across all workspaces
+npm run build
+npm run test
+npx tsc -p tsconfig.app.json --noEmit
 ```
 
 ## Notes for contributors

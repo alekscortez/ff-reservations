@@ -1,0 +1,101 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.table-map-shell {
+  width: 100%;
+  height: 100%;
+}
+
+.table-map-canvas {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.table-map-svg {
+  min-width: 680px;
+}
+
+.table-map-empty,
+.table-map-error {
+  padding: 16px;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.table-map-error {
+  color: #b91c1c;
+}
+
+@media (max-width: 1023px) {
+  .table-map-canvas {
+    min-height: 520px;
+  }
+}
+
+:host ::ng-deep .ff-map-root {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+:host ::ng-deep .ff-map-table {
+  transition: opacity 140ms ease, filter 140ms ease;
+}
+
+:host ::ng-deep .ff-map-table[data-clickable='true'] {
+  cursor: pointer;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-available > g:first-child [fill] {
+  fill: #22c55e !important;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-hold > g:first-child [fill] {
+  fill: #9ca3af !important;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-pending-payment > g:first-child [fill] {
+  fill: #9ca3af !important;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-reserved > g:first-child [fill] {
+  fill: #9ca3af !important;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-disabled > g:first-child [fill] {
+  fill: #9ca3af !important;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-disabled {
+  opacity: 0.42;
+}
+
+:host ::ng-deep .ff-map-unavailable-mark line {
+  stroke: #dc2626 !important;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+:host ::ng-deep .ff-map-table.ff-map-selected {
+  filter: drop-shadow(0 0 0.3rem rgba(17, 24, 39, 0.45));
+}
+
+:host ::ng-deep .ff-map-selected-ring {
+  fill: none;
+  stroke: #111827;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+:host ::ng-deep .ff-map-selected-ring-underlay {
+  stroke: #ffffff;
+  stroke-width: 4.6;
+}

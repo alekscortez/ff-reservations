@@ -1,0 +1,970 @@
+<section class="flex w-full flex-col gap-4">
+  <header>
+    <h1 class="text-2xl font-semibold text-brand-900">New Reservation</h1>
+    <p class="text-sm text-brand-600" *ngIf="event">
+      Event: {{ event.eventName }} ({{ event.eventDate }})
+    </p>
+  </header>
+
+  <section
+    class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6"
+    *ngIf="!eventDate"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold text-brand-900">Select Event</h2>
+        <p class="text-sm text-brand-600">Choose the correct date before taking reservations.</p>
+      </div>
+    </div>
+
+    <div *ngIf="eventsLoading" class="mt-3 text-sm text-brand-500">Loading events…</div>
+    <div *ngIf="eventsError" class="mt-3 text-sm text-danger-700">{{ eventsError }}</div>
+
+    <div
+      class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      *ngIf="!eventsLoading && upcomingEvents().length > 0"
+    >
+      <button
+        type="button"
+        class="rounded-2xl border border-brand-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-900"
+        *ngFor="let e of upcomingEvents()"
+        [ngClass]="{ 'ring-2 ring-brand-900': isThisWeek(e.eventDate) }"
+        (click)="selectEvent(e.eventDate!)"
+      >
+        <div class="grid gap-1">
+          <span class="text-xl font-semibold text-brand-900">{{ formatEventDate(e.eventDate) }}</span>
+          <span class="text-xs text-brand-500">{{ e.eventDate }}</span>
+        </div>
+        <div class="mt-2 text-sm font-semibold text-brand-900">{{ e.eventName }}</div>
+        <div class="mt-1 text-[11px] uppercase tracking-[0.2em] text-brand-500">
+          {{ e.status || 'ACTIVE' }}
+        </div>
+      </button>
+    </div>
+
+    <div class="mt-4 flex justify-end">
+      <button
+        type="button"
+        class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700"
+        (click)="showPastModal = true"
+      >
+        Search past events
+      </button>
+    </div>
+  </section>
+
+  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showPastModal">
+    <div class="absolute inset-0 bg-black/50" (click)="showPastModal = false"></div>
+    <div class="relative max-h-[92dvh] w-[92vw] max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:p-6">
+      <div class="flex items-center justify-between gap-4">
+        <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
+        <button
+          type="button"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+          (click)="showPastModal = false"
+          aria-label="Close past events"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <label class="grid gap-1 text-xs text-brand-600">
+          Date
+          <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterDate" />
+        </label>
+        <label class="grid gap-1 text-xs text-brand-600">
+          Name
+          <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterName" placeholder="Saturday Night" />
+        </label>
+        <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
+          Clear
+        </button>
+      </div>
+      <div class="mt-4 grid gap-2">
+        <button
+          type="button"
+          class="grid grid-cols-[120px_1fr_auto] items-center gap-3 rounded-xl border border-brand-100 px-3 py-3 text-left text-sm"
+          *ngFor="let e of pastEvents()"
+          (click)="selectEvent(e.eventDate!)"
+        >
+          <span class="font-semibold text-brand-900">{{ e.eventDate }}</span>
+          <span class="text-brand-700">{{ e.eventName }}</span>
+          <span class="text-[11px] uppercase tracking-[0.2em] text-brand-500">{{ e.status || 'ACTIVE' }}</span>
+        </button>
+        <div class="text-sm text-brand-500" *ngIf="pastEvents().length === 0">No past events found.</div>
+      </div>
+    </div>
+  </div>
+
+  <section
+    class="w-full pb-24 lg:pb-6"
+    *ngIf="eventDate"
+    [style.padding-bottom.px]="compactSectionBottomPaddingPx ?? null"
+  >
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="grid gap-1">
+        <span *ngIf="loading" class="text-sm text-brand-500">Loading tables…</span>
+        <span class="text-sm text-danger-700" *ngIf="error && !showReservationModal">{{ error }}</span>
+      </div>
+    </div>
+
+    <div class="mt-4 grid gap-2 lg:hidden">
+      <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
+        <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
+          <button
+            type="button"
+            class="rounded-full px-3 py-1 text-xs font-semibold"
+            [ngClass]="isTableViewMode('MAP') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            (click)="setTableViewMode('MAP')"
+          >
+            Map
+          </button>
+          <button
+            type="button"
+            class="rounded-full px-3 py-1 text-xs font-semibold"
+            [ngClass]="isTableViewMode('LIST') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            (click)="setTableViewMode('LIST')"
+          >
+            List
+          </button>
+        </div>
+        <p class="text-[11px] text-brand-500" *ngIf="isTableViewMode('MAP')">
+          Tap a green table to start reservation
+        </p>
+      </div>
+      <div class="flex min-w-0 items-end gap-2" *ngIf="isTableViewMode('LIST')">
+        <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
+          Search table
+          <input
+            type="text"
+            class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+            [formControl]="filterQuery"
+            placeholder="A01, B38..."
+            inputmode="numeric"
+            pattern="[0-9]*"
+          />
+        </label>
+        <div class="flex shrink-0 items-center">
+          <button
+            type="button"
+            class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-800"
+            [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
+            (click)="toggleFiltersPanel()"
+            aria-label="Open filters"
+            title="Filters"
+          >
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+            </svg>
+            <span
+              class="absolute right-0 top-0 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-900 px-1 text-center text-[9px] font-semibold leading-none text-white"
+              *ngIf="activeFiltersCount() > 0"
+            >
+              {{ activeFiltersCount() }}
+            </span>
+          </button>
+        </div>
+      </div>
+      <div
+        class="grid w-full gap-3 rounded-xl border border-brand-100 bg-white p-3 shadow-sm"
+        *ngIf="showFiltersPanel && isTableViewMode('LIST')"
+      >
+        <div class="grid gap-2">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'ALL' }"
+              (click)="setFilterStatus('ALL')"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'AVAILABLE' }"
+              (click)="setFilterStatus('AVAILABLE')"
+            >
+              Available
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'HOLD' }"
+              (click)="setFilterStatus('HOLD')"
+            >
+              Hold
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+              (click)="setFilterStatus('PENDING_PAYMENT')"
+            >
+              Pending Payment
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
+              (click)="setFilterStatus('RESERVED')"
+            >
+              Reserved
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'DISABLED' }"
+              (click)="setFilterStatus('DISABLED')"
+            >
+              Disabled
+            </button>
+          </div>
+        </div>
+
+        <div class="grid gap-2">
+          <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Section</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+              (click)="setFilterSection('ALL')"
+            >
+              All
+            </button>
+            <button
+              type="button"
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              *ngFor="let s of sections"
+              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+              (click)="setFilterSection(s)"
+            >
+              Section {{ s }}
+            </button>
+          </div>
+        </div>
+
+        <div class="flex justify-end" *ngIf="hasActiveFilters()">
+          <button
+            type="button"
+            class="rounded-full border border-brand-200 px-3 py-1 text-xs text-brand-700"
+            (click)="clearFilters()"
+          >
+            Clear filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      #compactMapShell
+      class="mt-4 lg:hidden compact-map-shell"
+      *ngIf="isTableViewMode('MAP')"
+      [style.bottom.px]="compactBottomInsetPx"
+      [style.height.px]="compactPanelHeightPx ?? null"
+    >
+      <app-table-map
+        class="compact-map-widget"
+        [tables]="tables"
+        [sectionColors]="tableSectionColors"
+        [selectedTableId]="selectedTable?.id ?? null"
+        (tableSelect)="selectTable($event)"
+      ></app-table-map>
+    </div>
+
+    <div
+      #compactListShell
+      class="compact-list-shell mt-4 overflow-hidden rounded-xl border border-brand-100 bg-white shadow-sm lg:hidden"
+      *ngIf="isTableViewMode('LIST')"
+      [style.bottom.px]="compactBottomInsetPx"
+      [style.max-height.px]="compactPanelHeightPx ?? null"
+    >
+      <div class="compact-list-header flex items-center justify-between gap-2 px-3 py-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
+        <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+      </div>
+      <div class="compact-list-body grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 md:grid-cols-4">
+      <button
+        class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
+        [ngClass]="{
+          'border-brand-900': selectedTable?.id === t.id,
+          'border-accent-400 bg-accent-50': t.status === 'HOLD',
+          'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
+          'border-danger-400 bg-danger-50': t.status === 'RESERVED',
+          'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
+        }"
+        *ngFor="let t of filteredTables()"
+        type="button"
+        (click)="selectTable(t)"
+        [disabled]="t.status !== 'AVAILABLE'"
+      >
+        <div
+          class="grid grid-cols-[1fr_auto] items-start gap-1"
+          [ngClass]="{
+            'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD' || t.status === 'PENDING_PAYMENT',
+            'text-brand-600': t.status === 'RESERVED',
+            'text-brand-400': t.status === 'DISABLED'
+          }"
+        >
+          <span class="text-lg font-semibold">{{ t.id }}</span>
+          <span class="text-base font-semibold">${{ t.price }}</span>
+        </div>
+        <div
+          class="mt-2 text-[11px] uppercase tracking-[0.2em]"
+          [ngClass]="{
+            'text-brand-500': t.status === 'AVAILABLE',
+            'text-accent-700': t.status === 'HOLD',
+            'text-warning-700': t.status === 'PENDING_PAYMENT',
+            'text-danger-700': t.status === 'RESERVED',
+            'text-brand-400': t.status === 'DISABLED'
+          }"
+        >
+          {{
+            t.status === 'AVAILABLE'
+              ? 'Available'
+              : t.status === 'PENDING_PAYMENT'
+                ? 'Pending Payment'
+                : t.status
+          }}
+        </div>
+      </button>
+      </div>
+    </div>
+
+    <div
+      #desktopSplitPanel
+      class="desktop-split mt-4 hidden lg:sticky lg:top-16 lg:grid lg:grid-cols-12 lg:gap-4"
+      [style.height.px]="desktopSplitHeightPx ?? null"
+    >
+      <div class="desktop-map-col lg:col-span-8">
+        <div class="desktop-map-panel-card">
+          <app-table-map
+            class="desktop-map-widget"
+            [tables]="tables"
+            [sectionColors]="tableSectionColors"
+            [selectedTableId]="selectedTable?.id ?? null"
+            (tableSelect)="selectTable($event)"
+          ></app-table-map>
+        </div>
+      </div>
+
+      <div class="desktop-table-panel lg:col-span-4">
+        <div class="desktop-table-panel-card rounded-xl border border-brand-100 bg-white p-3 shadow-sm">
+          <div class="mb-3 grid gap-2">
+            <div class="flex min-w-0 items-end gap-2">
+              <label class="grid min-w-0 flex-1 gap-1 text-xs text-brand-600">
+                Search table
+                <input
+                  type="text"
+                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm"
+                  [formControl]="filterQuery"
+                  placeholder="A01, B38..."
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                />
+              </label>
+              <div class="flex shrink-0 items-center">
+                <button
+                  type="button"
+                  class="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-800"
+                  [ngClass]="{ 'border-brand-900 bg-brand-50': hasActiveFilters() || showFiltersPanel }"
+                  (click)="toggleFiltersPanel()"
+                  aria-label="Open filters"
+                  title="Filters"
+                >
+                  <svg
+                    class="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
+                  </svg>
+                  <span
+                    class="absolute right-0 top-0 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-900 px-1 text-center text-[9px] font-semibold leading-none text-white"
+                    *ngIf="activeFiltersCount() > 0"
+                  >
+                    {{ activeFiltersCount() }}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="grid w-full gap-3 rounded-xl border border-brand-100 bg-white p-3"
+              *ngIf="showFiltersPanel"
+            >
+              <div class="grid gap-2">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'ALL' }"
+                    (click)="setFilterStatus('ALL')"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'AVAILABLE' }"
+                    (click)="setFilterStatus('AVAILABLE')"
+                  >
+                    Available
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'HOLD' }"
+                    (click)="setFilterStatus('HOLD')"
+                  >
+                    Hold
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+                    (click)="setFilterStatus('PENDING_PAYMENT')"
+                  >
+                    Pending Payment
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
+                    (click)="setFilterStatus('RESERVED')"
+                  >
+                    Reserved
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'DISABLED' }"
+                    (click)="setFilterStatus('DISABLED')"
+                  >
+                    Disabled
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Section</p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+                    (click)="setFilterSection('ALL')"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    *ngFor="let s of sections"
+                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+                    (click)="setFilterSection(s)"
+                  >
+                    Section {{ s }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex justify-end" *ngIf="hasActiveFilters()">
+                <button
+                  type="button"
+                  class="rounded-full border border-brand-200 px-3 py-1 text-xs text-brand-700"
+                  (click)="clearFilters()"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-2 flex shrink-0 items-center justify-between">
+            <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
+            <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+          </div>
+          <div class="desktop-table-list min-h-0 flex-1 space-y-2 pr-1">
+            <button
+              class="w-full rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
+              [ngClass]="{
+                'border-brand-900': selectedTable?.id === t.id,
+                'border-accent-400 bg-accent-50': t.status === 'HOLD',
+                'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
+                'border-danger-400 bg-danger-50': t.status === 'RESERVED',
+                'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
+              }"
+              *ngFor="let t of filteredTables()"
+              type="button"
+              (click)="selectTable(t)"
+              [disabled]="t.status !== 'AVAILABLE'"
+            >
+              <div
+                class="grid grid-cols-[1fr_auto] items-start gap-1"
+                [ngClass]="{
+                  'text-brand-900': t.status === 'AVAILABLE' || t.status === 'HOLD' || t.status === 'PENDING_PAYMENT',
+                  'text-brand-600': t.status === 'RESERVED',
+                  'text-brand-400': t.status === 'DISABLED'
+                }"
+              >
+                <span class="text-lg font-semibold">{{ t.id }}</span>
+                <span class="text-base font-semibold">${{ t.price }}</span>
+              </div>
+              <div
+                class="mt-2 text-[11px] uppercase tracking-[0.2em]"
+                [ngClass]="{
+                  'text-brand-500': t.status === 'AVAILABLE',
+                  'text-accent-700': t.status === 'HOLD',
+                  'text-warning-700': t.status === 'PENDING_PAYMENT',
+                  'text-danger-700': t.status === 'RESERVED',
+                  'text-brand-400': t.status === 'DISABLED'
+                }"
+              >
+                {{
+                  t.status === 'AVAILABLE'
+                    ? 'Available'
+                    : t.status === 'PENDING_PAYMENT'
+                      ? 'Pending Payment'
+                      : t.status
+                }}
+              </div>
+            </button>
+          </div>
+          <div class="desktop-table-actions mt-3 shrink-0 border-t border-brand-100 pt-3">
+            <div class="mb-2 text-sm text-brand-700">
+              <span class="font-semibold text-brand-900">
+                {{ selectedTable ? ('Table ' + selectedTable.id) : 'Select a table' }}
+              </span>
+              <span *ngIf="selectedTable" class="ml-2 text-brand-600">
+                ${{ selectedTable.price }}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                class="h-11 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:opacity-50"
+                (click)="clearEventSelection()"
+                [disabled]="loading || showReservationModal || showPastModal"
+              >
+                Change Event
+              </button>
+              <button
+                type="button"
+                class="h-11 rounded-lg px-3 text-sm font-semibold text-white disabled:opacity-60"
+                (click)="startHoldFlow()"
+                [disabled]="loading || !selectedTable"
+                [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900'"
+              >
+                Hold &amp; Reserve
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
+    <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
+    <div class="relative h-full w-full max-w-3xl overflow-y-auto overflow-x-hidden bg-white p-4 pb-28 md:h-auto md:max-h-[92dvh] md:rounded-2xl md:p-6">
+      <div class="grid gap-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-semibold text-brand-900">Reservation Details</h3>
+            <p class="text-sm text-brand-600">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span
+              class="rounded-full border border-brand-200 px-3 py-1 text-xs font-semibold text-brand-700"
+              *ngIf="holdId"
+            >
+              {{ holdCountdownLabel }}
+            </span>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+              (click)="closeReservationModal()"
+              aria-label="Close reservation details"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <ng-container *ngIf="!createdReservation; else postCreatePanel">
+          <form [formGroup]="form" class="grid gap-4 md:grid-cols-2">
+            <div class="grid gap-4 md:col-span-2 md:grid-cols-[1.2fr_1fr]">
+              <label class="grid gap-1 text-xs text-brand-600">
+                Phone
+                <div class="grid grid-cols-[110px_1fr] gap-2">
+                  <select
+                    class="rounded-lg border border-brand-200 px-2 py-2 text-sm"
+                    [value]="phoneCountry"
+                    (change)="onPhoneCountryChanged($any($event.target).value)"
+                  >
+                    <option value="US">🇺🇸 +1</option>
+                    <option value="MX">🇲🇽 +52</option>
+                  </select>
+                  <input
+                    type="tel"
+                    class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+                    formControlName="phone"
+                    inputmode="tel"
+                    placeholder="Phone number"
+                  />
+                </div>
+              </label>
+
+              <label class="grid gap-1 text-xs text-brand-600">
+                Customer Name
+                <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="customerName" />
+              </label>
+            </div>
+
+            <div
+              class="md:col-span-2 rounded-xl border border-brand-100 bg-white p-2"
+              *ngIf="clientLoading || clientMatches.length > 0 || noClientMatch"
+            >
+              <div class="text-xs text-brand-500" *ngIf="clientLoading">Searching…</div>
+              <div class="text-xs text-brand-500" *ngIf="noClientMatch">
+                No match found. This will create a new client.
+              </div>
+              <button
+                class="mt-2 flex w-full items-center justify-between rounded-lg border border-brand-100 px-3 py-2 text-left text-sm"
+                type="button"
+                *ngFor="let c of clientMatches"
+                [ngClass]="{ 'border-brand-900': isExactMatch(c) }"
+                (click)="selectClient(c)"
+              >
+                <span class="match-name">{{ c.name }}</span>
+                <span class="match-phone">{{ c.phone | phoneDisplay }}</span>
+              </button>
+            </div>
+
+            <div
+              class="md:col-span-2 rounded-xl border border-accent-200 bg-accent-50/70 p-3"
+              *ngIf="clientCreditsLoading || clientCredits.length > 0 || clientCreditsError"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-accent-800">
+                  Reservation Credits
+                </p>
+                <p class="text-xs font-semibold text-accent-800" *ngIf="!clientCreditsLoading && clientCredits.length">
+                  Total ${{ clientCreditsTotalRemaining().toFixed(2) }}
+                </p>
+              </div>
+              <p class="mt-1 text-xs text-brand-600" *ngIf="clientCreditsLoading">Loading reservation credits…</p>
+              <p class="mt-1 text-xs text-danger-700" *ngIf="clientCreditsError">{{ clientCreditsError }}</p>
+              <div class="mt-2 grid gap-2" *ngIf="!clientCreditsLoading && clientCredits.length">
+                <label class="flex items-center gap-2 text-sm text-brand-800">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4"
+                    [checked]="isUsingClientCredit()"
+                    (change)="form.controls.useCredit.setValue($any($event.target).checked)"
+                  />
+                  Apply reservation credit
+                </label>
+
+                <ng-container *ngIf="isUsingClientCredit()">
+                  <label class="grid gap-1 text-xs text-brand-600">
+                    Select Credit
+                    <select
+                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      formControlName="creditId"
+                    >
+                      <option value="" disabled>Select reservation credit</option>
+                      <option *ngFor="let credit of clientCredits" [value]="credit.creditId">
+                        {{ clientCreditLabel(credit) }}
+                      </option>
+                    </select>
+                  </label>
+                  <div class="rounded-lg border border-accent-200 bg-white p-2 text-xs text-brand-700">
+                    <p>Credit applied now: ${{ clientCreditAppliedAmount().toFixed(2) }}</p>
+                    <p *ngIf="clientCreditRemainingAmount() > 0">
+                      Remaining after credit: ${{ clientCreditRemainingAmount().toFixed(2) }}
+                    </p>
+                    <p *ngIf="clientCreditRemainingAmount() <= 0">
+                      Credit fully covers this reservation amount.
+                    </p>
+                  </div>
+                  <label class="grid gap-1 text-xs text-brand-600" *ngIf="shouldShowCreditRemainingMethod()">
+                    Remaining Payment Method
+                    <select
+                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      formControlName="remainingMethod"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="square">Square</option>
+                      <option value="client">Cash App</option>
+                    </select>
+                  </label>
+                </ng-container>
+              </div>
+            </div>
+
+            <div class="grid gap-2 md:col-span-2" *ngIf="!isUsingClientCredit()">
+              <p class="text-xs text-brand-600">Payment Method</p>
+              <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
+                <button
+                  type="button"
+                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold touch-manipulation"
+                  *ngFor="let method of paymentMethodOptions; trackBy: trackByPaymentMethodOption"
+                  [ngClass]="isPaymentMethod(method.value) ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-brand-800'"
+                  (mousedown)="onPaymentMethodButtonClick($event, method.value)"
+                  (click)="onPaymentMethodButtonClick($event, method.value)"
+                >
+                  {{ method.label }}
+                </button>
+              </div>
+            </div>
+
+            <label class="grid gap-1 text-xs text-brand-600 md:col-span-2">
+              Total Amount Due
+              <input
+                type="number"
+                min="0"
+                formControlName="amountDue"
+                class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+              />
+            </label>
+
+            <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isUsingClientCredit() && !isCashMethod()">
+              <p class="font-semibold text-brand-800">
+                Digital payment flow
+              </p>
+              <p class="mt-1">
+                Reservation is created as pending until payment is confirmed. Full amount due is collected using
+                {{ isClientPayMethod() ? 'Cash App link' : 'Square link' }}.
+              </p>
+            </div>
+
+            <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="!isUsingClientCredit() && isCashMethod()">
+              <label class="grid gap-1 text-xs text-brand-600">
+                Payment Status
+                <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+                  <option value="PAID">PAID</option>
+                  <option value="PARTIAL">PARTIAL</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="COURTESY">COURTESY</option>
+                </select>
+              </label>
+
+              <label class="grid gap-1 text-xs text-brand-600">
+                Deposit Amount
+                <div class="grid grid-cols-[1fr_auto] gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    formControlName="depositAmount"
+                    [readonly]="!allowCustomDeposit"
+                    [class.readonly]="!allowCustomDeposit"
+                    class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+                  />
+                  <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="toggleCustomDeposit()">
+                    {{ allowCustomDeposit ? 'Lock' : 'Modify' }}
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            <div class="grid gap-2 md:col-span-2">
+              <label class="flex items-center gap-2 text-sm text-brand-700" *ngIf="!isUsingClientCredit() && isCashMethod()">
+                <input
+                  type="checkbox"
+                  class="h-4 w-4"
+                  [checked]="paymentDeadlineEnabled"
+                  (change)="paymentDeadlineEnabled = !paymentDeadlineEnabled"
+                />
+                Set payment deadline (required if not fully paid)
+              </label>
+              <p class="text-xs text-brand-600" *ngIf="!isUsingClientCredit() && !isCashMethod()">
+                Payment deadline is required for digital payment methods.
+              </p>
+              <p class="text-xs text-brand-600" *ngIf="isUsingClientCredit() && shouldShowCreditRemainingMethod()">
+                Remaining balance will be collected by
+                {{
+                  form.controls.remainingMethod.value === 'cash'
+                    ? 'Cash'
+                    : (form.controls.remainingMethod.value === 'client' ? 'Cash App link' : 'Square link')
+                }}
+                after credit is applied.
+              </p>
+              <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
+                <label class="grid gap-1 text-xs text-brand-600">
+                  Deadline Date
+                  <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineDate" />
+                </label>
+                <label class="grid gap-1 text-xs text-brand-600">
+                  Deadline Time (America/Chicago)
+                  <input type="time" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineTime" />
+                </label>
+                <p class="text-xs text-brand-500 md:col-span-2">
+                  Default for pending/partial is next day at 12:00 AM (America/Chicago).
+                </p>
+              </div>
+            </div>
+          </form>
+        </ng-container>
+
+        <ng-template #postCreatePanel>
+          <article class="grid gap-3 rounded-xl border border-brand-100 bg-brand-50 p-4">
+            <h4 class="text-base font-semibold text-brand-900">Reservation Confirmed</h4>
+            <p class="text-sm text-brand-700">
+              Reservation <span class="font-semibold">{{ createdReservation?.reservationId }}</span> created for
+              Table {{ createdReservation?.tableId }}.
+            </p>
+
+            <ng-container *ngIf="isLinkCollectionFlow(); else nonSquareSummary">
+              <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ linkCollectionTitle() }}</p>
+                  <button
+                    type="button"
+                    class="h-8 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:opacity-60"
+                    (click)="generatePaymentLinkForCurrentFlow()"
+                    [disabled]="creatingPaymentLink"
+                  >
+                    {{ creatingPaymentLink ? 'Generating…' : (paymentLinkUrl ? 'Regenerate' : 'Generate Link') }}
+                  </button>
+                </div>
+
+                <p class="text-xs text-danger-700" *ngIf="paymentLinkError">{{ paymentLinkError }}</p>
+                <p class="text-xs text-success-700" *ngIf="paymentLinkNotice">{{ paymentLinkNotice }}</p>
+
+                <ng-container *ngIf="paymentLinkUrl">
+                  <input
+                    type="text"
+                    class="h-10 rounded-lg border border-brand-200 px-3 text-xs text-brand-900"
+                    [value]="paymentLinkUrl"
+                    readonly
+                  />
+                  <div class="flex flex-wrap gap-2">
+                    <button type="button" class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800" (click)="copyGeneratedPaymentLink()">
+                      Copy
+                    </button>
+                    <button type="button" class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800" (click)="openSmsShareGenerated()">
+                      SMS
+                    </button>
+                    <button type="button" class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800" (click)="openWhatsAppShareGenerated()">
+                      WhatsApp
+                    </button>
+                    <button type="button" class="h-9 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800" (click)="shareGeneratedPaymentLink()">
+                      Share
+                    </button>
+                  </div>
+                  <p class="text-xs text-brand-500">{{ generatedLinkShareMessage() }}</p>
+                </ng-container>
+              </div>
+            </ng-container>
+
+            <ng-template #nonSquareSummary>
+              <p class="text-sm text-brand-700" *ngIf="isCashMethod()">
+                Payment was captured as cash flow.
+              </p>
+            </ng-template>
+          </article>
+        </ng-template>
+
+        <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+
+        <p class="text-xs text-brand-500" *ngIf="!holdId && !createdReservation">
+          You must create a hold before confirming.
+        </p>
+
+        <div class="hidden items-center justify-end md:flex">
+          <button
+            type="button"
+            class="h-11 rounded-full bg-brand-900 px-5 text-sm font-semibold text-white disabled:opacity-60"
+            (click)="createdReservation ? finishReservationFlow() : confirmReservation()"
+            [disabled]="reservationActionDisabled()"
+          >
+            {{ reservationActionLabel() }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div
+  #mobileCtaBar
+  class="fixed bottom-0 left-0 right-0 z-[220] w-full bg-white/95 p-3 shadow-[0_-8px_20px_rgba(0,0,0,0.06)] lg:hidden"
+  *ngIf="(eventDate || (showReservationModal && selectedTable)) && !showReleaseConfirm"
+>
+  <ng-container *ngIf="showReservationModal && selectedTable; else mobileHoldBar">
+    <button
+      type="button"
+      class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
+      (click)="createdReservation ? finishReservationFlow() : confirmReservation()"
+      [disabled]="reservationActionDisabled()"
+      [ngClass]="'bg-brand-900 text-white'"
+    >
+      {{ reservationActionLabel() }}
+    </button>
+  </ng-container>
+  <ng-template #mobileHoldBar>
+    <div class="grid gap-2">
+      <button
+        type="button"
+        class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
+        (click)="selectedTable ? startHoldFlow() : clearEventSelection()"
+        [disabled]="loading || (!selectedTable && !eventDate)"
+        [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900 text-white'"
+      >
+        {{ selectedTable ? ('Hold & Reserve · Table ' + selectedTable.id) : 'Change Event' }}
+      </button>
+      <button
+        type="button"
+        class="text-center text-xs font-semibold text-brand-700 underline"
+        (click)="clearEventSelection()"
+        *ngIf="selectedTable"
+      >
+        Change Event
+      </button>
+    </div>
+  </ng-template>
+</div>
+
+<div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReleaseConfirm">
+  <div class="absolute inset-0 bg-black/40" (click)="cancelReleasePrompt()"></div>
+  <div class="relative w-[90vw] max-w-sm rounded-2xl bg-white p-5 text-center">
+    <h4 class="text-lg font-semibold text-brand-900">Release hold?</h4>
+    <p class="mt-2 text-sm text-brand-600">
+      You created this hold. Do you want to release it when closing?
+    </p>
+    <div class="mt-4 grid gap-2">
+      <button
+        type="button"
+        class="h-11 rounded-full bg-brand-900 text-sm font-semibold text-white"
+        (click)="releaseHold()"
+      >
+        Release Hold
+      </button>
+      <button
+        type="button"
+        class="h-11 rounded-full border border-brand-200 text-sm font-semibold text-brand-700"
+        (click)="cancelReleasePrompt(); showReservationModal = true"
+      >
+        Continue Reservation
+      </button>
+    </div>
+  </div>
+</div>

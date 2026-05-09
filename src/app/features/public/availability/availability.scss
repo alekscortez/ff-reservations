@@ -1,0 +1,13 @@
+:host {
+  display: block;
+}
+
+.public-map {
+  min-height: 520px;
+}
+
+@media (max-width: 1023px) {
+  .public-map {
+    min-height: 500px;
+  }
+}

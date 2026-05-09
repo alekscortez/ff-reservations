@@ -5,19 +5,15 @@ frontend:
       commands:
         - nvm install 22 && nvm use 22
         - node --version
-        - corepack enable
-        - corepack prepare pnpm@11.0.9 --activate
-        - pnpm --version
-        - pnpm install --frozen-lockfile
+        - npm --version
+        - npm ci
     build:
       commands:
-        - pnpm run build
+        - npm run build
   artifacts:
-    baseDirectory: apps/web/dist
+    baseDirectory: dist/ff-reservations/browser
     files:
       - '**/*'
   cache:
     paths:
       - node_modules/**/*
-      - apps/**/node_modules/**/*
-      - packages/**/node_modules/**/*

@@ -1,0 +1,29 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.sidebar a.active {
+  background: #111827;
+  color: #ffffff;
+}
+
+:host-context(.mobile-nav-open) .sidebar {
+  transform: translateX(0);
+}
+
+:host-context(.mobile-nav-open) .sidebar-backdrop {
+  display: block;
+}
+
+:host-context(.reservations-modal-open) .sidebar {
+  pointer-events: none;
+}
+
+:host-context(.reservations-new-modal-open) .sidebar {
+  pointer-events: none;
+}
+
+:host-context(.events-modal-open) .sidebar {
+  pointer-events: none;
+}
