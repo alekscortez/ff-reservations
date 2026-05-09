@@ -5,6 +5,7 @@ import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
 import { StaffDashboard } from '@/features/staff/dashboard';
+import { StaffEvents } from '@/features/staff/events';
 
 export function App() {
   return (
@@ -20,6 +21,14 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffDashboard />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/events"
+          element={
+            <RequireStaffOrAdmin>
+              <StaffEvents />
             </RequireStaffOrAdmin>
           }
         />

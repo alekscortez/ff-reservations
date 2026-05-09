@@ -27,5 +27,11 @@
   "staff": {
     "dashboardTitle": "Staff Dashboard",
     "dashboardWelcome": "Phase 2 placeholder. Feature pages land in Phase 5."
+  },
+  "events": {
+    "listTitle": "Events",
+    "listDescription": "Browse the events catalog.",
+    "empty": "No events yet.",
+    "minDeposit": "Min deposit"
   }
 }

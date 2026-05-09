@@ -27,5 +27,11 @@
   "staff": {
     "dashboardTitle": "Panel del personal",
     "dashboardWelcome": "Marcador de la Fase 2. Las páginas de funcionalidades llegan en la Fase 5."
+  },
+  "events": {
+    "listTitle": "Eventos",
+    "listDescription": "Explora el catálogo de eventos.",
+    "empty": "Aún no hay eventos.",
+    "minDeposit": "Depósito mínimo"
   }
 }

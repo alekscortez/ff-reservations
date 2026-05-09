@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 import { useTranslation } from 'react-i18next';
 import { cognitoLogoutUrl, getGroups } from '@/lib/auth';
@@ -37,6 +38,17 @@ export function StaffDashboard() {
             <dd>{groups.length ? groups.join(', ') : '—'}</dd>
           </dl>
         </section>
+        <nav className="mt-6 grid gap-3 sm:grid-cols-2">
+          <Link
+            to="/staff/events"
+            className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+          >
+            <h3 className="font-semibold text-brand-900">{t('events.listTitle')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('events.listDescription')}
+            </p>
+          </Link>
+        </nav>
       </div>
     </main>
   );
