@@ -1261,12 +1261,12 @@ export function ReservationNew() {
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <p className="text-sm text-brand-900">
               {selectedTable
-                ? t('reservationNew.cta.selected', {
+                ? t('reservationNew.pickerCta.selected', {
                     section: selectedTable.section,
                     id: selectedTable.id,
                     price: moneyFormatter.format(selectedTable.price),
                   })
-                : t('reservationNew.cta.selectPrompt')}
+                : t('reservationNew.pickerCta.selectPrompt')}
             </p>
             <div className="flex gap-2">
               <button
@@ -1284,7 +1284,7 @@ export function ReservationNew() {
               >
                 {createHold.isPending
                   ? t('common.saving')
-                  : t('reservationNew.cta.holdAndReserve')}
+                  : t('reservationNew.pickerCta.holdAndReserve')}
               </button>
             </div>
           </div>

@@ -405,7 +405,7 @@
         "UNAVAILABLE": "Unavailable"
       }
     },
-    "cta": {
+    "pickerCta": {
       "selectPrompt": "Select a table",
       "selected": "Selected: Table {{id}} · {{price}}",
       "holdAndReserve": "Hold & Reserve"

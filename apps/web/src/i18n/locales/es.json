@@ -405,7 +405,7 @@
         "UNAVAILABLE": "No disponible"
       }
     },
-    "cta": {
+    "pickerCta": {
       "selectPrompt": "Selecciona una mesa",
       "selected": "Seleccionada: Mesa {{id}} · {{price}}",
       "holdAndReserve": "Apartar y reservar"
