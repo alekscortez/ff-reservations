@@ -311,6 +311,7 @@ const meService = createMeService({
   cognito,
   userPoolId: USER_POOL_ID,
   CLIENTS_TABLE,
+  RES_TABLE,
 });
 
 const eventsService = createEventsService({
@@ -444,6 +445,7 @@ export const handler = async (event) => {
       requireCustomerOwnership,
       getProfile: meService.getProfile,
       deleteAccount: meService.deleteAccount,
+      listReservations: meService.listReservations,
     });
     if (meRouteResponse) return meRouteResponse;
 

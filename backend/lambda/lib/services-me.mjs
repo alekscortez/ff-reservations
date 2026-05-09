@@ -11,6 +11,7 @@
 import {
   GetCommand,
   UpdateCommand,
+  QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
   AdminGetUserCommand,
@@ -22,6 +23,7 @@ export function createMeService({
   cognito,
   userPoolId,
   CLIENTS_TABLE,
+  RES_TABLE,
 }) {
   async function fetchCognitoUser(sub) {
     const res = await cognito.send(
@@ -172,5 +174,42 @@ export function createMeService({
     return { deleted: true };
   }
 
-  return { getProfile, deleteAccount };
+  // Query the byCustomerSub GSI (sparse — only Phase-3+ reservations
+  // with customerCognitoSub set appear). Sort newest event first.
+  // Returns a curated shape — internal fields like paymentLinkId,
+  // paymentLinkProvider, history pointers, and reschedule-credit
+  // bookkeeping are intentionally not exposed.
+  async function listReservations(sub) {
+    if (!sub || !RES_TABLE) return [];
+    const res = await ddb.send(
+      new QueryCommand({
+        TableName: RES_TABLE,
+        IndexName: "byCustomerSub",
+        KeyConditionExpression: "customerCognitoSub = :s",
+        ExpressionAttributeValues: { ":s": sub },
+        ScanIndexForward: false,
+        Limit: 100,
+      })
+    );
+    return (res.Items ?? []).map((r) => ({
+      reservationId: r.reservationId ?? null,
+      eventDate: r.eventDate ?? null,
+      tableId: r.tableId ?? null,
+      customerName: r.customerName ?? null,
+      depositAmount: Number(r.depositAmount ?? 0),
+      tablePrice: r.tablePrice != null ? Number(r.tablePrice) : null,
+      amountDue: r.amountDue != null ? Number(r.amountDue) : null,
+      paymentStatus: r.paymentStatus ?? null,
+      paymentDeadlineAt: r.paymentDeadlineAt ?? null,
+      paymentDeadlineTz: r.paymentDeadlineTz ?? null,
+      paymentLinkUrl: r.paymentLinkUrl ?? null,
+      paymentLinkExpiresAt: r.paymentLinkExpiresAt ?? null,
+      status: r.status ?? null,
+      packageSnapshot: r.packageSnapshot ?? null,
+      checkedInAt: r.checkedInAt ?? null,
+      cancelledAt: r.cancelledAt ?? null,
+    }));
+  }
+
+  return { getProfile, deleteAccount, listReservations };
 }

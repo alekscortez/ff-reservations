@@ -20,6 +20,12 @@ export async function handleMeRoute(ctx) {
     return json(200, profile, cors);
   }
 
+  if (method === "GET" && path === "/me/reservations") {
+    const sub = requireCustomerOwnership(event);
+    const items = await ctx.listReservations(sub);
+    return json(200, { items }, cors);
+  }
+
   if (method === "DELETE" && path === "/me") {
     const sub = requireCustomerOwnership(event);
     const result = await deleteAccount(sub);

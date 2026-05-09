@@ -27,3 +27,16 @@ Authorization: Bearer {{customerAccessToken}}
 ### second call returns { deleted: true, alreadyGone: true }.
 DELETE {{baseUrl}}/me
 Authorization: Bearer {{customerAccessToken}}
+
+### GET /me/reservations — Phase-3+ reservations belonging to this
+### customer. Queries the sparse byCustomerSub GSI on ff-reservations
+### (PK=customerCognitoSub, SK=eventDate, ScanIndexForward=false), so
+### legacy reservations created before customerCognitoSub was set never
+### appear here — staff still see them via /reservations.
+### → 200 { items: [{ reservationId, eventDate, tableId, customerName,
+###    depositAmount, tablePrice, amountDue, paymentStatus,
+###    paymentDeadlineAt, paymentDeadlineTz, paymentLinkUrl,
+###    paymentLinkExpiresAt, status, packageSnapshot, checkedInAt,
+###    cancelledAt }] }
+GET {{baseUrl}}/me/reservations
+Authorization: Bearer {{customerAccessToken}}
