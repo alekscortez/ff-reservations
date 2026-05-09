@@ -10,15 +10,30 @@ import { useCreateReservation } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
 import { TableMap } from '@/components/table-map';
 
+type PaymentMethodChoice = 'cash' | 'square' | 'cashapp';
+type PaymentStatusChoice = 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY';
+
 interface CustomerForm {
   customerName: string;
   phone: string;
   phoneCountry: 'US' | 'MX';
+  paymentMethod: PaymentMethodChoice;
+  paymentStatus: PaymentStatusChoice;
+  amountDue: number;
   depositAmount: number;
-  paymentMethod: 'cash' | 'square' | 'cashapp' | 'credit';
+  paymentDeadlineDate: string;
+  paymentDeadlineTime: string;
   packageId: string;
   receiptNumber: string;
 }
+
+function nextDayDateString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const DEFAULT_DEADLINE_TZ = 'America/Chicago';
 
 export function ReservationNew() {
   const { t, i18n } = useTranslation();
@@ -83,24 +98,71 @@ export function ReservationNew() {
   const minDeposit = selectedEvent?.minDeposit ?? 0;
   const tablePrice = heldTable?.price ?? 0;
 
+  const [allowCustomDeposit, setAllowCustomDeposit] = useState(false);
+  const [paymentDeadlineEnabled, setPaymentDeadlineEnabled] = useState(false);
+
   const { register, handleSubmit, watch, setValue, formState } = useForm<CustomerForm>({
     defaultValues: {
       customerName: '',
       phone: '',
       phoneCountry: 'MX',
+      paymentMethod: 'square',
+      paymentStatus: 'PENDING',
+      amountDue: 0,
       depositAmount: 0,
-      paymentMethod: 'cash',
+      paymentDeadlineDate: nextDayDateString(),
+      paymentDeadlineTime: '00:00',
       packageId: '',
       receiptNumber: '',
     },
   });
 
+  const watchedMethod = watch('paymentMethod');
+  const watchedStatus = watch('paymentStatus');
+  const watchedAmountDue = Number(watch('amountDue')) || 0;
+  const watchedDeposit = Number(watch('depositAmount')) || 0;
+  const isCash = watchedMethod === 'cash';
+  const isDigital = watchedMethod === 'square' || watchedMethod === 'cashapp';
+
+  // When a table gets held, prefill amountDue with table price.
   useEffect(() => {
-    if (heldTable) {
-      const suggested = Math.max(minDeposit, 0);
-      if (suggested > 0) setValue('depositAmount', suggested);
+    if (heldTable && tablePrice > 0) {
+      setValue('amountDue', tablePrice);
     }
-  }, [heldTable, minDeposit, setValue]);
+  }, [heldTable, tablePrice, setValue]);
+
+  // Digital payments are always PENDING and need a deadline.
+  useEffect(() => {
+    if (isDigital) {
+      setValue('paymentStatus', 'PENDING');
+      setPaymentDeadlineEnabled(true);
+    }
+  }, [isDigital, setValue]);
+
+  // Auto-suggest deposit based on cash payment status (unless user unlocked).
+  useEffect(() => {
+    if (allowCustomDeposit) return;
+    if (isCash) {
+      if (watchedStatus === 'PAID') setValue('depositAmount', watchedAmountDue);
+      else if (watchedStatus === 'PARTIAL') {
+        // halfway between min and full as a sensible default
+        const half = Math.max(minDeposit, Math.round(watchedAmountDue / 2));
+        setValue('depositAmount', half);
+      } else if (watchedStatus === 'PENDING') setValue('depositAmount', 0);
+      else if (watchedStatus === 'COURTESY') setValue('depositAmount', 0);
+    } else if (isDigital) {
+      setValue('depositAmount', 0);
+    }
+  }, [allowCustomDeposit, isCash, isDigital, watchedStatus, watchedAmountDue, minDeposit, setValue]);
+
+  // Cash status determines whether a deadline is required (PARTIAL/PENDING).
+  const cashRequiresDeadline =
+    isCash && (watchedStatus === 'PARTIAL' || watchedStatus === 'PENDING');
+  const deadlineRequired = isDigital || cashRequiresDeadline;
+
+  useEffect(() => {
+    if (deadlineRequired) setPaymentDeadlineEnabled(true);
+  }, [deadlineRequired]);
 
   const moneyFormatter = new Intl.NumberFormat(i18n.language, {
     style: 'currency',
@@ -133,6 +195,12 @@ export function ReservationNew() {
 
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
+    const wantsDeadline =
+      paymentDeadlineEnabled || isDigital || cashRequiresDeadline;
+    const paymentDeadlineAt = wantsDeadline
+      ? `${form.paymentDeadlineDate}T${form.paymentDeadlineTime}:00`
+      : undefined;
+    const status: PaymentStatusChoice = isDigital ? 'PENDING' : form.paymentStatus;
     const created = await createReservation.mutateAsync({
       eventDate,
       tableId: hold.tableId,
@@ -140,10 +208,14 @@ export function ReservationNew() {
       customerName: form.customerName.trim(),
       phone: form.phone.trim(),
       phoneCountry: form.phoneCountry,
-      depositAmount: Number(form.depositAmount),
       paymentMethod: form.paymentMethod,
+      paymentStatus: status,
+      amountDue: Number(form.amountDue) || 0,
+      depositAmount: Number(form.depositAmount) || 0,
       packageId: form.packageId || undefined,
       receiptNumber: form.receiptNumber.trim() || undefined,
+      paymentDeadlineAt,
+      paymentDeadlineTz: wantsDeadline ? DEFAULT_DEADLINE_TZ : undefined,
     });
     navigate(`/staff/reservations/${created.eventDate}/${created.reservationId}`);
   });
@@ -157,9 +229,14 @@ export function ReservationNew() {
       ? `${createHold.error.status}: ${createHold.error.message}`
       : null;
 
-  const watchedDeposit = watch('depositAmount');
   const depositValid =
-    Number.isFinite(Number(watchedDeposit)) && Number(watchedDeposit) >= minDeposit;
+    isCash && watchedStatus === 'COURTESY'
+      ? true
+      : isCash && watchedStatus === 'PAID'
+        ? Math.abs(watchedDeposit - watchedAmountDue) < 0.01
+        : isCash
+          ? watchedDeposit >= minDeposit
+          : true;
 
   return (
     <div className="p-6 sm:p-8">
@@ -388,50 +465,189 @@ export function ReservationNew() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1 text-sm font-medium text-brand-900">
+                {t('reservationNew.field.paymentMethod')} *
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['square', 'cashapp', 'cash'] as PaymentMethodChoice[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setValue('paymentMethod', m, { shouldDirty: true })}
+                    className={`h-10 rounded-md border px-3 text-sm font-semibold transition ${
+                      watchedMethod === m
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-brand-900 hover:bg-muted'
+                    }`}
+                  >
+                    {t(`reservationNew.method.${m}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label
+                className="mb-1 block text-sm font-medium text-brand-900"
+                htmlFor="amountDue"
+              >
+                {t('reservationNew.field.amountDue')} *
+              </label>
+              <input
+                id="amountDue"
+                type="number"
+                step="0.01"
+                min="0"
+                {...register('amountDue', { valueAsNumber: true, min: 0 })}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('reservationNew.field.amountDueHint', {
+                  table: moneyFormatter.format(tablePrice),
+                })}
+              </p>
+            </div>
+
+            {isDigital && (
+              <p className="rounded-md border border-border bg-muted/30 p-3 text-xs text-brand-700">
+                {t('reservationNew.digitalNotice', {
+                  method: watchedMethod === 'square' ? 'Square' : 'Cash App',
+                })}
+              </p>
+            )}
+
+            {isCash && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    className="mb-1 block text-sm font-medium text-brand-900"
+                    htmlFor="paymentStatus"
+                  >
+                    {t('reservationNew.field.paymentStatus')} *
+                  </label>
+                  <select
+                    id="paymentStatus"
+                    {...register('paymentStatus')}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="PAID">PAID</option>
+                    <option value="PARTIAL">PARTIAL</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="COURTESY">COURTESY</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    className="mb-1 block text-sm font-medium text-brand-900"
+                    htmlFor="depositAmount"
+                  >
+                    {t('reservationNew.field.deposit')} *
+                  </label>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <input
+                      id="depositAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      readOnly={!allowCustomDeposit}
+                      {...register('depositAmount', { valueAsNumber: true })}
+                      className={`w-full rounded-md border border-border px-3 py-2 text-sm ${
+                        allowCustomDeposit ? 'bg-background' : 'bg-muted/40'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAllowCustomDeposit((v) => !v)}
+                      className="inline-flex items-center rounded-md border border-border bg-background px-3 text-xs font-medium text-brand-900 hover:bg-muted"
+                    >
+                      {allowCustomDeposit
+                        ? t('reservationNew.deposit.lock')
+                        : t('reservationNew.deposit.modify')}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('reservationNew.field.depositHint', {
+                      min: moneyFormatter.format(minDeposit),
+                      table: moneyFormatter.format(tablePrice),
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isDigital && (
               <div>
                 <label
                   className="mb-1 block text-sm font-medium text-brand-900"
                   htmlFor="depositAmount"
                 >
-                  {t('reservationNew.field.deposit')} *
+                  {t('reservationNew.field.depositOptional')}
                 </label>
                 <input
                   id="depositAmount"
                   type="number"
                   step="0.01"
-                  min={minDeposit}
-                  {...register('depositAmount', { valueAsNumber: true, min: minDeposit })}
+                  min="0"
+                  {...register('depositAmount', { valueAsNumber: true })}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t('reservationNew.field.depositHint', {
-                    min: moneyFormatter.format(minDeposit),
-                    table: moneyFormatter.format(tablePrice),
-                  })}
+                  {t('reservationNew.field.depositOptionalHint')}
                 </p>
               </div>
-              <div>
-                <label
-                  className="mb-1 block text-sm font-medium text-brand-900"
-                  htmlFor="paymentMethod"
-                >
-                  {t('reservationNew.field.paymentMethod')} *
+            )}
+
+            <div>
+              {!deadlineRequired && (
+                <label className="mb-2 flex items-center gap-2 text-sm text-brand-900">
+                  <input
+                    type="checkbox"
+                    checked={paymentDeadlineEnabled}
+                    onChange={(e) => setPaymentDeadlineEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  {t('reservationNew.field.deadlineToggle')}
                 </label>
-                <select
-                  id="paymentMethod"
-                  {...register('paymentMethod')}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                >
-                  <option value="cash">cash</option>
-                  <option value="square">square</option>
-                  <option value="cashapp">cashapp</option>
-                  <option value="credit">credit</option>
-                </select>
-              </div>
+              )}
+              {(paymentDeadlineEnabled || deadlineRequired) && (
+                <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/20 p-3">
+                  <div>
+                    <label
+                      className="mb-1 block text-xs text-brand-700"
+                      htmlFor="paymentDeadlineDate"
+                    >
+                      {t('reservationNew.field.deadlineDate')}
+                    </label>
+                    <input
+                      id="paymentDeadlineDate"
+                      type="date"
+                      {...register('paymentDeadlineDate')}
+                      className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="mb-1 block text-xs text-brand-700"
+                      htmlFor="paymentDeadlineTime"
+                    >
+                      {t('reservationNew.field.deadlineTime')}
+                    </label>
+                    <input
+                      id="paymentDeadlineTime"
+                      type="time"
+                      {...register('paymentDeadlineTime')}
+                      className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <p className="col-span-2 text-xs text-muted-foreground">
+                    {t('reservationNew.field.deadlineHint')}
+                  </p>
+                </div>
+              )}
             </div>
 
-            {watch('paymentMethod') === 'cash' && (
+            {isCash && (
               <div>
                 <label
                   className="mb-1 block text-sm font-medium text-brand-900"

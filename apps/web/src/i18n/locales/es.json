@@ -305,11 +305,30 @@
       "phone": "Teléfono",
       "package": "Paquete (opcional)",
       "noPackage": "— Sin paquete —",
+      "amountDue": "Total a cobrar (USD)",
+      "amountDueHint": "Predeterminado al precio de la mesa ({{table}}). Ajusta si hay precio negociado.",
+      "paymentStatus": "Estado de pago",
       "deposit": "Depósito (USD)",
-      "depositHint": "Mínimo {{min}}; mesa completa {{table}}.",
+      "depositOptional": "Depósito recibido ahora (opcional)",
+      "depositOptionalHint": "Los flujos digitales suelen dejar 0; el cliente paga por el link tras crear.",
+      "depositHint": "Mínimo {{min}}; mesa {{table}}. Bloqueado mientras lo sugiere el estado.",
       "paymentMethod": "Método de pago",
-      "receiptNumber": "Recibo #"
+      "receiptNumber": "Recibo # (solo efectivo)",
+      "deadlineToggle": "Establecer fecha límite de pago",
+      "deadlineDate": "Fecha límite",
+      "deadlineTime": "Hora límite",
+      "deadlineHint": "Zona horaria America/Chicago. Por defecto: día siguiente a las 12:00 AM."
     },
+    "method": {
+      "square": "Square",
+      "cashapp": "Cash App",
+      "cash": "Efectivo"
+    },
+    "deposit": {
+      "modify": "Modificar",
+      "lock": "Bloquear"
+    },
+    "digitalNotice": "La reservación se crea PENDIENTE. El cliente paga el total por el link de {{method}} tras crear.",
     "confirmCta": "Confirmar reservación"
   },
   "reservationDetail": {

@@ -31,6 +31,8 @@ export interface CreateReservationInput {
   phone: string;
   phoneCountry: 'US' | 'MX';
   depositAmount: number;
+  amountDue?: number;
+  paymentStatus?: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
   paymentMethod: 'cash' | 'square' | 'cashapp' | 'credit';
   packageId?: string;
   receiptNumber?: string;

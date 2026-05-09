@@ -305,11 +305,30 @@
       "phone": "Phone",
       "package": "Package (optional)",
       "noPackage": "— No package —",
+      "amountDue": "Total amount due (USD)",
+      "amountDueHint": "Defaults to the table price ({{table}}). Override for negotiated pricing.",
+      "paymentStatus": "Payment status",
       "deposit": "Deposit (USD)",
-      "depositHint": "Minimum {{min}}; full table is {{table}}.",
+      "depositOptional": "Deposit received now (optional)",
+      "depositOptionalHint": "Digital flows usually leave this 0; customer pays the link after create.",
+      "depositHint": "Minimum {{min}}; table {{table}}. Locked while suggested by status.",
       "paymentMethod": "Payment method",
-      "receiptNumber": "Receipt #"
+      "receiptNumber": "Receipt # (cash only)",
+      "deadlineToggle": "Set payment deadline",
+      "deadlineDate": "Deadline date",
+      "deadlineTime": "Deadline time",
+      "deadlineHint": "Timezone America/Chicago. Default: next day at 12:00 AM."
     },
+    "method": {
+      "square": "Square",
+      "cashapp": "Cash App",
+      "cash": "Cash"
+    },
+    "deposit": {
+      "modify": "Modify",
+      "lock": "Lock"
+    },
+    "digitalNotice": "Reservation creates as PENDING. Customer pays the full amount via {{method}} link after create.",
     "confirmCta": "Confirm reservation"
   },
   "reservationDetail": {
