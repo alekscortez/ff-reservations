@@ -69,6 +69,26 @@ export class AuthService {
   }
 
   logout(): void {
+    // Revoke the refresh token at Cognito so a stolen copy can't mint new
+    // access tokens for the remaining ~30 days of its lifetime. The
+    // revocation endpoint is auto-discovered from Cognito's
+    // .well-known/openid-configuration. Cognito only accepts refresh
+    // tokens for revocation (not access tokens), so we don't bother with
+    // revokeAccessToken — the access token expires in ~60 min anyway.
+    //
+    // Best-effort: even if revocation fails (network error, token already
+    // expired, etc.), we still proceed with local cleanup + Hosted UI
+    // logout so the user isn't stuck.
+    this.oidc.revokeRefreshToken().subscribe({
+      next: () => this.completeLogout(),
+      error: (err) => {
+        console.warn('refresh_token_revoke_failed_continuing_logout', err);
+        this.completeLogout();
+      },
+    });
+  }
+
+  private completeLogout(): void {
     // Local cleanup. Be selective so we don't nuke unrelated app state
     // (e.g. ff_new_res_active_hold_v1, saved filters). The OIDC library's
     // own keys live under "<authority>_…" prefixes; logoffLocal handles
