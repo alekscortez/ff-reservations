@@ -8,6 +8,7 @@ import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { EventForm } from '@/features/staff/event-form';
 import { StaffFrequentClients } from '@/features/staff/frequent-clients';
+import { FrequentClientForm } from '@/features/staff/frequent-client-form';
 import { StaffReservations } from '@/features/staff/reservations';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
@@ -58,6 +59,22 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffFrequentClients />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/frequent-clients/new"
+          element={
+            <RequireStaffOrAdmin>
+              <FrequentClientForm />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/frequent-clients/:clientId/edit"
+          element={
+            <RequireStaffOrAdmin>
+              <FrequentClientForm />
             </RequireStaffOrAdmin>
           }
         />

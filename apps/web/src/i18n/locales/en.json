@@ -52,7 +52,19 @@
   "frequentClients": {
     "listTitle": "Frequent Clients",
     "listDescription": "Recurring guests with table-booking privileges.",
-    "empty": "No frequent clients yet."
+    "empty": "No frequent clients yet.",
+    "newCta": "New frequent client",
+    "newTitle": "New frequent client",
+    "editTitle": "Edit frequent client",
+    "confirmDelete": "Delete frequent client \"{{name}}\"? This cannot be undone.",
+    "field": {
+      "name": "Name",
+      "phone": "Phone (E.164)",
+      "phoneHint": "International format with country code, e.g. +528991234567 or +12125551234.",
+      "country": "Country",
+      "notes": "Notes",
+      "status": "Status"
+    }
   },
   "reservations": {
     "listTitle": "Reservations",

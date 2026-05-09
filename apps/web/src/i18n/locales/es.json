@@ -52,7 +52,19 @@
   "frequentClients": {
     "listTitle": "Clientes frecuentes",
     "listDescription": "Huéspedes recurrentes con privilegios de reserva.",
-    "empty": "Aún no hay clientes frecuentes."
+    "empty": "Aún no hay clientes frecuentes.",
+    "newCta": "Nuevo cliente frecuente",
+    "newTitle": "Nuevo cliente frecuente",
+    "editTitle": "Editar cliente frecuente",
+    "confirmDelete": "¿Eliminar al cliente frecuente \"{{name}}\"? No se puede deshacer.",
+    "field": {
+      "name": "Nombre",
+      "phone": "Teléfono (E.164)",
+      "phoneHint": "Formato internacional con código de país, p. ej. +528991234567 o +12125551234.",
+      "country": "País",
+      "notes": "Notas",
+      "status": "Estado"
+    }
   },
   "reservations": {
     "listTitle": "Reservaciones",
