@@ -46,6 +46,18 @@ function nextDayDateString(): string {
 }
 
 const DEFAULT_DEADLINE_TZ = 'America/Chicago';
+const HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
+
+interface PersistedHoldSession {
+  hold: Hold;
+  eventDate: string;
+  form: CustomerForm;
+  allowCustomDeposit: boolean;
+  paymentDeadlineEnabled: boolean;
+  creditEnabled: boolean;
+  selectedCreditId: string | null;
+  savedAt: number;
+}
 
 export function ReservationNew() {
   const { t, i18n } = useTranslation();
@@ -113,7 +125,7 @@ export function ReservationNew() {
   const [allowCustomDeposit, setAllowCustomDeposit] = useState(false);
   const [paymentDeadlineEnabled, setPaymentDeadlineEnabled] = useState(false);
 
-  const { register, handleSubmit, watch, setValue, formState } = useForm<CustomerForm>({
+  const { register, handleSubmit, watch, setValue, reset, getValues, formState } = useForm<CustomerForm>({
     defaultValues: {
       customerName: '',
       phone: '',
@@ -136,12 +148,14 @@ export function ReservationNew() {
   const isCash = watchedMethod === 'cash';
   const isDigital = watchedMethod === 'square' || watchedMethod === 'cashapp';
 
-  // When a table gets held, prefill amountDue with table price.
+  // When a table gets held, prefill amountDue with table price — but only if
+  // it's still at the default 0. Skipping the prefill when a value is already
+  // present avoids clobbering a restored hold session or staff-typed override.
   useEffect(() => {
-    if (heldTable && tablePrice > 0) {
+    if (heldTable && tablePrice > 0 && (Number(getValues('amountDue')) || 0) <= 0) {
       setValue('amountDue', tablePrice);
     }
-  }, [heldTable, tablePrice, setValue]);
+  }, [heldTable, tablePrice, setValue, getValues]);
 
   // Digital payments are always PENDING and need a deadline.
   useEffect(() => {
@@ -204,6 +218,47 @@ export function ReservationNew() {
   }
 
   const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
+
+  // Restore an active hold session from localStorage on first mount. Survives
+  // page reloads / accidental tab close — staff don't lose their typed customer
+  // info if a refresh happens mid-flow. Discard if the hold has already
+  // expired (server-side). Done before any other form effect so the typed
+  // values aren't clobbered by the prefill-amountDue effect.
+  const [restoredOnce, setRestoredOnce] = useState(false);
+  useEffect(() => {
+    if (restoredOnce) return;
+    try {
+      const raw =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem(HOLD_STORAGE_KEY)
+          : null;
+      if (!raw) {
+        setRestoredOnce(true);
+        return;
+      }
+      const data = JSON.parse(raw) as Partial<PersistedHoldSession>;
+      const nowS = Math.floor(Date.now() / 1000);
+      const exp = Number(data?.hold?.expiresAt ?? 0);
+      if (!data?.hold || !data.eventDate || exp <= nowS) {
+        window.localStorage.removeItem(HOLD_STORAGE_KEY);
+        setRestoredOnce(true);
+        return;
+      }
+      setHold(data.hold as Hold);
+      setEventDate(data.eventDate);
+      if (data.form) reset(data.form as CustomerForm);
+      setAllowCustomDeposit(Boolean(data.allowCustomDeposit));
+      setPaymentDeadlineEnabled(Boolean(data.paymentDeadlineEnabled));
+    } catch {
+      try {
+        window.localStorage.removeItem(HOLD_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+    setRestoredOnce(true);
+  }, [restoredOnce, reset]);
+
   const watchedPhone = watch('phone');
   const watchedPhoneCountry = watch('phoneCountry');
   const [debouncedPhone, setDebouncedPhone] = useState('');
@@ -271,6 +326,55 @@ export function ReservationNew() {
     : watchedAmountDue || 0;
   const apiClient = useApiClient();
   const [creditApplyError, setCreditApplyError] = useState<string | null>(null);
+
+  // Persist the active hold session whenever any captured field changes. The
+  // load effect above will restore it on next mount if the hold hasn't expired.
+  useEffect(() => {
+    if (!restoredOnce) return;
+    const clear = () => {
+      try {
+        window.localStorage.removeItem(HOLD_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+    if (!hold || expired || createdReservation) {
+      clear();
+      return;
+    }
+    const save = () => {
+      const data: PersistedHoldSession = {
+        hold,
+        eventDate,
+        form: getValues(),
+        allowCustomDeposit,
+        paymentDeadlineEnabled,
+        creditEnabled,
+        selectedCreditId,
+        savedAt: Math.floor(Date.now() / 1000),
+      };
+      try {
+        window.localStorage.setItem(HOLD_STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        /* quota / disabled — ignore */
+      }
+    };
+    save();
+    const sub = watch(() => save());
+    return () => sub.unsubscribe();
+  }, [
+    restoredOnce,
+    hold,
+    expired,
+    createdReservation,
+    eventDate,
+    allowCustomDeposit,
+    paymentDeadlineEnabled,
+    creditEnabled,
+    selectedCreditId,
+    getValues,
+    watch,
+  ]);
 
   function applyCrmMatch(client: CrmClient) {
     if (client.name) setValue('customerName', client.name, { shouldDirty: true });
