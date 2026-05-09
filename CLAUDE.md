@@ -97,10 +97,11 @@ bash backend/lambda/deploy.sh             # deploy lambda (uses default AWS prof
 - `ff-clients` (CRM + reschedule credits). On first `/me/profile` touch with a matching phone, `cognitoSub` + `cognitoSubAttachedAt` are written. On `DELETE /me`, `deletedAt` + `deletedSub` are written and `cognitoSub` cleared (soft-delete; rows are never hard-removed so reservation totals stay reconstructible).
 - `ff-checkin-passes`
 - `ff-settings` (single `(APP, CONFIG)` record)
+- `ff-packages` (Phase 4 birthday packages — `(PACKAGE, PACKAGE#{packageId})`, status `ACTIVE|INACTIVE`. Public browse returns ACTIVE only; admin sees both. First `DELETE` soft-deletes; second hard-deletes).
 
 ## Lambda env vars
 
-Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `CLIENTS_TABLE`, `CHECKIN_PASSES_TABLE`, `SETTINGS_TABLE`
+Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `CLIENTS_TABLE`, `CHECKIN_PASSES_TABLE`, `SETTINGS_TABLE`, `PACKAGES_TABLE`
 Cognito: `USER_POOL_ID`, `CUSTOMER_CLIENT_ID` (gates the `/auth/customer/{start,verify}` route handlers — they no-op if unset)
 Square: `SQUARE_SECRET_ARN`, `SQUARE_ENV`, `SQUARE_LOCATION_ID`, `SQUARE_API_VERSION`, `SQUARE_WEBHOOK_NOTIFICATION_URL`, `SQUARE_CURRENCY`, `SQUARE_CHECKOUT_REDIRECT_URL`, `SQUARE_LINK_ENABLE_*`
 SMS: `SMS_ENABLED`, `SMS_SENDER_ID`, `SMS_TYPE`, `SMS_MAX_PRICE_USD`
@@ -193,7 +194,7 @@ Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phas
 1. **Phase 1 (DONE)**: monorepo scaffold, Angular tree deleted, `apps/web` (Vite+React+shadcn-ready), `apps/mobile` (Expo+NativeWind), `packages/core`, `packages/config`, root `pnpm-workspace.yaml`.
 2. **Phase 2**: web auth shell with `react-oidc-context`, port `AuthHealthBanner`, typed `apiFetch` wrapper.
 3. **Phase 3 (DONE 2026-05-08)**: customer App Client + custom OTP Lambda + user-pool triggers + `/auth/customer/{start,verify}` mediators + `GET /me/profile` (first-touch CRM merge) + `GET /me/reservations` (sparse `byCustomerSub` GSI) + `DELETE /me` (soft-delete CRM + AdminDeleteUser, idempotent) + Cloudflare proxy/rate-limit on `/auth/customer/*`.
-4. **Phase 4**: backend birthday packages — `ff-packages` table, admin CRUD, public browse, reservation `packageId` + `packageSnapshot`.
+4. **Phase 4 (backend done 2026-05-09)**: birthday packages — `ff-packages` table + admin CRUD (`/packages*`) + public browse (`/public/packages*`). Pending: reservation `packageId`/`packageSnapshot` (lands alongside `POST /me/reservations` in Phase 6).
 5. **Phase 5**: web feature port, smallest first, `staff/reservations-new` last.
 6. **Phase 6**: customer mobile app — browse → HOLD → Square In-App SDK checkout → confirm → my reservations → check-in pass → account delete.
 7. **Phase 7**: TestFlight + App Store / Play Store submission for the customer app. Staff mobile is v2.

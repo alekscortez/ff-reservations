@@ -120,6 +120,7 @@ Main expected keys:
 - `CLIENTS_TABLE`
 - `CHECKIN_PASSES_TABLE`
 - `SETTINGS_TABLE`
+- `PACKAGES_TABLE`
 - `USER_POOL_ID`
 - `CUSTOMER_CLIENT_ID` (gates `/auth/customer/{start,verify}`; routes no-op if unset)
 - `SQUARE_SECRET_ARN`
@@ -138,7 +139,7 @@ Main expected keys:
 - `SQUARE_CURRENCY`
 
 ## Required IAM highlights (Lambda role)
-- DynamoDB read/write/query/update/txn on all project tables + indexes (including the new `ff-reservations.byCustomerSub` GSI used by `/me/reservations`).
+- DynamoDB read/write/query/update/txn on all project tables + indexes (including the `ff-reservations.byCustomerSub` GSI used by `/me/reservations`). Phase 4 added inline policy `packages-table` granting Get/Put/Update/Delete/Query/Scan on `ff-packages`.
 - Cognito on user pool: `AdminGetUser` (existing) + `AdminCreateUser` / `AdminAddUserToGroup` / `AdminEnableUser` / `AdminDisableUser` / `AdminListGroupsForUser` / `AdminResetUserPassword` / `ListUsers` (existing). Phase 3 added inline policies `customer-auth-cognito-public-api` (`SignUp` / `InitiateAuth` / `RespondToAuthChallenge` for `/auth/customer/*`) and `me-routes-cognito-admin` (`AdminDeleteUser` for `DELETE /me`).
 - `secretsmanager:GetSecretValue` on Square secret ARN.
 - `sns:Publish` for SMS sends.
@@ -160,6 +161,7 @@ Use files in `/http`:
 - `public-availability.http`
 - `admin.http` (`/admin/whoami` for the staff `AuthHealthBanner`)
 - `customer-auth.http` (`POST /auth/customer/{start,verify}` mediator routes — public, no auth)
+- `packages.http` (admin CRUD on `/packages*` + public browse on `/public/packages*`)
 - `me.http` (`GET /me/profile`, `GET /me/reservations`, `DELETE /me` — customer access token via `customerAccessToken` env var)
 
 Environment variables for `.http` runs should be kept local (not committed), for example:

@@ -1,0 +1,83 @@
+### Birthday packages — admin CRUD + public browse
+###
+### Admin routes ({{baseUrl}}/packages/...) require a staff/admin
+### access token via {{accessToken}}.
+### Public routes ({{baseUrl}}/public/packages/...) require no auth and
+### return ACTIVE packages only — what the customer mobile app sees.
+###
+### Soft-delete behavior: DELETE on an ACTIVE package sets status=INACTIVE
+### (it stays visible to admin/staff but disappears from public browse).
+### A second DELETE on an already-INACTIVE package hard-deletes it.
+
+### GET /public/packages — list ACTIVE packages (customer-facing)
+GET {{baseUrl}}/public/packages
+
+### GET /public/packages/{packageId} — single ACTIVE package
+GET {{baseUrl}}/public/packages/REPLACE_ME
+
+### POST /packages — create (Admin)
+POST {{baseUrl}}/packages
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Birthday Premium",
+  "description": "Cake, decorations, photo session, signature cocktail.",
+  "priceUSD": 250,
+  "inclusions": [
+    "Custom cake (8 inch)",
+    "Themed decorations",
+    "30-minute photo session",
+    "Signature cocktail per guest"
+  ],
+  "displayOrder": 10,
+  "imageUrl": "https://famosofuego.com/assets/packages/birthday-premium.jpg",
+  "i18n": {
+    "en": {
+      "name": "Birthday Premium",
+      "description": "Cake, decorations, photo session, signature cocktail.",
+      "inclusions": [
+        "Custom cake (8 inch)",
+        "Themed decorations",
+        "30-minute photo session",
+        "Signature cocktail per guest"
+      ]
+    },
+    "es": {
+      "name": "Cumpleaños Premium",
+      "description": "Pastel, decoración, sesión fotográfica, coctel signature.",
+      "inclusions": [
+        "Pastel personalizado (20 cm)",
+        "Decoración temática",
+        "Sesión fotográfica de 30 min",
+        "Coctel signature por invitado"
+      ]
+    }
+  }
+}
+
+### GET /packages — list all (active + inactive) for staff/admin
+GET {{baseUrl}}/packages
+Authorization: Bearer {{accessToken}}
+
+### GET /packages/{packageId} — single package
+GET {{baseUrl}}/packages/REPLACE_ME
+Authorization: Bearer {{accessToken}}
+
+### PUT /packages/{packageId} — partial update
+PUT {{baseUrl}}/packages/REPLACE_ME
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "priceUSD": 275,
+  "displayOrder": 5
+}
+
+### DELETE /packages/{packageId} — soft-delete (sets status INACTIVE)
+DELETE {{baseUrl}}/packages/REPLACE_ME
+Authorization: Bearer {{accessToken}}
+
+### Customer token rejected by staff-audience authorizer → 401
+GET {{baseUrl}}/packages
+Authorization: Bearer {{customerAccessToken}}

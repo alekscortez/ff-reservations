@@ -49,6 +49,8 @@ import { handleAdminRoute } from "./lib/routes-admin.mjs";
 import { handleCustomerAuthRoute } from "./lib/routes-customer-auth.mjs";
 import { handleMeRoute } from "./lib/routes-me.mjs";
 import { createMeService } from "./lib/services-me.mjs";
+import { handlePackagesRoute } from "./lib/routes-packages.mjs";
+import { createPackagesService } from "./lib/services-packages.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -83,6 +85,7 @@ const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
 const CASH_APP_LINK_BASE_URL = process.env.CASH_APP_LINK_BASE_URL;
 const SETTINGS_TABLE = process.env.SETTINGS_TABLE;
+const PACKAGES_TABLE = process.env.PACKAGES_TABLE;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
@@ -323,6 +326,14 @@ const eventsService = createEventsService({
   createFrequentReservationsForEvent: clientsService.createFrequentReservationsForEvent,
 });
 
+const packagesService = createPackagesService({
+  ddb,
+  tableNames: { PACKAGES_TABLE },
+  nowEpoch,
+  httpError,
+  randomUUID,
+});
+
 const checkInPassesService = createCheckInPassesService({
   ddb,
   tableNames: {
@@ -522,6 +533,25 @@ export const handler = async (event) => {
       resolveBusinessDate: settingsService.resolveBusinessDate,
     });
     if (eventsRouteResponse) return eventsRouteResponse;
+
+    const packagesRouteResponse = await handlePackagesRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      noContent,
+      getBody,
+      requireAdmin,
+      requireStaffOrAdmin,
+      getUserLabel,
+      listPackages: packagesService.listPackages,
+      getPackageById: packagesService.getPackageById,
+      createPackage: packagesService.createPackage,
+      updatePackage: packagesService.updatePackage,
+      deletePackage: packagesService.deletePackage,
+    });
+    if (packagesRouteResponse) return packagesRouteResponse;
 
     const clientsRouteResponse = await handleClientsRoute({
       method,
