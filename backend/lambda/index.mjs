@@ -59,6 +59,7 @@ import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
 import { createSmsNotificationsService } from "./lib/services-sms-notifications.mjs";
 import { createSettingsService } from "./lib/services-settings.mjs";
 import { createUsersService } from "./lib/services-users.mjs";
+import { createRateLimitService } from "./lib/services-rate-limit.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -341,6 +342,13 @@ const settingsService = createSettingsService({
   httpError,
 });
 
+const rateLimitService = createRateLimitService({
+  ddb,
+  tableNames: { HOLDS_TABLE },
+  nowEpoch,
+  httpError,
+});
+
 const usersService = createUsersService({
   cognito,
   userPoolId: USER_POOL_ID,
@@ -495,6 +503,8 @@ export const handler = async (event) => {
       json,
       getBody,
       customerClientId: CUSTOMER_CLIENT_ID,
+      checkAndIncrementSmsRateLimit:
+        rateLimitService.checkAndIncrementSmsRateLimit,
     });
     if (customerAuthResponse) return customerAuthResponse;
 

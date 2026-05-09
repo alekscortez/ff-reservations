@@ -67,7 +67,16 @@ function generateThrowawayPassword() {
 }
 
 export async function handleCustomerAuthRoute(ctx) {
-  const { method, path, event, cors, json, getBody, customerClientId } = ctx;
+  const {
+    method,
+    path,
+    event,
+    cors,
+    json,
+    getBody,
+    customerClientId,
+    checkAndIncrementSmsRateLimit,
+  } = ctx;
   if (!customerClientId) return null;
 
   if (method === "POST" && path === "/auth/customer/start") {
@@ -77,6 +86,14 @@ export async function handleCustomerAuthRoute(ctx) {
     const name = String(body.name ?? "").trim() || placeholderName;
     if (!isValidE164(phone)) {
       return json(400, { message: "phoneE164 required, E.164 format" }, cors);
+    }
+
+    // Per-phone SMS rate-limit (audit P-H1). Cloudflare WAF rate-limits
+    // /auth/customer/* at the edge; this catches the case where the API
+    // Gateway URL is hit directly. Throws 429 when the cap is exceeded;
+    // the router's outer try/catch shapes it into the response.
+    if (typeof checkAndIncrementSmsRateLimit === "function") {
+      await checkAndIncrementSmsRateLimit(phone);
     }
 
     const username = syntheticEmailFromPhone(phone);
