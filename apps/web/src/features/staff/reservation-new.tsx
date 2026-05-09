@@ -20,6 +20,7 @@ import {
   useCreateSquarePaymentLink,
   useSendCashAppLinkSms,
   useSendSquareLinkSms,
+  type AutoSquareLinkSmsResult,
 } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
 import { useEventContext } from '@/lib/api/settings';
@@ -530,6 +531,10 @@ export function ReservationNew() {
   }
 
   const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
+  // Tracks whether the backend already auto-sent an SMS with the payment link
+  // when the reservation was created. If so, the post-create panel skips the
+  // manual generate prompt and surfaces a "link already sent" notice.
+  const [autoLinkSms, setAutoLinkSms] = useState<AutoSquareLinkSmsResult | null>(null);
 
   // Restore an active hold session from localStorage on first mount. Survives
   // page reloads / accidental tab close — staff don't lose their typed customer
@@ -900,7 +905,7 @@ export function ReservationNew() {
       : isDigital
         ? 'PENDING'
         : form.paymentStatus;
-    const created = await createReservation.mutateAsync({
+    const createdResp = await createReservation.mutateAsync({
       eventDate,
       tableId: hold.tableId,
       holdId: hold.holdId ?? '',
@@ -916,6 +921,8 @@ export function ReservationNew() {
       paymentDeadlineAt,
       paymentDeadlineTz: wantsDeadline ? operatingTz : undefined,
     });
+    const created = createdResp.item;
+    setAutoLinkSms(createdResp.autoSquareLinkSms ?? null);
     if (useCredit && selectedCredit) {
       try {
         const res = await apiClient.put<{ item: ReservationItem }>(
@@ -1289,7 +1296,7 @@ export function ReservationNew() {
           aria-modal="true"
           style={kbInset > 0 ? { paddingBottom: `${kbInset}px` } : undefined}
         >
-          <div className="relative my-4 w-full max-w-3xl rounded-2xl bg-background p-5 shadow-xl">
+          <div className="relative my-4 max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-background p-5 pb-28 shadow-xl sm:pb-5">
             <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-3">
               {hold && heldTable ? (
                 <div>
@@ -1359,6 +1366,7 @@ export function ReservationNew() {
                     ? 'cashapp'
                     : 'square'
                 }
+                autoLinkSms={autoLinkSms}
                 onDone={() =>
                   navigate(
                     `/staff/reservations/${createdReservation.eventDate}/${createdReservation.reservationId}`
@@ -2126,12 +2134,14 @@ function PostCreatePanel({
   reservation,
   isDigital,
   linkMode,
+  autoLinkSms,
   onDone,
   onAnother,
 }: {
   reservation: ReservationItem;
   isDigital: boolean;
   linkMode: 'square' | 'cashapp';
+  autoLinkSms: AutoSquareLinkSmsResult | null;
   onDone: () => void;
   onAnother: () => void;
 }) {
@@ -2235,6 +2245,13 @@ function PostCreatePanel({
 
       {isDigital && remaining > 0 && (
         <div className="mt-4 space-y-3 rounded-md border border-border bg-background p-4">
+          {autoLinkSms?.sent && (
+            <p className="rounded-md border border-success-200 bg-success-100/40 px-3 py-2 text-xs text-success-700">
+              {t('reservationNew.postCreate.autoLinkSmsSent', {
+                to: autoLinkSms.to ?? reservation.phone ?? '',
+              })}
+            </p>
+          )}
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-sm font-semibold text-brand-900">
               {linkMode === 'cashapp'

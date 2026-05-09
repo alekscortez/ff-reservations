@@ -41,20 +41,35 @@ export interface CreateReservationInput {
   paymentDeadlineTz?: string;
 }
 
+export interface AutoSquareLinkSmsResult {
+  attempted: boolean;
+  sent: boolean;
+  paymentMethod?: string;
+  linkType?: string;
+  linkAmount?: number;
+  paymentLinkId?: string;
+  to?: string | null;
+  messageId?: string | null;
+  reason?: string;
+}
+
+export interface CreateReservationResult {
+  item: ReservationItem;
+  autoSquareLinkSms?: AutoSquareLinkSmsResult | null;
+  idempotentReplay?: boolean;
+}
+
 export function useCreateReservation() {
   const api = useApiClient();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateReservationInput) => {
-      const res = await api.post<{ item: ReservationItem; idempotentReplay?: boolean }>(
-        '/reservations',
-        input
-      );
-      return res.item;
+    mutationFn: async (input: CreateReservationInput): Promise<CreateReservationResult> => {
+      const res = await api.post<CreateReservationResult>('/reservations', input);
+      return res;
     },
-    onSuccess: (item) => {
-      qc.invalidateQueries({ queryKey: listKey(item.eventDate) });
-      qc.invalidateQueries({ queryKey: ['tables', 'for-event', item.eventDate] });
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: listKey(res.item.eventDate) });
+      qc.invalidateQueries({ queryKey: ['tables', 'for-event', res.item.eventDate] });
     },
   });
 }

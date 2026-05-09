@@ -334,6 +334,7 @@
       "linkHeading": "Square payment link",
       "linkHeadingCashApp": "Cash App payment link",
       "linkHint": "Generate the link, then copy / SMS / WhatsApp it to the customer.",
+      "autoLinkSmsSent": "Payment link auto-sent via SMS to {{to}}.",
       "generate": "Generate link",
       "regenerate": "Regenerate",
       "copy": "Copy",
