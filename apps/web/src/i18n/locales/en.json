@@ -347,6 +347,10 @@
     "share": {
       "message": "Hi {{name}}, your Famoso Fuego reservation for table {{table}} is confirmed. Please complete payment of {{amount}}: {{url}}"
     },
+    "crm": {
+      "searching": "Searching customers…",
+      "noMatch": "No match found. This will create a new client."
+    },
     "confirmCta": "Confirm reservation"
   },
   "reservationDetail": {

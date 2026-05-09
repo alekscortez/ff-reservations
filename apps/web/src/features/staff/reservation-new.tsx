@@ -13,6 +13,7 @@ import {
   useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
+import { useCrmSearch, type CrmClient } from '@/lib/api/clients';
 import { TableMap } from '@/components/table-map';
 
 type PaymentMethodChoice = 'cash' | 'square' | 'cashapp';
@@ -199,6 +200,25 @@ export function ReservationNew() {
   }
 
   const [createdReservation, setCreatedReservation] = useState<ReservationItem | null>(null);
+  const watchedPhone = watch('phone');
+  const [debouncedPhone, setDebouncedPhone] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedPhone(watchedPhone.trim()), 350);
+    return () => clearTimeout(id);
+  }, [watchedPhone]);
+  const crmSearch = useCrmSearch(debouncedPhone);
+  const crmMatches = crmSearch.data ?? [];
+  const showCrmPanel =
+    debouncedPhone.replace(/\D/g, '').length >= 3 && !createdReservation;
+  const noCrmMatch = showCrmPanel && !crmSearch.isLoading && crmMatches.length === 0;
+
+  function applyCrmMatch(client: CrmClient) {
+    if (client.name) setValue('customerName', client.name, { shouldDirty: true });
+    if (client.phone) setValue('phone', client.phone, { shouldDirty: true });
+    if (client.phoneCountry === 'US' || client.phoneCountry === 'MX') {
+      setValue('phoneCountry', client.phoneCountry, { shouldDirty: true });
+    }
+  }
 
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
@@ -465,6 +485,39 @@ export function ReservationNew() {
                 </select>
               </div>
             </div>
+
+            {showCrmPanel && (
+              <div className="rounded-md border border-border bg-muted/30 p-2">
+                {crmSearch.isLoading ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('reservationNew.crm.searching')}
+                  </p>
+                ) : noCrmMatch ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('reservationNew.crm.noMatch')}
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {crmMatches.slice(0, 5).map((c) => (
+                      <li key={c.phone}>
+                        <button
+                          type="button"
+                          onClick={() => applyCrmMatch(c)}
+                          className="flex w-full items-baseline justify-between gap-2 rounded-md border border-border bg-background px-2 py-1 text-left text-sm hover:border-primary"
+                        >
+                          <span className="font-medium text-brand-900">
+                            {c.name ?? '—'}
+                          </span>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {c.phone}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {(packages ?? []).filter((p) => p.status === 'ACTIVE').length > 0 && (
               <div>

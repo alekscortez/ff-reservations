@@ -347,6 +347,10 @@
     "share": {
       "message": "Hola {{name}}, tu reservación en Famoso Fuego para la mesa {{table}} está confirmada. Completa tu pago de {{amount}}: {{url}}"
     },
+    "crm": {
+      "searching": "Buscando clientes…",
+      "noMatch": "Sin coincidencias. Se creará un nuevo cliente."
+    },
     "confirmCta": "Confirmar reservación"
   },
   "reservationDetail": {
