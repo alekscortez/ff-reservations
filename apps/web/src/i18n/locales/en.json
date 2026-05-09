@@ -1,6 +1,7 @@
 {
   "app": {
     "title": "Famoso Fuego — Reservations",
+    "brandShort": "Famoso Fuego",
     "scaffoldNotice": "Scaffold ready. Auth, routes, and features land in Phase 2."
   },
   "common": {
@@ -17,7 +18,13 @@
   },
   "layout": {
     "toggleNav": "Open navigation",
-    "closeNav": "Close navigation"
+    "closeNav": "Close navigation",
+    "staff": "Staff",
+    "admin": "Admin"
+  },
+  "header": {
+    "todayLabel": "Today",
+    "nextLabel": "Next"
   },
   "auth": {
     "login": "Sign in",

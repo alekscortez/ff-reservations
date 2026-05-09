@@ -1,6 +1,7 @@
 {
   "app": {
     "title": "Famoso Fuego — Reservaciones",
+    "brandShort": "Famoso Fuego",
     "scaffoldNotice": "Andamiaje listo. Autenticación, rutas y funcionalidades llegan en la Fase 2."
   },
   "common": {
@@ -17,7 +18,13 @@
   },
   "layout": {
     "toggleNav": "Abrir navegación",
-    "closeNav": "Cerrar navegación"
+    "closeNav": "Cerrar navegación",
+    "staff": "Staff",
+    "admin": "Admin"
+  },
+  "header": {
+    "todayLabel": "Hoy",
+    "nextLabel": "Próximo"
   },
   "auth": {
     "login": "Iniciar sesión",
