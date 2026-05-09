@@ -86,7 +86,7 @@ export async function handleSquareWebhookRoute(ctx) {
       reservationId: String(result?.reservationId ?? "").trim() || null,
       reason: String(result?.reason ?? "").trim() || null,
     };
-    console.info("Square webhook audit", audit);
+    console.info("square_webhook_audit", audit);
     return json(200, { ok: true, audit, ...result });
   }
 
