@@ -22,7 +22,7 @@ Nightclub reservations platform with role-aware staff/admin web app, serverless 
 - EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
 - Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Failed scheduled invocations land here; `ff-res-lambda-dlq-depth` alarm pages on ≥1 visible message in 5min.
 - API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides).
-- CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth.
+- CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth / **post-charge auto-refund failures (`ff-res-auto-refund-failed-5m`)** / **REFUND-resolution refunds-orphaned-from-reservation (`ff-res-refund-orphaned-5m`)**.
 
 For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
 
@@ -49,7 +49,7 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 
 ## Repository layout
 - `/src` Angular app
-- `/backend/lambda` Lambda handler and service modules
+- `/backend/lambda` Lambda handler and service modules (the reservations/holds domain was split into 4 focused service modules + a 67-line barrel on 2026-05-09 — see `/backend/lambda/README.md`)
 - `/http` HTTP client requests for smoke/debug testing
 - `/src/assets/maps/FF_Reservations_Map.normalized.svg` live table map asset
 
@@ -157,10 +157,14 @@ Environment variables for `.http` runs should be kept local (not committed), for
 
 ## Build and test
 ```bash
-npm run build
-npm run test
-npx tsc -p tsconfig.app.json --noEmit
+npm run build                            # prod build
+npm run test                             # frontend Vitest (Angular components)
+npm run test:backend                     # backend node:test (pure-fn specs in backend/lambda/lib/*.test.mjs)
+npm run test:all                         # both, in sequence
+npx tsc -p tsconfig.app.json --noEmit    # typecheck
 ```
+
+`npm run test:backend` uses Node 22's built-in `node:test` runner — no extra runner dep. `@aws-sdk/lib-dynamodb` is a devDep at the repo root so test files can resolve modules that import it; the production Lambda doesn't bundle it because the AWS Lambda nodejs22.x runtime ships `@aws-sdk/*` v3 modules.
 
 ## Notes for contributors
 - Keep commits scoped (frontend UX vs backend behavior vs infra).
