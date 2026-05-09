@@ -66,6 +66,15 @@
       "status": "Status"
     }
   },
+  "holds": {
+    "listTitle": "Active Holds",
+    "listDescription": "Pending table holds awaiting reservation conversion.",
+    "empty": "No active holds for this event.",
+    "expiredBadge": "EXPIRED",
+    "placedBy": "Placed by",
+    "release": "Release",
+    "confirmRelease": "Release the hold on table {{tableId}}? The table becomes available immediately."
+  },
   "reservations": {
     "listTitle": "Reservations",
     "listDescription": "View bookings for an event date.",

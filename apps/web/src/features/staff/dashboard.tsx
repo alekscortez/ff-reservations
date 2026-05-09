@@ -75,6 +75,15 @@ export function StaffDashboard() {
               {t('packages.listDescription')}
             </p>
           </Link>
+          <Link
+            to="/staff/holds"
+            className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+          >
+            <h3 className="font-semibold text-brand-900">{t('holds.listTitle')}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('holds.listDescription')}
+            </p>
+          </Link>
         </nav>
       </div>
     </main>

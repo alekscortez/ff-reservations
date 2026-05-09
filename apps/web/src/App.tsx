@@ -12,6 +12,7 @@ import { FrequentClientForm } from '@/features/staff/frequent-client-form';
 import { StaffReservations } from '@/features/staff/reservations';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
+import { StaffHolds } from '@/features/staff/holds';
 
 export function App() {
   return (
@@ -107,6 +108,14 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <PackageForm />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/holds"
+          element={
+            <RequireStaffOrAdmin>
+              <StaffHolds />
             </RequireStaffOrAdmin>
           }
         />

@@ -66,6 +66,15 @@
       "status": "Estado"
     }
   },
+  "holds": {
+    "listTitle": "Apartados activos",
+    "listDescription": "Apartados de mesa pendientes de convertirse en reservación.",
+    "empty": "Sin apartados activos para este evento.",
+    "expiredBadge": "EXPIRADO",
+    "placedBy": "Apartado por",
+    "release": "Liberar",
+    "confirmRelease": "¿Liberar el apartado de la mesa {{tableId}}? La mesa quedará disponible inmediatamente."
+  },
   "reservations": {
     "listTitle": "Reservaciones",
     "listDescription": "Ver reservaciones para una fecha de evento.",
