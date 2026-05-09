@@ -6,7 +6,11 @@ import { ApiError } from '@/lib/api-client';
 import { useApiClient } from '@/lib/use-api-client';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import type { ReservationItem } from '@ff/core';
-import { formatPhoneForDisplay, inferPhoneCountryFromE164 } from '@ff/core';
+import {
+  formatPhoneForDisplay,
+  inferPhoneCountryFromE164,
+  normalizePhoneToE164,
+} from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
 import { useCreateHold, useHoldsList, useReleaseHold, type Hold } from '@/lib/api/holds';
@@ -410,8 +414,21 @@ export function ReservationNew() {
   function confirmHoldSelected() {
     const table = tablesArray.find((tb) => tb.id === selectedTableId);
     if (!table || table.status !== 'AVAILABLE') return;
+    // Forward any pre-typed contact info so the lock row carries it (Angular
+    // parity — staff who already typed name/phone pre-hold). Phone gets
+    // normalized to E.164 if possible; otherwise we send what was typed.
+    const rawName = (getValues('customerName') ?? '').trim();
+    const rawPhone = (getValues('phone') ?? '').trim();
+    const country = (getValues('phoneCountry') ?? 'MX') as 'US' | 'MX';
+    const normalizedPhone = rawPhone ? normalizePhoneToE164(rawPhone, country) || rawPhone : '';
     createHold.mutate(
-      { eventDate, tableId: table.id },
+      {
+        eventDate,
+        tableId: table.id,
+        customerName: rawName || undefined,
+        phone: normalizedPhone || undefined,
+        phoneCountry: country,
+      },
       {
         onSuccess: (created) => {
           setHold(created);
@@ -728,10 +745,20 @@ export function ReservationNew() {
   }
 
   const [deadlineError, setDeadlineError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
     setCreditApplyError(null);
     setDeadlineError(null);
+    setPhoneError(null);
+    // Pre-validate the phone is a valid US/MX E.164 — backend validates too
+    // but surfacing inline saves a network round-trip and matches the
+    // Angular original's UX.
+    const normalizedPhone = normalizePhoneToE164(form.phone, form.phoneCountry);
+    if (!normalizedPhone) {
+      setPhoneError(t('reservationNew.phoneValidation.invalid'));
+      return;
+    }
     // When applying a credit, the reservation is created as PENDING with no
     // deposit; the credit lands as a separate payment immediately after via
     // PUT /reservations/{id}/payment with method=credit. The remainder (if any)
@@ -766,7 +793,7 @@ export function ReservationNew() {
       tableId: hold.tableId,
       holdId: hold.holdId ?? '',
       customerName: form.customerName.trim(),
-      phone: form.phone.trim(),
+      phone: normalizedPhone,
       phoneCountry: form.phoneCountry,
       paymentMethod: form.paymentMethod,
       paymentStatus: status,
@@ -1627,6 +1654,11 @@ export function ReservationNew() {
               </div>
             )}
 
+            {phoneError && (
+              <p className="text-sm text-destructive" role="alert">
+                {phoneError}
+              </p>
+            )}
             {submitError && (
               <p className="text-sm text-destructive" role="alert">
                 {submitError}

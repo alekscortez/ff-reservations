@@ -405,6 +405,9 @@
     "deadlineValidation": {
       "past": "La fecha límite de pago debe ser futura ({{tz}})."
     },
+    "phoneValidation": {
+      "invalid": "El teléfono debe ser un número válido de US o MX."
+    },
     "pastEvents": {
       "button": "Eventos pasados ({{count}})",
       "title": "Eventos pasados",

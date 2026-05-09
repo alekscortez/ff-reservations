@@ -405,6 +405,9 @@
     "deadlineValidation": {
       "past": "Payment deadline must be in the future ({{tz}})."
     },
+    "phoneValidation": {
+      "invalid": "Phone must be a valid US or MX number."
+    },
     "pastEvents": {
       "button": "Past events ({{count}})",
       "title": "Past events",

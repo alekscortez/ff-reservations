@@ -56,11 +56,9 @@ export function useReleaseHold(eventDate: string) {
 export interface CreateHoldInput {
   eventDate: string;
   tableId: string;
-  contactName?: string;
-  contactPhone?: string;
+  customerName?: string;
+  phone?: string;
   phoneCountry?: 'US' | 'MX';
-  notes?: string;
-  chargeAmount?: number;
 }
 
 export function useCreateHold() {
