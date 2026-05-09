@@ -54,6 +54,19 @@ function nextDayDateString(): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Add `days` to a YYYY-MM-DD date string using UTC arithmetic so DST shifts
+// don't bump the date by ±1 day. Returns the input unchanged on parse error.
+function addDaysToDateString(date: string, days: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const [y, m, d] = date.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -345,11 +358,20 @@ export function ReservationNew() {
   // the restore effect before this runs).
   const [deadlineDefaultsApplied, setDeadlineDefaultsApplied] = useState(false);
   useEffect(() => {
-    if (!hold || deadlineDefaultsApplied || !ctx) return;
-    // The form's defaultValues set the time to '00:00' and date to next-day
-    // (browser-local). Only override when those literal defaults are still in
-    // place, so we don't clobber an explicit user choice or a restored session.
+    if (!hold || deadlineDefaultsApplied) return;
+    // Override the literal defaults the form was constructed with. Date
+    // defaults to event-date + 1 (matches Angular: a Saturday event's
+    // deadline defaults to Sunday, not "tomorrow from staff perspective").
+    // Falls back to browser-tomorrow when no event is loaded yet.
+    const fallbackTomorrow = nextDayDateString();
+    if (getValues('paymentDeadlineDate') === fallbackTomorrow) {
+      const eventBased = eventDate ? addDaysToDateString(eventDate, 1) : fallbackTomorrow;
+      if (eventBased !== fallbackTomorrow) {
+        setValue('paymentDeadlineDate', eventBased);
+      }
+    }
     if (
+      ctx &&
       getValues('paymentDeadlineTime') === '00:00' &&
       (defaultDeadlineHour !== 0 || defaultDeadlineMinute !== 0)
     ) {
@@ -359,7 +381,7 @@ export function ReservationNew() {
       );
     }
     setDeadlineDefaultsApplied(true);
-  }, [hold, ctx, deadlineDefaultsApplied, defaultDeadlineHour, defaultDeadlineMinute, getValues, setValue]);
+  }, [hold, ctx, deadlineDefaultsApplied, defaultDeadlineHour, defaultDeadlineMinute, eventDate, getValues, setValue]);
   useEffect(() => {
     if (!hold) setDeadlineDefaultsApplied(false);
   }, [hold]);
