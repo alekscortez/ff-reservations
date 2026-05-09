@@ -1236,6 +1236,13 @@ export function createReservationsHoldsService({
     }
   }
 
+  // Bounded concurrency for the cron sweep. With many active events, the
+  // serial loop is O(events) sequential DDB queries — a slow tail event
+  // delays the rest. Cap at 5 in flight: enough parallelism to amortize
+  // wall-clock without saturating Lambda's concurrent connection budget
+  // or starving normal request paths in the same execution.
+  const OVERDUE_SWEEP_CONCURRENCY = 5;
+
   async function releaseOverdueReservationsForAllActiveEvents(user = DEFAULT_AUTO_RELEASE_USER) {
     if (typeof listEvents !== "function") {
       throw httpError(500, "listEvents dependency is not configured");
@@ -1248,15 +1255,31 @@ export function createReservationsHoldsService({
 
     let releasedTotal = 0;
     const failures = [];
-    for (const eventDate of candidates) {
-      try {
-        const { released } = await releaseOverdueReservationsForEventDate(eventDate, user);
-        releasedTotal += Number(released ?? 0);
-      } catch (err) {
-        failures.push({
-          eventDate,
-          message: String(err?.message ?? err ?? ""),
-        });
+    for (let i = 0; i < candidates.length; i += OVERDUE_SWEEP_CONCURRENCY) {
+      const slice = candidates.slice(i, i + OVERDUE_SWEEP_CONCURRENCY);
+      const results = await Promise.all(
+        slice.map(async (eventDate) => {
+          try {
+            const { released } = await releaseOverdueReservationsForEventDate(
+              eventDate,
+              user
+            );
+            return { ok: true, eventDate, released };
+          } catch (err) {
+            return {
+              ok: false,
+              eventDate,
+              message: String(err?.message ?? err ?? ""),
+            };
+          }
+        })
+      );
+      for (const r of results) {
+        if (r.ok) {
+          releasedTotal += Number(r.released ?? 0);
+        } else {
+          failures.push({ eventDate: r.eventDate, message: r.message });
+        }
       }
     }
     return {
