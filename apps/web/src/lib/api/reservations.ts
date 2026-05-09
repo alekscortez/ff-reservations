@@ -183,6 +183,63 @@ export function useCancelReservation(reservationId: string, eventDate: string) {
   });
 }
 
+export interface CashAppLinkInput {
+  eventDate: string;
+  amount?: number;
+}
+
+export interface CashAppLinkResponse {
+  reservation: {
+    reservationId: string;
+    customerName: string | null;
+    phone: string | null;
+    paymentStatus: string | null;
+    amountDue: number;
+    paid: number;
+    remainingAmount: number;
+    linkAmount: number;
+  };
+  cashAppLink: {
+    url: string;
+    expiresAt: number;
+    ttlMinutes: number;
+  };
+}
+
+export function useCreateCashAppLink(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CashAppLinkInput) => {
+      const res = await api.post<CashAppLinkResponse>(
+        `/reservations/${reservationId}/cashapp-link/square`,
+        input
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: listKey(eventDate) });
+    },
+  });
+}
+
+export function useSendCashAppLinkSms(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<{ sent: boolean; messageId?: string }>(
+        `/reservations/${reservationId}/cashapp-link/square/sms`,
+        { eventDate }
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: listKey(eventDate) });
+    },
+  });
+}
+
 export function useSendSquareLinkSms(reservationId: string, eventDate: string) {
   const api = useApiClient();
   const qc = useQueryClient();

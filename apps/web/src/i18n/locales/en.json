@@ -332,6 +332,7 @@
       "another": "Another reservation",
       "viewDetail": "View detail",
       "linkHeading": "Square payment link",
+      "linkHeadingCashApp": "Cash App payment link",
       "linkHint": "Generate the link, then copy / SMS / WhatsApp it to the customer.",
       "generate": "Generate link",
       "regenerate": "Regenerate",

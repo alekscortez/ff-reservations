@@ -11,8 +11,10 @@ import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
 import { useCreateHold, useHoldsList, useReleaseHold, type Hold } from '@/lib/api/holds';
 import {
+  useCreateCashAppLink,
   useCreateReservation,
   useCreateSquarePaymentLink,
+  useSendCashAppLinkSms,
   useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
@@ -182,9 +184,12 @@ export function ReservationNew() {
 
   useEffect(() => {
     if (eventDate || sortedEvents.length === 0) return;
-    // Deep-link: ?eventDate=YYYY-MM-DD takes priority over the auto-pick if it
-    // matches an active event.
-    const requested = searchParams.get('eventDate') ?? '';
+    // Deep-link: ?eventDate or ?date (Angular original) take priority over
+    // the auto-pick if either matches an active event. Reading both keeps
+    // bookmarks from the legacy app working.
+    const requested =
+      (searchParams.get('eventDate') ?? '').trim() ||
+      (searchParams.get('date') ?? '').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(requested)) {
       const match = sortedEvents.find((e) => e.eventDate === requested);
       if (match) {
@@ -1213,6 +1218,13 @@ export function ReservationNew() {
                   ((createdReservation.paymentMethod ?? null) === null &&
                     (watchedMethod === 'square' || watchedMethod === 'cashapp'))
                 }
+                linkMode={
+                  createdReservation.paymentMethod === 'cashapp' ||
+                  ((createdReservation.paymentMethod ?? null) === null &&
+                    watchedMethod === 'cashapp')
+                    ? 'cashapp'
+                    : 'square'
+                }
                 onDone={() =>
                   navigate(
                     `/staff/reservations/${createdReservation.eventDate}/${createdReservation.reservationId}`
@@ -1948,11 +1960,13 @@ function TableListView({
 function PostCreatePanel({
   reservation,
   isDigital,
+  linkMode,
   onDone,
   onAnother,
 }: {
   reservation: ReservationItem;
   isDigital: boolean;
+  linkMode: 'square' | 'cashapp';
   onDone: () => void;
   onAnother: () => void;
 }) {
@@ -1961,16 +1975,29 @@ function PostCreatePanel({
     style: 'currency',
     currency: 'USD',
   });
-  const createLink = useCreateSquarePaymentLink(
+  const createSquareLink = useCreateSquarePaymentLink(
     reservation.reservationId,
     reservation.eventDate
   );
-  const sendSms = useSendSquareLinkSms(
+  const sendSquareSms = useSendSquareLinkSms(
     reservation.reservationId,
     reservation.eventDate
   );
+  const createCashAppLink = useCreateCashAppLink(
+    reservation.reservationId,
+    reservation.eventDate
+  );
+  const sendCashAppSms = useSendCashAppLinkSms(
+    reservation.reservationId,
+    reservation.eventDate
+  );
+  const createLink = linkMode === 'cashapp' ? createCashAppLink : createSquareLink;
+  const sendSms = linkMode === 'cashapp' ? sendCashAppSms : sendSquareSms;
 
-  const linkUrl = createLink.data?.paymentLinkUrl ?? reservation.paymentLinkUrl ?? '';
+  const linkUrl =
+    linkMode === 'cashapp'
+      ? createCashAppLink.data?.cashAppLink?.url ?? ''
+      : createSquareLink.data?.paymentLinkUrl ?? reservation.paymentLinkUrl ?? '';
   const paidTotal = Array.isArray(reservation.payments)
     ? reservation.payments.reduce((sum, p) => sum + (Number(p?.amount) || 0), 0)
     : Number(reservation.depositAmount ?? 0);
@@ -2045,7 +2072,9 @@ function PostCreatePanel({
         <div className="mt-4 space-y-3 rounded-md border border-border bg-background p-4">
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-sm font-semibold text-brand-900">
-              {t('reservationNew.postCreate.linkHeading')}
+              {linkMode === 'cashapp'
+                ? t('reservationNew.postCreate.linkHeadingCashApp')
+                : t('reservationNew.postCreate.linkHeading')}
             </p>
             <button
               type="button"
