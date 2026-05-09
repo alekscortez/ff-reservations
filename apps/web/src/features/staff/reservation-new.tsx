@@ -8,6 +8,7 @@ import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
 import { useCreateHold, useReleaseHold, type Hold } from '@/lib/api/holds';
 import { useCreateReservation } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
+import { TableMap } from '@/components/table-map';
 
 interface CustomerForm {
   customerName: string;
@@ -18,15 +19,6 @@ interface CustomerForm {
   packageId: string;
   receiptNumber: string;
 }
-
-const TABLE_STATUS_CLASS: Record<TableForEvent['status'], string> = {
-  AVAILABLE: 'border-success-200 bg-success-100/40 text-success-700',
-  HOLD: 'border-accent bg-accent/30 text-accent-foreground',
-  RESERVED: 'border-danger-200 bg-danger-100/40 text-danger-700',
-  PENDING_PAYMENT: 'border-accent bg-accent/30 text-accent-foreground',
-  DISABLED: 'border-border bg-muted text-muted-foreground line-through',
-  UNAVAILABLE: 'border-border bg-muted text-muted-foreground',
-};
 
 export function ReservationNew() {
   const { t, i18n } = useTranslation();
@@ -68,18 +60,17 @@ export function ReservationNew() {
     [sortedEvents, eventDate]
   );
 
-  const tablesBySection = useMemo(() => {
-    const map = new Map<string, TableForEvent[]>();
-    for (const tb of tablesData?.tables ?? []) {
-      const arr = map.get(tb.section) ?? [];
-      arr.push(tb);
-      map.set(tb.section, arr);
-    }
-    for (const arr of map.values()) {
-      arr.sort((a, b) => String(a.number).localeCompare(String(b.number)));
+  const tablesArray = tablesData?.tables ?? [];
+  const sectionStats = useMemo(() => {
+    const map = new Map<string, { total: number; available: number }>();
+    for (const tb of tablesArray) {
+      const cur = map.get(tb.section) ?? { total: 0, available: 0 };
+      cur.total += 1;
+      if (tb.status === 'AVAILABLE') cur.available += 1;
+      map.set(tb.section, cur);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [tablesData?.tables]);
+  }, [tablesArray]);
 
   const heldTable = useMemo(() => {
     if (!hold || !tablesData?.tables) return null;
@@ -264,45 +255,65 @@ export function ReservationNew() {
           </section>
         ) : eventDate ? (
           <section className="rounded-lg border border-border bg-background p-4">
-            <h2 className="text-sm font-semibold text-brand-900">
-              {t('reservationNew.pickTable')}
-            </h2>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-brand-900">
+                {t('reservationNew.pickTable')}
+              </h2>
+              {sectionStats.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {sectionStats
+                    .map(([s, c]) => `${s}: ${c.available}/${c.total}`)
+                    .join(' · ')}
+                </span>
+              )}
+            </div>
             {holdError && <p className="mt-2 text-xs text-destructive">{holdError}</p>}
             {tablesLoading ? (
               <p className="mt-3 text-muted-foreground">{t('common.loading')}</p>
-            ) : tablesBySection.length === 0 ? (
+            ) : tablesArray.length === 0 ? (
               <p className="mt-3 text-muted-foreground">{t('events.empty')}</p>
             ) : (
-              <div className="mt-3 space-y-4">
-                {tablesBySection.map(([section, tables]) => (
-                  <div key={section}>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {t('reservationNew.section', { section })}
-                    </h3>
-                    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                      {tables.map((tb) => {
-                        const clickable = tb.status === 'AVAILABLE';
-                        return (
-                          <button
-                            key={tb.id}
-                            type="button"
-                            onClick={() => handleHold(tb)}
-                            disabled={!clickable || createHold.isPending}
-                            className={`flex flex-col items-center rounded-md border p-2 text-xs transition ${TABLE_STATUS_CLASS[tb.status]} ${
-                              clickable ? 'hover:scale-105 cursor-pointer' : 'cursor-not-allowed opacity-70'
-                            }`}
-                          >
-                            <span className="font-semibold">{tb.id}</span>
-                            <span>{moneyFormatter.format(tb.price)}</span>
-                            <span className="mt-1 text-[10px] uppercase">{tb.status}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <TableMap
+                tables={tablesArray}
+                interactive={!createHold.isPending}
+                onSelect={handleHold}
+                className="mt-3"
+              />
             )}
+            <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ background: '#16a34a' }}
+                />{' '}
+                {t('reservationNew.legend.available')}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ background: '#f59e0b' }}
+                />{' '}
+                {t('reservationNew.legend.hold')}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ background: '#dc2626' }}
+                />{' '}
+                {t('reservationNew.legend.reserved')}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span
+                  aria-hidden
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ background: '#9ca3af' }}
+                />{' '}
+                {t('reservationNew.legend.disabled')}
+              </span>
+            </div>
           </section>
         ) : null}
 

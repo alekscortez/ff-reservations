@@ -276,6 +276,12 @@
     "minDeposit": "Depósito mínimo",
     "pickTable": "Selecciona una mesa",
     "section": "Sección {{section}}",
+    "legend": {
+      "available": "Disponible",
+      "hold": "Apartada",
+      "reserved": "Reservada",
+      "disabled": "Inhabilitada"
+    },
     "heldTable": "Apartando {{section}}-{{id}}",
     "holdExpired": "EXPIRADO — vuelve a elegir una mesa",
     "confirmRelease": "¿Liberar este apartado? Tendrás que elegir mesa otra vez.",

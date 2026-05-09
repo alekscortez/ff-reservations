@@ -276,6 +276,12 @@
     "minDeposit": "Min deposit",
     "pickTable": "Pick a table",
     "section": "Section {{section}}",
+    "legend": {
+      "available": "Available",
+      "hold": "On hold",
+      "reserved": "Reserved",
+      "disabled": "Disabled"
+    },
     "heldTable": "Holding {{section}}-{{id}}",
     "holdExpired": "EXPIRED — restart by picking a table",
     "confirmRelease": "Release this hold? You'll have to pick a table again.",
