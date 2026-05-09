@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -481,6 +481,10 @@ export function ReservationNew() {
           setHold(created);
           setHoldCreatedByMe(true);
           setSelectedTableId(null);
+          // Fresh hold created server-side, no need for the listLocks check.
+          // Also clear any stale "session lost" banner from a prior restore.
+          holdNeedsServerCheck.current = false;
+          setHoldValidationError(null);
         },
       }
     );
@@ -564,6 +568,10 @@ export function ReservationNew() {
       setHold(data.hold as Hold);
       // Restored hold is from a prior session of this same user → still ours.
       setHoldCreatedByMe(true);
+      // Arm the server-side listLocks check: only restored holds need to
+      // confirm they still exist on the backend. Freshly created holds do
+      // not (the create call already confirmed it server-side).
+      holdNeedsServerCheck.current = true;
       setEventDate(data.eventDate);
       if (data.form) reset(data.form as CustomerForm);
       setAllowCustomDeposit(Boolean(data.allowCustomDeposit));
@@ -583,12 +591,17 @@ export function ReservationNew() {
   // refresh after a long pause may surface a session whose row has been
   // garbage-collected; trusting localStorage alone would let staff fill out
   // the form and POST /reservations only to hit a 409.
-  const [holdVerifiedAt, setHoldVerifiedAt] = useState<number | null>(null);
+  //
+  // IMPORTANT: this validation must only run for RESTORED holds. For freshly
+  // created holds the listLocks query may still hold a stale snapshot (taken
+  // before our POST /holds), so the new lock won't be in the list yet and
+  // the validation would falsely conclude the hold was lost — exactly what
+  // happened in the screenshot bug. Track restore source via a ref.
+  const holdNeedsServerCheck = useRef(false);
   const [holdValidationError, setHoldValidationError] = useState<string | null>(null);
   const holdsList = useHoldsList(hold ? eventDate : null);
   useEffect(() => {
-    if (!hold || !holdsList.data) return;
-    if (holdVerifiedAt) return;
+    if (!hold || !holdsList.data || !holdNeedsServerCheck.current) return;
     const stillThere = holdsList.data.find(
       (lock) =>
         lock.tableId === hold.tableId &&
@@ -604,16 +617,9 @@ export function ReservationNew() {
         /* ignore */
       }
     }
-    setHoldVerifiedAt(Math.floor(Date.now() / 1000));
-  }, [hold, holdsList.data, holdVerifiedAt, t]);
-  // Re-validate on every fresh hold (clear the verifiedAt mark when hold changes).
-  useEffect(() => {
-    if (!hold) {
-      setHoldVerifiedAt(null);
-      return;
-    }
-    setHoldVerifiedAt(null);
-  }, [hold?.holdId]);
+    // One-shot: cleared on every hold transition. Restore re-arms it.
+    holdNeedsServerCheck.current = false;
+  }, [hold, holdsList.data, t]);
 
   const watchedPhone = watch('phone');
   const watchedPhoneCountry = watch('phoneCountry');
