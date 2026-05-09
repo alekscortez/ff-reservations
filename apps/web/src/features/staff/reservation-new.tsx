@@ -185,9 +185,7 @@ export function ReservationNew() {
     createHold.mutate(
       { eventDate, tableId: table.id },
       {
-        onSuccess: (created) => {
-          setHold(created);
-        },
+        onSuccess: (created) => setHold(created),
       }
     );
   }

@@ -19,6 +19,15 @@ export interface Hold {
 
 const listKey = (eventDate: string) => ['holds', 'list', eventDate] as const;
 
+// Backend stores the table id only in the DDB sort key ("TABLE#A04") and
+// doesn't add a top-level tableId field. Recover it client-side so every
+// consumer can rely on hold.tableId.
+function withTableId(hold: Hold, fallback?: string): Hold {
+  if (hold.tableId) return hold;
+  const fromSk = hold.SK?.replace(/^TABLE#/, '');
+  return { ...hold, tableId: fromSk ?? fallback ?? '' };
+}
+
 export function useHoldsList(eventDate: string | null | undefined) {
   const api = useApiClient();
   return useQuery({
@@ -26,7 +35,7 @@ export function useHoldsList(eventDate: string | null | undefined) {
     enabled: Boolean(eventDate),
     queryFn: async () => {
       const res = await api.get<{ items: Hold[] }>('/holds', { eventDate });
-      return res.items;
+      return (res.items ?? []).map((h) => withTableId(h));
     },
   });
 }
@@ -60,7 +69,7 @@ export function useCreateHold() {
   return useMutation({
     mutationFn: async (input: CreateHoldInput) => {
       const res = await api.post<{ item: Hold }>('/holds', input);
-      return res.item;
+      return withTableId(res.item, input.tableId);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: listKey(vars.eventDate) });
