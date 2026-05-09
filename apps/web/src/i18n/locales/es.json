@@ -66,6 +66,27 @@
       "status": "Estado"
     }
   },
+  "adminUsers": {
+    "listTitle": "Personal y administradores",
+    "listDescription": "Gestiona cuentas del personal/administrador en Cognito.",
+    "empty": "Aún no hay usuarios del personal.",
+    "newCta": "Nuevo usuario",
+    "newTitle": "Nuevo usuario del personal",
+    "enabled": "ACTIVO",
+    "disabled": "DESACTIVADO",
+    "enable": "Activar",
+    "disable": "Desactivar",
+    "resetPassword": "Restablecer contraseña",
+    "confirmEnable": "¿Reactivar a {{username}}?",
+    "confirmDisable": "¿Desactivar a {{username}}? Pierde acceso a la API de inmediato.",
+    "confirmResetPassword": "¿Enviar restablecimiento de contraseña a {{username}}?",
+    "field": {
+      "email": "Correo",
+      "emailHint": "Se enviará una invitación aquí. Cognito usa el correo como nombre de usuario.",
+      "name": "Nombre",
+      "role": "Rol"
+    }
+  },
   "holds": {
     "listTitle": "Apartados activos",
     "listDescription": "Apartados de mesa pendientes de convertirse en reservación.",

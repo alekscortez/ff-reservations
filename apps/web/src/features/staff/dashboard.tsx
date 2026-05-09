@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 import { useTranslation } from 'react-i18next';
-import { cognitoLogoutUrl, getGroups } from '@/lib/auth';
+import { cognitoLogoutUrl, getGroups, isAdmin } from '@/lib/auth';
 
 export function StaffDashboard() {
   const auth = useAuth();
   const { t } = useTranslation();
   const groups = getGroups(auth.user);
   const email = auth.user?.profile?.email as string | undefined;
+  const showAdminLinks = isAdmin(groups);
 
   async function signOut() {
     await auth.removeUser();
@@ -84,6 +85,17 @@ export function StaffDashboard() {
               {t('holds.listDescription')}
             </p>
           </Link>
+          {showAdminLinks ? (
+            <Link
+              to="/admin/users"
+              className="rounded-lg border border-border bg-background p-4 transition hover:border-primary"
+            >
+              <h3 className="font-semibold text-brand-900">{t('adminUsers.listTitle')}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t('adminUsers.listDescription')}
+              </p>
+            </Link>
+          ) : null}
         </nav>
       </div>
     </main>

@@ -66,6 +66,27 @@
       "status": "Status"
     }
   },
+  "adminUsers": {
+    "listTitle": "Staff & Admin Users",
+    "listDescription": "Manage Cognito staff/admin accounts.",
+    "empty": "No staff users yet.",
+    "newCta": "New user",
+    "newTitle": "New staff user",
+    "enabled": "ENABLED",
+    "disabled": "DISABLED",
+    "enable": "Enable",
+    "disable": "Disable",
+    "resetPassword": "Reset password",
+    "confirmEnable": "Re-enable {{username}}?",
+    "confirmDisable": "Disable {{username}}? They lose API access immediately.",
+    "confirmResetPassword": "Send a password reset to {{username}}?",
+    "field": {
+      "email": "Email",
+      "emailHint": "An invitation will be sent here. Cognito uses email as username.",
+      "name": "Display name",
+      "role": "Role"
+    }
+  },
   "holds": {
     "listTitle": "Active Holds",
     "listDescription": "Pending table holds awaiting reservation conversion.",

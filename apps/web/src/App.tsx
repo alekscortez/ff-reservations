@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthHealthBanner } from '@/components/auth-health-banner';
-import { RequireStaffOrAdmin } from '@/components/route-guards';
+import { RequireAdmin, RequireStaffOrAdmin } from '@/components/route-guards';
 import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
@@ -13,6 +13,8 @@ import { StaffReservations } from '@/features/staff/reservations';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
 import { StaffHolds } from '@/features/staff/holds';
+import { AdminUsers } from '@/features/admin/users';
+import { AdminUserForm } from '@/features/admin/user-form';
 
 export function App() {
   return (
@@ -117,6 +119,22 @@ export function App() {
             <RequireStaffOrAdmin>
               <StaffHolds />
             </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <RequireAdmin>
+              <AdminUsers />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/users/new"
+          element={
+            <RequireAdmin>
+              <AdminUserForm />
+            </RequireAdmin>
           }
         />
         <Route path="*" element={<Navigate to="/login" replace />} />
