@@ -48,6 +48,14 @@ import {
   writeActiveHoldSession,
 } from './reservations-new-active-hold';
 import {
+  applyTableFilters,
+  formatSectionFilterLabel,
+  formatStatusFilterLabel,
+  readSavedFilters,
+  TableFilterStatus,
+  writeSavedFilters,
+} from './reservations-new-filters';
+import {
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToE164,
@@ -72,7 +80,6 @@ interface CreatedReservationContext {
   styleUrl: './reservations-new.scss',
 })
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
-  private readonly filterStorageKey = 'ff_new_res_filters_v1';
   private readonly sidebarModalLockClass = 'reservations-new-modal-open';
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
   private sidebarModalLockActive = false;
@@ -158,9 +165,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   });
 
   filterQuery = new FormControl('', { nonNullable: true });
-  filterStatus = new FormControl<
-    'ALL' | 'AVAILABLE' | 'HOLD' | 'PENDING_PAYMENT' | 'RESERVED' | 'DISABLED'
-  >('ALL', {
+  filterStatus = new FormControl<TableFilterStatus>('ALL', {
     nonNullable: true,
   });
   filterSection = new FormControl<string>('ALL', { nonNullable: true });
@@ -1210,15 +1215,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   filteredTables(): TableForEvent[] {
-    const query = this.filterQuery.value.trim().toLowerCase();
-    const status = this.filterStatus.value;
-    const section = this.filterSection.value;
-    return this.tables.filter((t) => {
-      const matchQuery = query ? t.id.toLowerCase().includes(query) : true;
-      const matchStatus = status === 'ALL' ? true : t.status === status;
-      const matchSection = section === 'ALL' ? true : t.section === section;
-      return matchQuery && matchStatus && matchSection;
-    });
+    return applyTableFilters(
+      this.tables,
+      this.filterQuery.value,
+      this.filterStatus.value,
+      this.filterSection.value
+    );
   }
 
   setTableViewMode(mode: 'MAP' | 'LIST'): void {
@@ -1233,9 +1235,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.tableViewMode.value === mode;
   }
 
-  setFilterStatus(
-    status: 'ALL' | 'AVAILABLE' | 'HOLD' | 'PENDING_PAYMENT' | 'RESERVED' | 'DISABLED'
-  ): void {
+  setFilterStatus(status: TableFilterStatus): void {
     this.filterStatus.setValue(status);
     this.showFiltersPanel = false;
     this.saveFilters();
@@ -1264,17 +1264,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   statusFilterLabel(): string {
-    const status = this.filterStatus.value;
-    if (status === 'ALL') return 'All';
-    if (status === 'AVAILABLE') return 'Available';
-    if (status === 'HOLD') return 'Hold';
-    if (status === 'PENDING_PAYMENT') return 'Pending Payment';
-    if (status === 'RESERVED') return 'Reserved';
-    return 'Disabled';
+    return formatStatusFilterLabel(this.filterStatus.value);
   }
 
   sectionFilterLabel(): string {
-    return this.filterSection.value === 'ALL' ? 'All' : `Section ${this.filterSection.value}`;
+    return formatSectionFilterLabel(this.filterSection.value);
   }
 
   filtersButtonLabel(): string {
@@ -1290,49 +1284,17 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   private saveFilters(): void {
-    try {
-      localStorage.setItem(
-        this.filterStorageKey,
-        JSON.stringify({
-          status: this.filterStatus.value,
-          section: this.filterSection.value,
-        })
-      );
-    } catch {
-      // Ignore local storage failures in restricted environments.
-    }
+    writeSavedFilters({
+      status: this.filterStatus.value,
+      section: this.filterSection.value,
+    });
   }
 
   private restoreSavedFilters(): void {
-    try {
-      const raw = localStorage.getItem(this.filterStorageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { status?: string; section?: string };
-      const validStatuses = [
-        'ALL',
-        'AVAILABLE',
-        'HOLD',
-        'PENDING_PAYMENT',
-        'RESERVED',
-        'DISABLED',
-      ];
-      if (parsed.status && validStatuses.includes(parsed.status)) {
-        this.filterStatus.setValue(
-          parsed.status as
-            | 'ALL'
-            | 'AVAILABLE'
-            | 'HOLD'
-            | 'PENDING_PAYMENT'
-            | 'RESERVED'
-            | 'DISABLED'
-        );
-      }
-      if (parsed.section) {
-        this.filterSection.setValue(parsed.section);
-      }
-    } catch {
-      // Ignore malformed saved filters.
-    }
+    const saved = readSavedFilters();
+    if (!saved) return;
+    if (saved.status) this.filterStatus.setValue(saved.status);
+    if (saved.section) this.filterSection.setValue(saved.section);
   }
 
   private applyPaymentDefaultsForCurrentMethod(): void {
