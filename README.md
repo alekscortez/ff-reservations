@@ -24,7 +24,8 @@ Nightclub reservations platform with role-aware staff/admin web app, serverless 
 - Customer custom-auth Lambda `ff-reservations-customer-auth` handles four user-pool triggers (PreSignUp / DefineAuthChallenge / CreateAuthChallenge / VerifyAuthChallengeResponse) for the customer App Client phone-OTP flow. Source under `backend/cognito-customer-auth/`.
 - EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
 - Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Failed scheduled invocations land here; `ff-res-lambda-dlq-depth` alarm pages on ≥1 visible message in 5min.
-- API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides). WAF v2 rate-based rule on `/auth/customer/*` is still pending.
+- API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides).
+- Cloudflare (Free) proxies `api.famosofuego.com` with TLS Full (strict). WAF rate-limit rule `auth-customer-otp-bombing` blocks any IP making >5 requests / 10s to `/auth/customer/*`, for 10s. Free tier counts per-edge, so effective threshold scales with the number of CF edges serving the client (typically ~2 in Houston-area). AWS WAF v2 doesn't support API Gateway HTTP APIs — Cloudflare is the chosen alternative for L7 / per-IP rate limiting.
 - CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth.
 
 For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
@@ -179,7 +180,7 @@ Environment variables for `.http` runs should be kept local (not committed), for
 - SMS not delivered: query CloudWatch log group `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure) for the recipient phone — these were enabled at 100% sample rate.
 - Cron sweep status: `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance" --region us-east-1`.
 - Lambda DLQ has messages (`ff-res-lambda-dlq-depth` alarm fired): `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1` to inspect the failed async invocation payloads. Investigate before redriving — the same code path is still scheduled to run.
-- `429 Too Many Requests` from API Gateway: stage throttle is 200 burst / 100 RPS by default. Bump in `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...` if a real workload outgrows it.
+- `429 Too Many Requests`: distinguish source by response shape. Cloudflare → short HTML body, `server: cloudflare` header, no `cf-cache-status` (rate-limit rule on `/auth/customer/*`); tune in Cloudflare dashboard → Security → WAF → Rate limiting rules. API Gateway → JSON `{"message":"Too Many Requests"}` (stage throttle 200 burst / 100 RPS); bump via `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...`.
 - Reservation history rows missing in audit log: `ff-res-history-write-errors-5m` alarm + filter-log-events on `"reservation_history_write_error"` will surface the cause (IAM, throttling, schema).
 
 ## Build and test

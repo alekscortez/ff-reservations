@@ -157,6 +157,7 @@ Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phas
 - Log metric filters extract `PaymentLinkSmsErrorCount` and `PaymentLinkSmsSuccessCount` from `payment_link_sms_route_*` log lines into `FFReservations/SMS` namespace, and `ReservationHistoryWriteFailureCount` from `reservation_history_write_error` log lines into `FFReservations/History`.
 - API Gateway `$default` stage has `DetailedMetricsEnabled=true` (per-route 4xx/5xx/latency in `AWS/ApiGateway`) and default-route throttle `ThrottlingBurstLimit=200, ThrottlingRateLimit=100` (sized for ~12 RPS realistic peak with ~8x headroom — DoS / runaway-cost guardrail). No per-route overrides; if a single route ever needs a different limit, use `aws apigatewayv2 update-route` with `--route-settings`.
 - SNS SMS delivery status logging enabled at 100% sample rate. Successes go to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber`; failures to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber/Failure`. Both 30-day retention.
+- **Cloudflare proxy + WAF rate-limit on `api.famosofuego.com`** (added 2026-05-08). The `famosofuego.com` zone is on Cloudflare DNS (Free); `api` is proxied (TLS mode Full strict). Custom rate-limit rule `auth-customer-otp-bombing` blocks any IP making >5 requests / 10s to URI paths starting with `/auth/customer/`, for 10s. Free-tier rate limiting counts **per-edge**, so effective threshold = configured × N edges (Houston-area: 2 → ~10/10s/IP). AWS WAF v2 isn't supported on API Gateway HTTP APIs, which is why we route through Cloudflare. **Real client IP** in lambda is now the `cf-connecting-ip` header (`event.requestContext.http.sourceIp` becomes Cloudflare's edge IP). Square webhooks transit this proxy unaffected (they're not under `/auth/customer/`).
 
 **Phase 3 customer auth (deployed 2026-05-08; deploy details in `backend/cognito-customer-auth/README.md`):**
 
@@ -168,7 +169,7 @@ Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phas
 
 **Still missing (Phase 3+ work):**
 
-- AWS WAF v2 web ACL with a rate-based rule scoped to `/auth/customer/*` (limit OTP-bombing). Stage-level throttling is in place; WAF would add L7 attack signatures and per-IP rate limiting.
+- Per-phone Lambda-side rate limit (e.g. `ff-rate-limits` DDB key on `phoneE164`, max 3 starts per 10 min) to close the per-victim SMS-bomb gap that Cloudflare's IP-only rate limit can't catch. Currently bounded by SNS's $20 monthly cap and Cognito's 3-attempts-per-session counter — acceptable for now.
 - AWS End User Messaging Configuration Set with event destinations (richer SMS event data than the SNS-side logs above).
 - Toll-free `+18557656160` is registered but `Status: PENDING` carrier approval. Once approved, SNS will auto-pick it as origination identity (resource policy already correct). Until then, SNS uses shared shortcodes.
 - SNS-side `MonthlySpendLimit` is $20; AWS End User Messaging cap is $50 (the max AWS authorized). Aligning these is a deferred audit item.
@@ -191,7 +192,7 @@ Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phas
 
 1. **Phase 1 (DONE)**: monorepo scaffold, Angular tree deleted, `apps/web` (Vite+React+shadcn-ready), `apps/mobile` (Expo+NativeWind), `packages/core`, `packages/config`, root `pnpm-workspace.yaml`.
 2. **Phase 2**: web auth shell with `react-oidc-context`, port `AuthHealthBanner`, typed `apiFetch` wrapper.
-3. **Phase 3 (substantially done 2026-05-08)**: customer App Client + custom OTP Lambda + user-pool triggers + `/auth/customer/{start,verify}` mediators + `GET /me/profile` (with first-touch CRM merge by phone) + `GET /me/reservations` (sparse `byCustomerSub` GSI on `ff-reservations`) + `DELETE /me` (soft-delete CRM + AdminDeleteUser, idempotent). **Pending**: WAF v2 rate-based rule on `/auth/customer/*`.
+3. **Phase 3 (DONE 2026-05-08)**: customer App Client + custom OTP Lambda + user-pool triggers + `/auth/customer/{start,verify}` mediators + `GET /me/profile` (first-touch CRM merge) + `GET /me/reservations` (sparse `byCustomerSub` GSI) + `DELETE /me` (soft-delete CRM + AdminDeleteUser, idempotent) + Cloudflare proxy/rate-limit on `/auth/customer/*`.
 4. **Phase 4**: backend birthday packages — `ff-packages` table, admin CRUD, public browse, reservation `packageId` + `packageSnapshot`.
 5. **Phase 5**: web feature port, smallest first, `staff/reservations-new` last.
 6. **Phase 6**: customer mobile app — browse → HOLD → Square In-App SDK checkout → confirm → my reservations → check-in pass → account delete.
