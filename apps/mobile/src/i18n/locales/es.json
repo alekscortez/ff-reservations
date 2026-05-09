@@ -1,0 +1,10 @@
+{
+  "app": {
+    "title": "Famoso Fuego",
+    "scaffoldNotice": "Andamiaje móvil listo. El flujo del cliente llega en la Fase 6."
+  },
+  "common": {
+    "loading": "Cargando…",
+    "retry": "Reintentar"
+  }
+}

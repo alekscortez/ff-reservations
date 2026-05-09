@@ -1,0 +1,22 @@
+{
+  "app": {
+    "title": "Famoso Fuego — Reservaciones",
+    "scaffoldNotice": "Andamiaje listo. Autenticación, rutas y funcionalidades llegan en la Fase 2."
+  },
+  "common": {
+    "loading": "Cargando…",
+    "error": "Algo salió mal",
+    "retry": "Reintentar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "confirm": "Confirmar"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "unauthorized": "No tienes acceso a esta sección.",
+    "misconfigured": "Autenticación mal configurada",
+    "missingGroupsHelp": "Tu token de acceso no incluye el claim cognito:groups."
+  }
+}

@@ -3,15 +3,16 @@
 Nightclub reservations platform with role-aware staff/admin web app, serverless API, payment links, SMS notifications, check-in passes, and public live table map.
 
 ## Stack
-- Frontend: Angular 21 + Tailwind (`/src`)
-- Backend: AWS Lambda Node.js 22 (ESM) (`/backend/lambda`)
+- Web app: Vite + React 19 + TypeScript + Tailwind 3 + shadcn/ui + react-oidc-context + react-i18next (EN+ES) (`apps/web`)
+- Mobile app (customer-facing, in development): Expo + React Native + expo-router + NativeWind + react-native-reusables (`apps/mobile`)
+- Shared library: typed models + phone normalization (`packages/core`); runtime config helpers (`packages/config`)
+- Backend: AWS Lambda Node.js 22 (ESM) (`backend/lambda`)
 - API: API Gateway HTTP API (`$default` stage)
 - Data: DynamoDB
-- Auth: Cognito Hosted UI + JWT authorizer
-- Hosting: Amplify (web)
-- Payments: Square (payment links + webhook handling)
+- Auth: Cognito Hosted UI for staff/admin; Cognito Custom Auth phone OTP for customers (Phase 3)
+- Hosting: Amplify (web); EAS Build (mobile)
+- Payments: Square payment links (web) + Square In-App Payments SDK (mobile)
 - Messaging: Amazon SNS (SMS)
-- Scanner: ZXing for QR check-in flow
 
 ## Current AWS context
 - API base URL: `https://api.famosofuego.com` (custom domain mapped to API Gateway HTTP API `oxk1adhl3a`)
@@ -48,29 +49,46 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 - Check-in pass is one-time use.
 
 ## Repository layout
-- `/src` Angular app
-- `/backend/lambda` Lambda handler and service modules
-- `/http` HTTP client requests for smoke/debug testing
-- `/src/assets/maps/FF_Reservations_Map.normalized.svg` live table map asset
+- `apps/web/` — Vite + React staff/admin web app
+- `apps/mobile/` — Expo + React Native customer mobile app
+- `packages/core/` — shared types, models, phone normalization
+- `packages/config/` — runtime config helpers
+- `backend/lambda/` — Lambda handler and service modules (deployed independently)
+- `backend/cognito-pre-token-gen/` — Cognito Pre Token Generation v2 trigger
+- `http/` — HTTP client requests for smoke/debug testing
+- `apps/web/public/maps/FF_Reservations_Map.normalized.svg` — live table map asset
 
 ## Local development
 
 ### Prerequisites
-- Node.js 20+ (frontend)
-- npm 11+
+- Node.js 20+
+- pnpm 9+ (`npm install -g pnpm`)
 - AWS CLI configured for deployment/testing
+- Xcode + iOS Simulator (for mobile development on macOS)
+- Android Studio + Android Emulator (for mobile development)
 
-### Frontend
+### Install
 ```bash
-npm install
-npm start
+pnpm install
 ```
-App runs at `http://localhost:4200`.
 
-Config lives in:
-- `/src/app/core/config/app-config.ts`
+### Web (Vite)
+```bash
+pnpm dev
+```
+Runs at `http://localhost:4200`. Optionally copy `apps/web/.env.example` to `apps/web/.env.local` to override the defaults.
 
-If you need a different API/Cognito setup (dev/staging/prod), update that config file before build/deploy.
+### Mobile (Expo)
+```bash
+pnpm dev:mobile
+```
+Press `i` for iOS simulator, `a` for Android emulator, or scan the QR with Expo Go.
+
+### Typecheck and tests
+```bash
+pnpm typecheck
+pnpm test
+```
 
 ### Lambda (manual deploy script)
 From `/backend/lambda`:

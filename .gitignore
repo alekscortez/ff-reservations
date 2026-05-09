@@ -1,15 +1,36 @@
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# Compiled output
-/dist
-/tmp
-/out-tsc
-/bazel-out
+# Build outputs
+**/dist
+**/dist-ssr
+**/build
+**/.vite
+**/coverage
+**/web-build
 
 # Node
-/node_modules
+**/node_modules
 npm-debug.log
 yarn-error.log
+pnpm-debug.log
+
+# Lockfiles: keep pnpm-lock.yaml; ignore others if they appear by mistake.
+package-lock.json
+yarn.lock
+
+# Local env
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Vite local cache
+**/.vite
+
+# Expo / React Native
+**/.expo
+**/.expo-shared
+apps/mobile/ios
+apps/mobile/android
 
 # IDEs and editors
 .idea/
@@ -30,14 +51,10 @@ yarn-error.log
 .history/*
 
 # Miscellaneous
-/.angular/cache
 .sass-cache/
 /connect.lock
-/coverage
 /libpeerconnection.log
-testem.log
 /typings
-__screenshots__/
 
 # System files
 .DS_Store

@@ -1,0 +1,22 @@
+{
+  "app": {
+    "title": "Famoso Fuego — Reservations",
+    "scaffoldNotice": "Scaffold ready. Auth, routes, and features land in Phase 2."
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm"
+  },
+  "auth": {
+    "login": "Sign in",
+    "logout": "Sign out",
+    "unauthorized": "You don't have access to this area.",
+    "misconfigured": "Auth misconfigured",
+    "missingGroupsHelp": "Your access token is missing the cognito:groups claim."
+  }
+}

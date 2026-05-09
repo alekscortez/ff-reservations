@@ -4,50 +4,78 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## Stack
 
-- **Frontend:** Angular 21 (standalone components), Tailwind, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering
-- **Backend:** AWS Lambda (Node 22 ESM `.mjs`), API Gateway HTTP API, DynamoDB, Cognito Hosted UI, Square API + webhook, SNS SMS, Secrets Manager
-- **Hosting:** Amplify for the SPA; custom domain `api.famosofuego.com` for the API
+- **Web app:** Vite + React 19 + TypeScript + Tailwind 3 + shadcn/ui + react-router-dom + react-oidc-context + react-hook-form + Zod + @tanstack/react-query + react-i18next (EN + ES)
+- **Mobile app (customer-facing, v1):** Expo + React Native + expo-router + NativeWind + react-native-reusables + expo-auth-session (phone OTP custom challenge) + expo-secure-store + react-i18next
+- **Mobile app (staff, v2):** deferred until customer app is stable
+- **Backend:** AWS Lambda (Node 22 ESM `.mjs`), API Gateway HTTP API, DynamoDB, Cognito Hosted UI (staff) + Custom Auth phone OTP (customers), Square API + webhook + In-App Payments SDK, SNS SMS, Secrets Manager
+- **Hosting:** Amplify for the web SPA; EAS Build for mobile; custom domain `api.famosofuego.com` for the API
 
 ## Repo layout
 
 ```
-src/app/
-  core/         # auth, config, layout, http, guards, payments
-  features/     # public/, staff/, admin/ route groups (lazy-loaded)
-  shared/       # components (table-map, page-header, confirm-dialog), models
+apps/
+  web/                            # Vite + React staff/admin app (replaces former Angular SPA)
+    src/
+      lib/{api-client,config,utils}.ts
+      i18n/{index,locales/{en,es}.json}
+      App.tsx, main.tsx
+    public/{favicon.ico, assets/, maps/}
+  mobile/                         # Expo + RN customer app
+    app/                          # expo-router file-based routes
+    src/{i18n,styles}
+packages/
+  core/                           # shared types + phone normalization
+    src/{phone.ts, models/{reservation,event,table,client,frequent-client}.ts}
+  config/                         # FfRuntimeConfig type + assertConfig + buildCognitoLogoutUrl
 backend/lambda/
   index.mjs                       # entry, auth helpers, CORS, router, EventBridge dispatch
   lib/routes-*.mjs                # route handlers per domain
   lib/services-*.mjs              # business logic per domain
-  lib/core-utils.mjs              # phone normalization, json/error helpers
+  lib/core-utils.mjs              # phone normalization (server-side mirror of @ff/core), json/error helpers
   table-template.json             # static venue floor plan
   deploy.sh                       # `aws lambda update-function-code` wrapper
-backend/cognito-pre-token-gen/    # separate Lambda — Cognito Pre Token Gen v2 trigger
-  index.mjs                       # injects cognito:groups into access tokens
-  README.md                       # one-time deploy commands
+backend/cognito-pre-token-gen/    # Cognito Pre Token Gen v2 trigger — injects cognito:groups into access tokens
 http/*.http                       # smoke tests for IDE HTTP runner
+pnpm-workspace.yaml               # apps/* and packages/* are workspace members
+tsconfig.base.json                # shared TS compiler options; each package extends
 ```
 
-Note: `backend/` was historically gitignored; only `index.mjs` was tracked. Phase 1 of the audit remediation un-gitignored it. Verify `git ls-files backend/` is non-trivial before assuming code is in version control.
+Backend (`backend/`) is NOT a workspace member — it has no package.json and is deployed independently via `deploy.sh`. Stays at the repo root.
 
 ## Commands
 
 ```bash
-CI=true npm run build                    # prod build (warns on qrcode CommonJS — known)
-npx tsc -p tsconfig.app.json --noEmit    # typecheck
-npm run test -- --watch=false            # unit tests (vitest)
-bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profile)
+pnpm install                              # install all workspace deps (run once)
+pnpm dev                                  # web app (Vite) on http://localhost:4200
+pnpm dev:mobile                           # Expo dev server for mobile
+pnpm typecheck                            # tsc --noEmit across all workspaces
+pnpm build                                # build packages then web app
+pnpm test                                 # vitest across all workspaces
+bash backend/lambda/deploy.sh             # deploy lambda (uses default AWS profile)
 ```
+
+Run `npx shadcn@latest add button` (etc.) inside `apps/web/` to add shadcn components — `components.json` is preconfigured.
 
 ## Auth model — read this before touching auth
 
-- Cognito Hosted UI + code flow + PKCE via `angular-auth-oidc-client`.
-- Frontend sends the **access token** (not the ID token) via `Bearer` header (`src/app/core/http/auth.interceptor.ts`).
-- API Gateway HTTP API has a JWT authorizer attached **per route**. Public routes (`/public/availability`, `/check-in/pass`, `/cashapp/session*`, `/webhooks/square`, `/pay`) do NOT have the authorizer.
-- Lambda re-checks `requireAdmin(event)` / `requireStaffOrAdmin(event)` for sensitive routes (`backend/lambda/index.mjs:162-174`). Defense-in-depth — do not rely on API Gateway alone.
-- Cognito access tokens do NOT include `cognito:groups` by default. **A Pre Token Generation v2 Lambda trigger injects groups into the access token.** Trigger source lives in `backend/cognito-pre-token-gen/`. If it's disabled or fails, every authenticated request silently 403s with "Admin/Staff required" — staff will see a red "Auth misconfigured" banner from `AuthHealthBanner` (driven by `GET /admin/whoami`).
-- Groups: `Admin`, `Staff` (managed). Users without a group fall through to the `unauthorized` page.
-- Frontend role guards live in `src/app/core/guards/` (`auth.guard.ts`, `role.guard.ts`, `admin.guard.ts`).
+**Two parallel authentication tiers on the same Cognito User Pool, distinguished by App Client:**
+
+- **Staff / admin** (web app):
+  - Cognito Hosted UI + code flow + PKCE via `react-oidc-context` (built on `oidc-client-ts`).
+  - Web sends the **access token** via `Authorization: Bearer` header (configured in `apps/web/src/lib/api-client.ts`).
+  - Cognito groups: `Admin`, `Staff`. Users without a group fall through to `/unauthorized`.
+
+- **Customers** (mobile app, Phase 6):
+  - Phone OTP custom auth flow via `expo-auth-session`. SMS delivered through existing SNS infrastructure.
+  - Customer App Client uses `ALLOW_CUSTOM_AUTH`; tokens minted contain no `cognito:groups`.
+  - Refresh tokens stored in `expo-secure-store` (Keychain on iOS, Keystore on Android) — never `AsyncStorage`.
+
+**Shared backend invariants:**
+
+- API Gateway HTTP API has a JWT authorizer attached **per route**. Public routes (`/public/availability`, `/check-in/pass`, `/cashapp/session*`, `/webhooks/square`, `/pay`, `/auth/customer/start`, `/auth/customer/verify`) do NOT have the authorizer.
+- Lambda re-checks `requireAdmin(event)` / `requireStaffOrAdmin(event)` for staff/admin routes and `requireCustomerOwnership(event, recordOwnerSub)` for `/me/*` routes. Defense-in-depth — do not rely on API Gateway alone.
+- Cognito access tokens do NOT include `cognito:groups` by default. **A Pre Token Generation v2 Lambda trigger injects groups into the access token** for staff/admin users. Trigger source lives in `backend/cognito-pre-token-gen/`. If it's disabled or fails, every authenticated staff request silently 403s with "Admin/Staff required" — staff will see a red "Auth misconfigured" banner from `AuthHealthBanner` (driven by `GET /admin/whoami`).
+- Customers get tokens with no `cognito:groups`; their authorization is by `cognito:sub` ownership match against the record being read/modified.
 
 ## Concurrency / data integrity
 
@@ -84,12 +112,15 @@ Settings stored in `ff-settings` override env at runtime; some keys (Square IDs,
 
 ## Frontend config
 
-`src/app/core/config/app-config.ts` hardcodes:
+Web app reads runtime config from Vite env (`apps/web/.env.local`, prefix `VITE_`):
 
-- `apiBaseUrl: https://api.famosofuego.com`
-- Cognito authority, hostedUiDomain, clientId, scope `openid email profile`
+- `VITE_API_BASE_URL` (default `https://api.famosofuego.com`)
+- `VITE_COGNITO_AUTHORITY`, `VITE_COGNITO_HOSTED_UI_DOMAIN`, `VITE_COGNITO_STAFF_CLIENT_ID`, `VITE_COGNITO_CUSTOMER_CLIENT_ID`
+- `VITE_COGNITO_SCOPE` (default `openid email profile`), `VITE_COGNITO_REDIRECT_PATH` (`/auth/callback`), `VITE_COGNITO_POST_LOGOUT_PATH` (`/login`)
 
-There is no per-environment config file yet.
+Defaults match production values, so `pnpm dev` works without an `.env.local`. Override per environment via Amplify console env vars at build time.
+
+Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phase 6 wiring).
 
 ## Conventions
 
@@ -103,13 +134,15 @@ There is no per-environment config file yet.
 
 ## Known gotchas
 
-- `qrcode` triggers a CommonJS optimization warning during build — cosmetic, ignore.
-- Tests use Vitest with a shared OIDC mock at `src/app/testing/oidc-mock.ts`. **If you add a component that injects `OidcSecurityService`, use `provideMockOidc()` plus `provideRouter([])` in the spec's TestBed providers** — see `src/app/app.spec.ts` for the pattern.
 - `backend/lambda/function.zip` is the built artifact; do not hand-edit and never commit.
 - `backend/lambda/code_url.txt` may contain a presigned S3 URL from a previous deploy — never commit.
-- `app.config.ts:provideAppInitializer` calls `oidc.checkAuth()` before bootstrap; navigation happens after.
-- `auth-callback.ts` decides `/staff/dashboard` vs `/unauthorized` based on `cognito:groups` from the **ID token**, while API calls use the **access token**. Keep them in sync.
-- API Gateway routes are explicit (no `$default` proxy). Adding a backend route requires both: (a) implementing the handler in `lib/routes-*.mjs`, (b) `aws apigatewayv2 create-route` with the right authorizer.
+- API Gateway routes are explicit (no `$default` proxy). Adding a backend route requires both: (a) implementing the handler in `lib/routes-*.mjs`, (b) `aws apigatewayv2 create-route` with the right authorizer (or `--authorization-type NONE` for public routes).
+- Phone normalization is duplicated: server-side in `backend/lambda/lib/core-utils.mjs` and client-side in `packages/core/src/phone.ts`. Keep them behaviorally identical — a divergence will silently corrupt CRM merges.
+- React 19 Strict Mode double-mounts effects in dev. Anything that loads external scripts (Square SDK), opens cameras, or registers global listeners must be idempotent on remount.
+- `react-oidc-context` redirects to `/auth/callback` after Hosted UI; the route handler reads ID token claims and routes to `/staff/dashboard` or `/unauthorized`. API calls send the **access token**; ID-token-vs-access-token claim drift will manifest as inconsistent group checks. Pre Token Generation v2 keeps both in sync.
+- The customer mobile app stores refresh tokens in `expo-secure-store`, NOT `AsyncStorage`. Never relax this — it's the difference between "tokens in plaintext on disk" and "tokens in iOS Keychain / Android Keystore."
+- shadcn components are added per-app via `npx shadcn@latest add <component>` inside `apps/web/`. Do not commit unedited shadcn defaults to `apps/web/src/components/ui/` — they're meant to be customized as needed.
+- Tests use Vitest at every workspace package (root `pnpm test` runs all). React component tests use `@testing-library/react` + `jsdom`; mock the auth context via a custom `<TestAuthProvider>` rather than the real `react-oidc-context`.
 
 ## Wiring outside this repo
 
@@ -141,10 +174,22 @@ There is no per-environment config file yet.
 
 ## Where to look first
 
-- Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public routes).**
-- Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards.
+- Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or `--authorization-type NONE` for public routes).**
+- Adding a web feature → page component under `apps/web/src/features/<area>/<page>.tsx`, register in `apps/web/src/App.tsx` `<Routes>` with appropriate guard wrapper. Use shadcn components from `@/components/ui/*` (add via `npx shadcn add ...`). Translation keys go in `apps/web/src/i18n/locales/{en,es}.json`.
+- Adding a mobile screen → file-based route under `apps/mobile/app/`. Use NativeWind utility classes. Translation keys go in `apps/mobile/src/i18n/locales/{en,es}.json`.
+- Adding a shared model or helper → drop it in `packages/core/src/` and re-export from `packages/core/src/index.ts`. Both apps consume `@ff/core` via workspace alias.
 - Touching reservation state → start with `services-reservations-holds.mjs` (the ~2400-line file). Read existing TransactWrite + ConditionExpression patterns before adding writes.
-- Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver.
-- Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin`.
+- Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver. The mobile In-App SDK tokenizes on device and sends `source_id` to a new `/me/reservations` route in Phase 3.
+- Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin`. Customer ownership checks land in Phase 3 as `requireCustomerOwnership`.
 - "Did SMS X arrive?" → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure). Logs include `messageId`, `destination`, `providerResponse`, `dwellTimeMs`, `status`.
 - "Did the cron sweep run?" → `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance"`.
+
+## Implementation phases (from 2026-05-08 audit + interview)
+
+1. **Phase 1 (DONE)**: monorepo scaffold, Angular tree deleted, `apps/web` (Vite+React+shadcn-ready), `apps/mobile` (Expo+NativeWind), `packages/core`, `packages/config`, root `pnpm-workspace.yaml`.
+2. **Phase 2**: web auth shell with `react-oidc-context`, port `AuthHealthBanner`, typed `apiFetch` wrapper.
+3. **Phase 3**: backend customer auth (second App Client + custom OTP Lambda), `/me/*` routes, CRM merge by phone, `DELETE /me`, WAF rate-based rules.
+4. **Phase 4**: backend birthday packages — `ff-packages` table, admin CRUD, public browse, reservation `packageId` + `packageSnapshot`.
+5. **Phase 5**: web feature port, smallest first, `staff/reservations-new` last.
+6. **Phase 6**: customer mobile app — browse → HOLD → Square In-App SDK checkout → confirm → my reservations → check-in pass → account delete.
+7. **Phase 7**: TestFlight + App Store / Play Store submission for the customer app. Staff mobile is v2.
