@@ -24,7 +24,6 @@ import { CrmClient } from '../../../shared/models/client.model';
 import { debounceTime, distinctUntilChanged, interval, of, Subscription, switchMap } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import {
-  formatCreditExpiry,
   formatEventDate as formatEventDateUtil,
   formatHm,
   isFutureDeadline,
@@ -55,6 +54,13 @@ import {
   TableFilterStatus,
   writeSavedFilters,
 } from './reservations-new-filters';
+import {
+  computeCreditAppliedAmount,
+  computeCreditRemainingAmount,
+  findCreditById,
+  formatCreditLabel,
+  sumCreditsRemaining,
+} from './reservations-new-credits';
 import {
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
@@ -836,15 +842,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   clientCreditsTotalRemaining(): number {
-    return Number(
-      this.clientCredits.reduce((sum, credit) => sum + Number(credit.amountRemaining ?? 0), 0).toFixed(2)
-    );
+    return sumCreditsRemaining(this.clientCredits);
   }
 
   clientCreditLabel(credit: RescheduleCredit): string {
-    const amount = Number(credit.amountRemaining ?? 0);
-    const expires = formatCreditExpiry(credit.expiresAt);
-    return expires ? `$${amount.toFixed(2)} · Expires ${expires}` : `$${amount.toFixed(2)} · No expiry`;
+    return formatCreditLabel(credit);
   }
 
   isUsingClientCredit(): boolean {
@@ -887,24 +889,25 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   selectedClientCredit(): RescheduleCredit | null {
-    const selectedId = String(this.form.controls.creditId.value ?? '').trim();
-    if (!selectedId) return null;
-    return this.clientCredits.find((credit) => credit.creditId === selectedId) ?? null;
+    return findCreditById(this.clientCredits, this.form.controls.creditId.value ?? '');
   }
 
   clientCreditAppliedAmount(): number {
     if (!this.isUsingClientCredit()) return 0;
-    const selected = this.selectedClientCredit();
-    if (!selected) return 0;
-    const amountDue = Number(this.form.controls.amountDue.value ?? 0);
-    const available = Number(selected.amountRemaining ?? 0);
-    return Number(Math.max(0, Math.min(amountDue, available)).toFixed(2));
+    return computeCreditAppliedAmount(
+      this.selectedClientCredit(),
+      this.form.controls.amountDue.value
+    );
   }
 
   clientCreditRemainingAmount(): number {
-    if (!this.isUsingClientCredit()) return Number(Math.max(0, this.form.controls.amountDue.value).toFixed(2));
-    const remaining = Number(this.form.controls.amountDue.value ?? 0) - this.clientCreditAppliedAmount();
-    return Number(Math.max(0, remaining).toFixed(2));
+    if (!this.isUsingClientCredit()) {
+      return Number(Math.max(0, this.form.controls.amountDue.value).toFixed(2));
+    }
+    return computeCreditRemainingAmount(
+      this.form.controls.amountDue.value,
+      this.clientCreditAppliedAmount()
+    );
   }
 
   shouldShowCreditRemainingMethod(): boolean {
