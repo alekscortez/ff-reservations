@@ -1055,13 +1055,6 @@ export function ReservationNew() {
                 <h2 className="text-sm font-semibold text-brand-900">
                   {t('reservationNew.pickTable')}
                 </h2>
-                {sectionStats.length > 0 && (
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    {sectionStats
-                      .map(([s, c]) => `${s}: ${c.available}/${c.total}`)
-                      .join(' · ')}
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -1252,32 +1245,6 @@ export function ReservationNew() {
                 </div>
               </>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-2">
-                <span className="text-brand-700">
-                  {t('reservationNew.legend.available')}
-                </span>
-                {availableSectionKeys.map((s) => (
-                  <span
-                    key={s}
-                    aria-hidden
-                    title={`Section ${s}`}
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{
-                      background: sectionMapColors?.[s] ?? SECTION_COLORS[s] ?? '#9ca3af',
-                    }}
-                  />
-                ))}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: '#9ca3af' }}
-                />
-                {t('reservationNew.legend.unavailable')}
-              </span>
-            </div>
           </section>
         ) : null}
 
@@ -2085,17 +2052,15 @@ function TableListView({
   const colorFor = (section: string) =>
     sectionColors?.[section] ?? SECTION_COLORS[section] ?? '#9ca3af';
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, TableForEvent[]>();
-    for (const tb of tables) {
-      const arr = map.get(tb.section) ?? [];
-      arr.push(tb);
-      map.set(tb.section, arr);
-    }
-    for (const [, arr] of map) {
-      arr.sort((a, b) => a.id.localeCompare(b.id));
-    }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  // Sort flat by table number (suffix digits), matching Angular's
+  // pure-numeric ordering — visually aligns with the SVG floor plan, where
+  // tables are spatially numbered 01..114 regardless of section.
+  const sortedFlat = useMemo(() => {
+    const numericSuffix = (id: string) => {
+      const m = id.match(/(\d+)$/);
+      return m ? Number(m[1]) : 0;
+    };
+    return [...tables].sort((a, b) => numericSuffix(a.id) - numericSuffix(b.id));
   }, [tables]);
 
   if (tables.length === 0) {
@@ -2107,25 +2072,18 @@ function TableListView({
   }
 
   return (
-    <div className="space-y-3">
-      {grouped.map(([section, arr]) => (
-        <div key={section}>
-          <p
-            className="mb-1 text-xs font-semibold uppercase tracking-wide"
-            style={{ color: colorFor(section) }}
-          >
-            {t('reservationNew.section', { section })}
-          </p>
-          <ul
-            className={
-              layout === 'rows'
-                ? 'flex flex-col gap-1'
-                : 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4'
-            }
-          >
-            {arr.map((tb) => {
+    <div>
+      <ul
+        className={
+          layout === 'rows'
+            ? 'flex flex-col gap-1'
+            : 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4'
+        }
+      >
+        {sortedFlat.map((tb) => {
               const avail = tb.status === 'AVAILABLE';
               const isSelected = selectedTableId === tb.id;
+              const section = tb.section;
               // Per-status row chrome — keeps the at-a-glance scanability the
               // Angular original had. AVAILABLE rows use the section accent
               // border; status'd rows use a status-specific border + tint.
@@ -2184,9 +2142,7 @@ function TableListView({
                 </li>
               );
             })}
-          </ul>
-        </div>
-      ))}
+      </ul>
     </div>
   );
 }
