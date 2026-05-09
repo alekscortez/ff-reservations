@@ -365,17 +365,34 @@
       "map": "Mapa",
       "list": "Lista"
     },
-    "list": {
-      "empty": "Ninguna mesa coincide con los filtros."
-    },
     "filters": {
       "button": "Filtros",
       "search": "ID de mesa",
+      "searchPlaceholder": "Buscar…",
       "status": "Estado",
       "available": "Disponible",
       "unavailable": "No disponible",
       "sections": "Secciones",
       "reset": "Limpiar filtros"
+    },
+    "list": {
+      "empty": "Ninguna mesa coincide con los filtros.",
+      "heading": "Lista de mesas",
+      "results": "{{count}} resultados"
+    },
+    "cta": {
+      "selectPrompt": "Selecciona una mesa",
+      "selected": "Seleccionada: Mesa {{id}} · {{price}}",
+      "holdAndReserve": "Apartar y reservar"
+    },
+    "changeEvent": "Cambiar evento",
+    "changeEventModal": {
+      "title": "Cambiar evento",
+      "searchPlaceholder": "Buscar por nombre o fecha (AAAA-MM-DD)…",
+      "noMatch": "No hay eventos que coincidan.",
+      "upcoming": "Próximos",
+      "past": "Pasados",
+      "current": "Actual"
     },
     "holdValidation": {
       "lost": "Tu apartado anterior expiró o se liberó en otro dispositivo. Elige una mesa de nuevo para continuar."

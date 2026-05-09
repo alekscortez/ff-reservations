@@ -111,6 +111,10 @@ export function ReservationNew() {
 
   const [eventDate, setEventDate] = useState<string>('');
   const [hold, setHold] = useState<Hold | null>(null);
+  // Two-step hold pattern: clicking a table sets selectedTableId; the actual
+  // POST /holds fires from the bottom CTA bar's "Hold & Reserve" button. Match
+  // Angular's deliberate confirm step instead of the React port's instant hold.
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
   const { data: events, isLoading: eventsLoading } = useEventsList();
@@ -188,10 +192,17 @@ export function ReservationNew() {
         return;
       }
     }
+    // Prefer the operating-day's current event (or next active) from context;
+    // falls back to "next ≥ browser-today" if context isn't loaded yet.
+    const ctxPick = ctx?.event?.eventDate || ctx?.nextEvent?.eventDate;
+    if (ctxPick) {
+      setEventDate(ctxPick);
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     const next = sortedEvents.find((e) => e.eventDate >= today) ?? sortedEvents[0];
     setEventDate(next.eventDate);
-  }, [eventDate, sortedEvents, searchParams]);
+  }, [eventDate, sortedEvents, searchParams, ctx]);
 
   useEffect(() => {
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
@@ -263,10 +274,20 @@ export function ReservationNew() {
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [tablesArray]);
 
+  const availableSectionKeys = useMemo(
+    () => sectionStats.map(([s]) => s),
+    [sectionStats]
+  );
+
   const heldTable = useMemo(() => {
     if (!hold || !tablesData?.tables) return null;
     return tablesData.tables.find((tb) => tb.id === hold.tableId) ?? null;
   }, [hold, tablesData?.tables]);
+
+  const selectedTable = useMemo(() => {
+    if (!selectedTableId) return null;
+    return tablesArray.find((tb) => tb.id === selectedTableId) ?? null;
+  }, [tablesArray, selectedTableId]);
 
   const remainingSec = hold?.expiresAt ? hold.expiresAt - nowSec : 0;
   const expired = hold?.expiresAt ? remainingSec <= 0 : false;
@@ -371,21 +392,40 @@ export function ReservationNew() {
     style: 'currency',
     currency: 'USD',
   });
-  const dateFormatter = new Intl.DateTimeFormat(i18n.language, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
 
-  function handleHold(table: TableForEvent) {
+  // Step 1 of two-step hold: just toggles selection, no server call. Clicking
+  // the same table again clears the selection.
+  function handleTableSelect(table: TableForEvent) {
     if (table.status !== 'AVAILABLE') return;
+    setSelectedTableId((cur) => (cur === table.id ? null : table.id));
+  }
+
+  // Step 2 of two-step hold: the bottom CTA "Hold & Reserve" calls this with
+  // the currently-selected table.
+  function confirmHoldSelected() {
+    const table = tablesArray.find((tb) => tb.id === selectedTableId);
+    if (!table || table.status !== 'AVAILABLE') return;
     createHold.mutate(
       { eventDate, tableId: table.id },
       {
-        onSuccess: (created) => setHold(created),
+        onSuccess: (created) => {
+          setHold(created);
+          setSelectedTableId(null);
+        },
       }
     );
   }
+
+  // Clear selection when the event changes or the table is no longer
+  // available (e.g. someone else held it during polling).
+  useEffect(() => {
+    if (!selectedTableId) return;
+    const t = tablesArray.find((tb) => tb.id === selectedTableId);
+    if (!t || t.status !== 'AVAILABLE') setSelectedTableId(null);
+  }, [tablesArray, selectedTableId]);
+  useEffect(() => {
+    setSelectedTableId(null);
+  }, [eventDate]);
 
   type ReleaseIntent =
     | { kind: 'release' }
@@ -792,125 +832,42 @@ export function ReservationNew() {
           </Link>
         </div>
 
-        <section className="rounded-lg border border-border bg-background p-4">
-          <div className="flex items-baseline justify-between">
-            <label className="block text-sm font-medium text-brand-700" htmlFor="evt">
-              {t('reservationNew.eventLabel')}
-            </label>
-            {pastEvents.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setPastModalOpen(true)}
-                className="text-xs text-muted-foreground hover:text-brand-900"
-              >
-                {t('reservationNew.pastEvents.button', { count: pastEvents.length })}
-              </button>
-            )}
-          </div>
-          {sortedEvents.length > 0 && (
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {sortedEvents.slice(0, 8).map((evt) => {
-                const selected = evt.eventDate === eventDate;
-                const thisWeek =
-                  evt.eventDate >= todayStr && evt.eventDate <= inAWeekStr;
-                return (
-                  <button
-                    key={evt.eventId}
-                    type="button"
-                    onClick={() => {
-                      if (hold && evt.eventDate !== eventDate) {
-                        setReleaseIntent({
-                          kind: 'switchEvent',
-                          nextEventDate: evt.eventDate,
-                        });
-                        return;
-                      }
-                      setEventDate(evt.eventDate);
-                    }}
-                    className={`relative rounded-lg border p-3 text-left text-sm transition ${
-                      selected
-                        ? 'border-primary bg-primary/10 ring-2 ring-primary'
-                        : thisWeek
-                          ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
-                          : 'border-border bg-background hover:border-primary/60'
-                    }`}
-                  >
-                    {thisWeek && !selected && (
-                      <span className="absolute right-1 top-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
-                        {t('reservationNew.eventCard.thisWeek')}
-                      </span>
-                    )}
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {dateFormatter.format(new Date(evt.eventDate + 'T00:00:00'))}
-                    </p>
-                    <p className="mt-1 font-semibold text-brand-900">{evt.eventName}</p>
-                    {Number(evt.minDeposit ?? 0) > 0 && (
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {t('reservationNew.minDeposit')}:{' '}
-                        {moneyFormatter.format(evt.minDeposit)}
-                      </p>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <select
-            id="evt"
-            className={`w-full rounded-md border border-border bg-background px-3 py-2 text-sm ${
-              sortedEvents.length > 0 ? 'mt-3' : 'mt-2'
-            }`}
-            aria-label={t('reservationNew.eventLabel')}
-            value={eventDate}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (hold) {
-                setReleaseIntent({ kind: 'switchEvent', nextEventDate: next });
-                return;
-              }
-              setEventDate(next);
-            }}
-            disabled={eventsLoading || sortedEvents.length === 0}
-          >
-            {sortedEvents.length === 0 ? (
-              <option value="">
-                {eventsLoading ? t('common.loading') : t('events.empty')}
-              </option>
-            ) : (
-              sortedEvents.map((evt) => (
-                <option key={evt.eventId} value={evt.eventDate}>
-                  {dateFormatter.format(new Date(evt.eventDate + 'T00:00:00'))} —{' '}
-                  {evt.eventName}
-                </option>
-              ))
-            )}
-            {/* Synthetic option for a past/inactive event back-fill so the
-                select reflects what's actually loaded. */}
-            {eventDate && !sortedEvents.some((e) => e.eventDate === eventDate) && (
-              <option value={eventDate}>
-                {dateFormatter.format(new Date(eventDate + 'T00:00:00'))}
-                {(() => {
-                  const ev = (events ?? []).find((e) => e.eventDate === eventDate);
-                  return ev ? ` — ${ev.eventName} (${t('reservationNew.pastEvents.tag')})` : '';
-                })()}
-              </option>
-            )}
-          </select>
-          {selectedEvent && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t('reservationNew.minDeposit')}:{' '}
-              {moneyFormatter.format(selectedEvent.minDeposit)}
+        <section className="rounded-lg border border-border bg-background px-4 py-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm text-brand-900">
+              <span className="text-brand-700">{t('reservationNew.eventLabel')}: </span>
+              <span className="font-semibold">
+                {selectedEvent
+                  ? `${selectedEvent.eventName} (${selectedEvent.eventDate})`
+                  : eventsLoading
+                    ? t('common.loading')
+                    : t('events.empty')}
+              </span>
+              {selectedEvent && Number(selectedEvent.minDeposit ?? 0) > 0 && (
+                <span className="ml-3 text-xs text-muted-foreground">
+                  {t('reservationNew.minDeposit')}:{' '}
+                  {moneyFormatter.format(selectedEvent.minDeposit)}
+                </span>
+              )}
             </p>
-          )}
+            <button
+              type="button"
+              onClick={() => setPastModalOpen(true)}
+              disabled={Boolean(hold)}
+              className="rounded-md border border-border bg-background px-3 py-1 text-xs font-medium text-brand-900 hover:bg-muted disabled:opacity-50"
+            >
+              {t('reservationNew.changeEvent')}
+            </button>
+          </div>
         </section>
 
         {eventDate ? (
-          <section className="rounded-lg border border-border bg-background p-4">
+          <section className="rounded-lg border border-border bg-background p-4 pb-24 lg:pb-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-sm font-semibold text-brand-900">
-                {t('reservationNew.pickTable')}
-              </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-sm font-semibold text-brand-900">
+                  {t('reservationNew.pickTable')}
+                </h2>
                 {sectionStats.length > 0 && (
                   <span className="hidden text-xs text-muted-foreground sm:inline">
                     {sectionStats
@@ -918,10 +875,22 @@ export function ReservationNew() {
                       .join(' · ')}
                   </span>
                 )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="search"
+                  value={filters.search}
+                  onChange={(e) =>
+                    setFilters((f) => ({ ...f, search: e.target.value }))
+                  }
+                  placeholder={t('reservationNew.filters.searchPlaceholder')}
+                  aria-label={t('reservationNew.filters.search')}
+                  className="w-32 rounded-md border border-border bg-background px-2 py-1 text-xs uppercase sm:w-40"
+                />
                 <div
                   role="tablist"
                   aria-label={t('reservationNew.view.label')}
-                  className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs lg:hidden"
+                  className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs md:hidden"
                 >
                   {(['map', 'list'] as const).map((v) => (
                     <button
@@ -943,6 +912,7 @@ export function ReservationNew() {
                 <button
                   type="button"
                   onClick={() => setFiltersOpen((v) => !v)}
+                  aria-label={t('reservationNew.filters.button')}
                   className={`relative rounded-md border px-3 py-1 text-xs font-medium ${
                     filtersActive
                       ? 'border-primary bg-primary/10 text-primary'
@@ -959,20 +929,6 @@ export function ReservationNew() {
             {filtersOpen && (
               <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-brand-700">
-                      {t('reservationNew.filters.search')}
-                    </span>
-                    <input
-                      type="search"
-                      value={filters.search}
-                      onChange={(e) =>
-                        setFilters((f) => ({ ...f, search: e.target.value }))
-                      }
-                      placeholder="A04, B12…"
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm uppercase"
-                    />
-                  </label>
                   <div className="flex flex-col gap-1">
                     <span className="text-brand-700">
                       {t('reservationNew.filters.status')}
@@ -1005,36 +961,36 @@ export function ReservationNew() {
                       </label>
                     </div>
                   </div>
-                </div>
-                <div className="mt-2 flex flex-col gap-1">
-                  <span className="text-brand-700">
-                    {t('reservationNew.filters.sections')}
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {(['A', 'B', 'C', 'D', 'E'] as const).map((s) => {
-                      const on = filters.sections.includes(s);
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() =>
-                            setFilters((f) => ({
-                              ...f,
-                              sections: on
-                                ? f.sections.filter((x) => x !== s)
-                                : [...f.sections, s],
-                            }))
-                          }
-                          className={`rounded-md border px-2 py-0.5 text-xs ${
-                            on
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-border bg-background text-brand-900 hover:bg-muted'
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      );
-                    })}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-brand-700">
+                      {t('reservationNew.filters.sections')}
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {availableSectionKeys.map((s) => {
+                        const on = filters.sections.includes(s);
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() =>
+                              setFilters((f) => ({
+                                ...f,
+                                sections: on
+                                  ? f.sections.filter((x) => x !== s)
+                                  : [...f.sections, s],
+                              }))
+                            }
+                            className={`rounded-md border px-2 py-0.5 text-xs ${
+                              on
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-background text-brand-900 hover:bg-muted'
+                            }`}
+                          >
+                            {s}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
                 {filtersActive && (
@@ -1065,38 +1021,52 @@ export function ReservationNew() {
               <p className="mt-3 text-muted-foreground">{t('events.empty')}</p>
             ) : (
               <>
-                {/* Mobile / tablet: single view driven by the toggle. */}
-                <div className="lg:hidden">
+                {/* Phone: single view driven by the toggle pill. */}
+                <div className="mt-3 md:hidden">
                   {tableView === 'map' ? (
                     <TableMap
                       tables={tablesArray}
                       interactive={!createHold.isPending}
-                      onSelect={handleHold}
+                      onSelect={handleTableSelect}
+                      selectedTableId={selectedTableId ?? hold?.tableId ?? null}
                       sectionColors={sectionMapColors}
-                      className="mt-3"
                     />
                   ) : (
                     <TableListView
                       tables={filteredTables}
                       disabled={createHold.isPending}
-                      onSelect={handleHold}
+                      onSelect={handleTableSelect}
+                      selectedTableId={selectedTableId ?? hold?.tableId ?? null}
+                      sectionColors={sectionMapColors}
                     />
                   )}
                 </div>
-                {/* Desktop split: map left, scrollable list right. */}
-                <div className="mt-3 hidden gap-4 lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                {/* Tablet+: map left, scrollable list right (always split). */}
+                <div className="mt-3 hidden gap-4 md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
                   <TableMap
                     tables={tablesArray}
                     interactive={!createHold.isPending}
-                    onSelect={handleHold}
+                    onSelect={handleTableSelect}
+                    selectedTableId={selectedTableId ?? hold?.tableId ?? null}
                     sectionColors={sectionMapColors}
                   />
-                  <div className="max-h-[70vh] overflow-y-auto rounded-md border border-border bg-background p-2">
-                    <TableListView
-                      tables={filteredTables}
-                      disabled={createHold.isPending}
-                      onSelect={handleHold}
-                    />
+                  <div className="flex flex-col">
+                    <div className="mb-2 flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <span>{t('reservationNew.list.heading')}</span>
+                      <span>
+                        {t('reservationNew.list.results', { count: filteredTables.length })}
+                      </span>
+                    </div>
+                    <div className="max-h-[68vh] overflow-y-auto rounded-md border border-border bg-background p-2">
+                      <TableListView
+                        tables={filteredTables}
+                        disabled={createHold.isPending}
+                        onSelect={handleTableSelect}
+                        selectedTableId={selectedTableId ?? hold?.tableId ?? null}
+                        layout="rows"
+                        sectionColors={sectionMapColors}
+                      />
+                    </div>
                   </div>
                 </div>
               </>
@@ -1106,14 +1076,14 @@ export function ReservationNew() {
                 <span className="text-brand-700">
                   {t('reservationNew.legend.available')}
                 </span>
-                {(['A', 'B', 'C', 'D', 'E'] as const).map((s) => (
+                {availableSectionKeys.map((s) => (
                   <span
                     key={s}
                     aria-hidden
                     title={`Section ${s}`}
                     className="inline-block h-3 w-3 rounded-full"
                     style={{
-                      background: { A: '#ec008c', B: '#2e3192', C: '#00aeef', D: '#f7941d', E: '#711411' }[s],
+                      background: sectionMapColors?.[s] ?? SECTION_COLORS[s] ?? '#9ca3af',
                     }}
                   />
                 ))}
@@ -1131,6 +1101,47 @@ export function ReservationNew() {
         ) : null}
 
       </div>
+
+      {/* Bottom CTA bar — always visible while picking a table. Sits above the
+          mobile keyboard via env() inset and the visualViewport listener
+          handles soft-keyboard cases on iOS. */}
+      {eventDate && !hold && !createdReservation && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+          style={{ paddingBottom: kbInset > 0 ? `${kbInset}px` : undefined }}
+        >
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            <p className="text-sm text-brand-900">
+              {selectedTable
+                ? t('reservationNew.cta.selected', {
+                    section: selectedTable.section,
+                    id: selectedTable.id,
+                    price: moneyFormatter.format(selectedTable.price),
+                  })
+                : t('reservationNew.cta.selectPrompt')}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPastModalOpen(true)}
+                className="inline-flex h-10 items-center rounded-md border border-border bg-background px-4 text-sm font-medium text-brand-900 hover:bg-muted"
+              >
+                {t('reservationNew.changeEvent')}
+              </button>
+              <button
+                type="button"
+                onClick={confirmHoldSelected}
+                disabled={!selectedTable || createHold.isPending}
+                className="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {createHold.isPending
+                  ? t('common.saving')
+                  : t('reservationNew.cta.holdAndReserve')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(createdReservation || (hold && heldTable)) && (
         <div
@@ -1655,7 +1666,7 @@ export function ReservationNew() {
           <div className="my-4 w-full max-w-lg rounded-2xl bg-background p-5 shadow-xl">
             <header className="mb-3 flex items-baseline justify-between gap-3 border-b border-border pb-3">
               <h2 className="text-base font-semibold text-brand-900">
-                {t('reservationNew.pastEvents.title')}
+                {t('reservationNew.changeEventModal.title')}
               </h2>
               <button
                 type="button"
@@ -1673,19 +1684,33 @@ export function ReservationNew() {
               type="search"
               value={pastSearch}
               onChange={(e) => setPastSearch(e.target.value)}
-              placeholder={t('reservationNew.pastEvents.searchPlaceholder')}
+              placeholder={t('reservationNew.changeEventModal.searchPlaceholder')}
               className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             />
-            {filteredPast.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t('reservationNew.pastEvents.noMatch')}
-              </p>
-            ) : (
-              <ul className="max-h-[60vh] space-y-1 overflow-y-auto">
-                {filteredPast.map((e) => (
+            {(() => {
+              const q = pastSearch.trim().toLowerCase();
+              const matches = (e: typeof sortedEvents[number]) =>
+                !q ||
+                e.eventName.toLowerCase().includes(q) ||
+                e.eventDate.includes(q);
+              const upcoming = sortedEvents.filter(matches);
+              const past = filteredPast;
+              if (upcoming.length === 0 && past.length === 0) {
+                return (
+                  <p className="text-sm text-muted-foreground">
+                    {t('reservationNew.changeEventModal.noMatch')}
+                  </p>
+                );
+              }
+              const renderItem = (e: typeof sortedEvents[number]) => {
+                const current = e.eventDate === eventDate;
+                const thisWeek =
+                  e.eventDate >= todayStr && e.eventDate <= inAWeekStr;
+                return (
                   <li key={e.eventId}>
                     <button
                       type="button"
+                      disabled={current}
                       onClick={() => {
                         if (hold) {
                           setReleaseIntent({
@@ -1698,17 +1723,61 @@ export function ReservationNew() {
                         setPastModalOpen(false);
                         setPastSearch('');
                       }}
-                      className="flex w-full items-baseline justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary"
+                      className={`flex w-full items-baseline justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm ${
+                        current
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border bg-background hover:border-primary'
+                      }`}
                     >
-                      <span className="font-medium text-brand-900">{e.eventName}</span>
+                      <span className="flex flex-col">
+                        <span className="font-medium text-brand-900">
+                          {e.eventName}
+                          {current && (
+                            <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">
+                              {t('reservationNew.changeEventModal.current')}
+                            </span>
+                          )}
+                          {thisWeek && !current && (
+                            <span className="ml-2 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
+                              {t('reservationNew.eventCard.thisWeek')}
+                            </span>
+                          )}
+                        </span>
+                        {Number(e.minDeposit ?? 0) > 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {t('reservationNew.minDeposit')}:{' '}
+                            {moneyFormatter.format(e.minDeposit)}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-xs font-mono text-muted-foreground">
                         {e.eventDate}
                       </span>
                     </button>
                   </li>
-                ))}
-              </ul>
-            )}
+                );
+              };
+              return (
+                <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+                  {upcoming.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t('reservationNew.changeEventModal.upcoming')}
+                      </p>
+                      <ul className="space-y-1">{upcoming.map(renderItem)}</ul>
+                    </div>
+                  )}
+                  {past.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t('reservationNew.changeEventModal.past')}
+                      </p>
+                      <ul className="space-y-1">{past.map(renderItem)}</ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1767,16 +1836,25 @@ function TableListView({
   tables,
   disabled,
   onSelect,
+  selectedTableId,
+  layout = 'grid',
+  sectionColors,
 }: {
   tables: TableForEvent[];
   disabled: boolean;
   onSelect: (t: TableForEvent) => void;
+  selectedTableId?: string | null;
+  layout?: 'grid' | 'rows';
+  sectionColors?: Record<string, string>;
 }) {
   const { t, i18n } = useTranslation();
   const moneyFormatter = new Intl.NumberFormat(i18n.language, {
     style: 'currency',
     currency: 'USD',
   });
+
+  const colorFor = (section: string) =>
+    sectionColors?.[section] ?? SECTION_COLORS[section] ?? '#9ca3af';
 
   const grouped = useMemo(() => {
     const map = new Map<string, TableForEvent[]>();
@@ -1800,40 +1878,56 @@ function TableListView({
   }
 
   return (
-    <div className="mt-3 space-y-3">
+    <div className="space-y-3">
       {grouped.map(([section, arr]) => (
         <div key={section}>
           <p
             className="mb-1 text-xs font-semibold uppercase tracking-wide"
-            style={{ color: SECTION_COLORS[section] ?? '#374151' }}
+            style={{ color: colorFor(section) }}
           >
             {t('reservationNew.section', { section })}
           </p>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          <ul
+            className={
+              layout === 'rows'
+                ? 'flex flex-col gap-1'
+                : 'grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4'
+            }
+          >
             {arr.map((tb) => {
               const avail = tb.status === 'AVAILABLE';
+              const isSelected = selectedTableId === tb.id;
               return (
                 <li key={tb.id}>
                   <button
                     type="button"
                     disabled={!avail || disabled}
                     onClick={() => avail && onSelect(tb)}
-                    className={`flex w-full items-baseline justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
-                      avail
-                        ? 'border-border bg-background hover:border-primary'
-                        : 'cursor-not-allowed border-border bg-muted/40 opacity-60'
+                    aria-pressed={isSelected}
+                    aria-label={`${tb.id} ${avail ? moneyFormatter.format(tb.price) : tb.status.replace(/_/g, ' ')}`}
+                    className={`flex w-full items-baseline justify-between rounded-md border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-primary ${
+                      isSelected
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary'
+                        : avail
+                          ? 'border-border bg-background hover:border-primary'
+                          : 'cursor-not-allowed border-border bg-muted/40 opacity-60'
                     }`}
                     style={
-                      avail
-                        ? { borderLeft: `4px solid ${SECTION_COLORS[section] ?? '#9ca3af'}` }
+                      avail && !isSelected
+                        ? { borderLeft: `4px solid ${colorFor(section)}` }
                         : undefined
                     }
                   >
                     <span className="font-mono font-semibold text-brand-900">
                       {tb.id}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {avail ? moneyFormatter.format(tb.price) : tb.status}
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{moneyFormatter.format(tb.price)}</span>
+                      {!avail && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
+                          {tb.status.replace(/_/g, ' ')}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>

@@ -365,17 +365,34 @@
       "map": "Map",
       "list": "List"
     },
-    "list": {
-      "empty": "No tables match your filters."
-    },
     "filters": {
       "button": "Filters",
       "search": "Table ID",
+      "searchPlaceholder": "Search…",
       "status": "Status",
       "available": "Available",
       "unavailable": "Unavailable",
       "sections": "Sections",
       "reset": "Clear filters"
+    },
+    "list": {
+      "empty": "No tables match your filters.",
+      "heading": "Table list",
+      "results": "{{count}} results"
+    },
+    "cta": {
+      "selectPrompt": "Select a table",
+      "selected": "Selected: Table {{id}} · {{price}}",
+      "holdAndReserve": "Hold & Reserve"
+    },
+    "changeEvent": "Change Event",
+    "changeEventModal": {
+      "title": "Change Event",
+      "searchPlaceholder": "Search by name or date (YYYY-MM-DD)…",
+      "noMatch": "No events match your search.",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "current": "Current"
     },
     "holdValidation": {
       "lost": "Your previous hold expired or was released on another device. Pick a table again to continue."
