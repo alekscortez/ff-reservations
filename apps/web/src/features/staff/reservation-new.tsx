@@ -612,7 +612,7 @@ export function ReservationNew() {
 
   return (
     <div className="p-6 sm:p-8">
-      <div className="mx-auto max-w-4xl space-y-5">
+      <div className="mx-auto max-w-4xl space-y-5 lg:max-w-6xl">
         <div className="flex items-baseline justify-between">
           <h1 className="text-3xl font-semibold text-brand-900">
             {t('reservationNew.title')}
@@ -754,7 +754,7 @@ export function ReservationNew() {
                 <div
                   role="tablist"
                   aria-label={t('reservationNew.view.label')}
-                  className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs"
+                  className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs lg:hidden"
                 >
                   {(['map', 'list'] as const).map((v) => (
                     <button
@@ -888,19 +888,41 @@ export function ReservationNew() {
               <p className="mt-3 text-muted-foreground">{t('common.loading')}</p>
             ) : tablesArray.length === 0 ? (
               <p className="mt-3 text-muted-foreground">{t('events.empty')}</p>
-            ) : tableView === 'map' ? (
-              <TableMap
-                tables={tablesArray}
-                interactive={!createHold.isPending}
-                onSelect={handleHold}
-                className="mt-3"
-              />
             ) : (
-              <TableListView
-                tables={filteredTables}
-                disabled={createHold.isPending}
-                onSelect={handleHold}
-              />
+              <>
+                {/* Mobile / tablet: single view driven by the toggle. */}
+                <div className="lg:hidden">
+                  {tableView === 'map' ? (
+                    <TableMap
+                      tables={tablesArray}
+                      interactive={!createHold.isPending}
+                      onSelect={handleHold}
+                      className="mt-3"
+                    />
+                  ) : (
+                    <TableListView
+                      tables={filteredTables}
+                      disabled={createHold.isPending}
+                      onSelect={handleHold}
+                    />
+                  )}
+                </div>
+                {/* Desktop split: map left, scrollable list right. */}
+                <div className="mt-3 hidden gap-4 lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                  <TableMap
+                    tables={tablesArray}
+                    interactive={!createHold.isPending}
+                    onSelect={handleHold}
+                  />
+                  <div className="max-h-[70vh] overflow-y-auto rounded-md border border-border bg-background p-2">
+                    <TableListView
+                      tables={filteredTables}
+                      disabled={createHold.isPending}
+                      onSelect={handleHold}
+                    />
+                  </div>
+                </div>
+              </>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-2">
