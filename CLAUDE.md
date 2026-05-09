@@ -127,9 +127,11 @@ There is no per-environment config file yet.
   - `ff-res-lambda-throttles-5m` (≥1)
   - `ff-res-sms-errors-5m` (≥3 PaymentLinkSmsErrorCount in 5min)
   - `ff-res-history-write-errors-5m` (≥1 ReservationHistoryWriteFailureCount in 5min)
+  - `ff-res-auto-refund-failed-5m` (≥1 AutoRefundFailedCount in 5min) — fires when the post-charge auto-refund safety net itself fails (Square charged, addReservationPayment rejected, refund attempt also failed → manual reconciliation needed)
+  - `ff-res-refund-orphaned-5m` (≥1 RefundOrphanedCount in 5min) — fires when REFUND-resolution refunds succeeded at Square but the reservation row update lost a race (reservation may not reflect REFUNDED)
   - `ff-res-lambda-dlq-depth` (≥1 SQS msg visible in `ff-reservations-api-dlq` over 5min)
 - Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Wired via `DeadLetterConfig` so EventBridge cron failures (or any other async invoke) that exhaust lambda's retry budget land here instead of being silently dropped. Inspect with `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1`.
-- Log metric filters extract `PaymentLinkSmsErrorCount` and `PaymentLinkSmsSuccessCount` from `payment_link_sms_route_*` log lines into `FFReservations/SMS` namespace, and `ReservationHistoryWriteFailureCount` from `reservation_history_write_error` log lines into `FFReservations/History`.
+- Log metric filters extract `PaymentLinkSmsErrorCount` and `PaymentLinkSmsSuccessCount` from `payment_link_sms_route_*` log lines into `FFReservations/SMS` namespace, `ReservationHistoryWriteFailureCount` from `reservation_history_write_error` log lines into `FFReservations/History`, and `AutoRefundFailedCount` / `RefundOrphanedCount` from `auto_refund_failed` / `refund_orphaned` log lines into `FFReservations/Payments`.
 - API Gateway `$default` stage has `DetailedMetricsEnabled=true` (per-route 4xx/5xx/latency in `AWS/ApiGateway`) and default-route throttle `ThrottlingBurstLimit=200, ThrottlingRateLimit=100` (sized for ~12 RPS realistic peak with ~8x headroom — DoS / runaway-cost guardrail). No per-route overrides; if a single route ever needs a different limit, use `aws apigatewayv2 update-route` with `--route-settings`.
 - SNS SMS delivery status logging enabled at 100% sample rate. Successes go to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber`; failures to `sns/us-east-1/908027422124/DirectPublishToPhoneNumber/Failure`. Both 30-day retention.
 

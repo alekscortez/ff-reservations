@@ -1642,6 +1642,17 @@ export function createReservationsHoldsService({
             },
             at: cancelAt,
           });
+          // Emit a stable log marker so the CloudWatch metric filter
+          // ff-res-refund-orphaned can count occurrences and alarm via
+          // RefundOrphanedCount in FFReservations/Payments.
+          console.error("refund_orphaned", {
+            reservationId,
+            eventDate,
+            tableId,
+            cancelReason,
+            totalRefundedAmount,
+            refundCount: refundResults.length,
+          });
           throw httpError(
             409,
             "Refund issued at Square but reservation status changed concurrently. Manual reconciliation required."
