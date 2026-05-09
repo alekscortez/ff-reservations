@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { buildCognitoLogoutUrl } from '../config/app-config';
 import { decodeJwt, normalizeGroupsClaim, JwtClaims } from './jwt';
-import { Observable, map } from 'rxjs';
+import { Observable, distinctUntilChanged, map } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -25,7 +25,14 @@ export class AuthService {
   /** Cognito groups (parsed defensively — array or JSON-string array) */
   groups$(): Observable<string[]> {
     return this.idTokenClaims$().pipe(
-      map(claims => normalizeGroupsClaim(claims?.['cognito:groups']))
+      map(claims => normalizeGroupsClaim(claims?.['cognito:groups'])),
+      // Silent renew re-emits the same group list every ~14 min. Without
+      // distinctUntilChanged, every consumer (topbar context loader,
+      // sidebar role gate, etc.) re-fires its side effects on every
+      // renew — duplicate API calls and visible flicker.
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every((g, i) => g === b[i])
+      )
     );
   }
 
