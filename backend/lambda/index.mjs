@@ -47,6 +47,8 @@ import { handleSettingsRoute } from "./lib/routes-settings.mjs";
 import { handleUsersRoute } from "./lib/routes-users.mjs";
 import { handleAdminRoute } from "./lib/routes-admin.mjs";
 import { handleCustomerAuthRoute } from "./lib/routes-customer-auth.mjs";
+import { handleMeRoute } from "./lib/routes-me.mjs";
+import { createMeService } from "./lib/services-me.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -198,6 +200,20 @@ function requireStaffOrAdmin(event) {
   }
 }
 
+// Returns the authenticated user's Cognito sub, or throws 401 if the
+// token is missing/invalid. Called by /me/* routes to identify the
+// customer; the route then enforces resource ownership against this
+// sub. Defense in depth — API Gateway's customer-only authorizer is
+// the first line, this is the second.
+function requireCustomerOwnership(event) {
+  const claims = event?.requestContext?.authorizer?.jwt?.claims ?? {};
+  const sub = String(claims.sub ?? "").trim();
+  if (!sub) {
+    throw httpError(401, "Customer authentication required");
+  }
+  return sub;
+}
+
 // If you enabled CORS at API Gateway, you *usually* don’t need CORS headers here.
 // But having them here helps local testing / direct lambda invoke.
 function corsHeaders(event) {
@@ -288,6 +304,13 @@ const usersService = createUsersService({
     ListUsersCommand,
     AdminGetUserCommand,
   },
+});
+
+const meService = createMeService({
+  ddb,
+  cognito,
+  userPoolId: USER_POOL_ID,
+  CLIENTS_TABLE,
 });
 
 const eventsService = createEventsService({
@@ -411,6 +434,17 @@ export const handler = async (event) => {
       customerClientId: CUSTOMER_CLIENT_ID,
     });
     if (customerAuthResponse) return customerAuthResponse;
+
+    const meRouteResponse = await handleMeRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      requireCustomerOwnership,
+      getProfile: meService.getProfile,
+    });
+    if (meRouteResponse) return meRouteResponse;
 
     const adminRouteResponse = await handleAdminRoute({
       method,
