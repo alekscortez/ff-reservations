@@ -46,6 +46,7 @@ import { handleCheckInRoute } from "./lib/routes-checkin.mjs";
 import { handleSettingsRoute } from "./lib/routes-settings.mjs";
 import { handleUsersRoute } from "./lib/routes-users.mjs";
 import { handleAdminRoute } from "./lib/routes-admin.mjs";
+import { handleCustomerAuthRoute } from "./lib/routes-customer-auth.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -62,6 +63,7 @@ const RES_TABLE = process.env.RES_TABLE;
 const FREQUENT_CLIENTS_TABLE = process.env.FREQUENT_CLIENTS_TABLE;
 const CLIENTS_TABLE = process.env.CLIENTS_TABLE;
 const USER_POOL_ID = process.env.USER_POOL_ID;
+const CUSTOMER_CLIENT_ID = process.env.CUSTOMER_CLIENT_ID;
 const SQUARE_SECRET_ARN = process.env.SQUARE_SECRET_ARN;
 const SQUARE_ENV = process.env.SQUARE_ENV;
 const SQUARE_LOCATION_ID = process.env.SQUARE_LOCATION_ID;
@@ -398,6 +400,17 @@ export const handler = async (event) => {
     if (!EVENTS_TABLE) {
       return json(500, { message: "Missing env var EVENTS_TABLE" }, cors);
     }
+
+    const customerAuthResponse = await handleCustomerAuthRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      getBody,
+      customerClientId: CUSTOMER_CLIENT_ID,
+    });
+    if (customerAuthResponse) return customerAuthResponse;
 
     const adminRouteResponse = await handleAdminRoute({
       method,

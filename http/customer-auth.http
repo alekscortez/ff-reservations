@@ -1,0 +1,49 @@
+### Customer phone-OTP auth (public mediator routes)
+###
+### These routes hide the pool's synthetic-email convention from the
+### client. Mobile only ever sends/receives phone + OTP. See
+### `backend/cognito-customer-auth/README.md` for the why and the
+### deployed ARNs.
+###
+### Requires: {{baseUrl}} in http-client env. No accessToken needed.
+
+### Start sign-in / sign-up (best-effort SignUp + InitiateAuth)
+### → 200 { session, challengeName }; SMS lands on phone
+POST {{baseUrl}}/auth/customer/start
+Content-Type: application/json
+
+{
+  "phoneE164": "+15555550100",
+  "name": "Test Customer"
+}
+
+### Verify OTP — returns access/id/refresh tokens
+### → 200 { accessToken, idToken, refreshToken, expiresIn, tokenType }
+### → 401 { message, session, challengeName } if OTP wrong (retry with returned session)
+### → 401 { message } if session expired or too many attempts (restart from /start)
+POST {{baseUrl}}/auth/customer/verify
+Content-Type: application/json
+
+{
+  "phoneE164": "+15555550100",
+  "otp": "123456",
+  "session": "<paste-session-from-start>"
+}
+
+### Validation: bad phone format → 400
+POST {{baseUrl}}/auth/customer/start
+Content-Type: application/json
+
+{
+  "phoneE164": "not-a-phone"
+}
+
+### Validation: bad OTP shape → 400
+POST {{baseUrl}}/auth/customer/verify
+Content-Type: application/json
+
+{
+  "phoneE164": "+15555550100",
+  "otp": "abc",
+  "session": "anything"
+}
