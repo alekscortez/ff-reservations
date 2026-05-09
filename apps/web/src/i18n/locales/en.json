@@ -184,6 +184,54 @@
     "sectionsHeading": "By section",
     "priceRangeHint": "Tables from {{min}} to {{max}}."
   },
+  "financials": {
+    "adminEyebrow": "Admin",
+    "listTitle": "Financials",
+    "listDescription": "Collections, receivables, and event-level performance.",
+    "refresh": "Refresh",
+    "exportCsv": "Export CSV",
+    "from": "From",
+    "to": "To",
+    "eventStatus": "Event status",
+    "eventsInRange": "{{count}} event(s) in range",
+    "partialWarning": "Some events couldn't be loaded:",
+    "kpi": {
+      "collected": "Collected",
+      "expected": "Expected",
+      "outstanding": "Outstanding",
+      "overdue": "Overdue",
+      "dueSoon": "Due soon (24h)",
+      "courtesy": "Courtesy value",
+      "confirmedRatio": "{{confirmed}} confirmed / {{total}} total"
+    },
+    "eventSummary": {
+      "heading": "Event summary",
+      "eventsLabel": "events",
+      "empty": "No events in this range."
+    },
+    "receivables": {
+      "heading": "Receivables",
+      "overdue": "OVERDUE",
+      "dueSoon": "DUE SOON",
+      "more": "+ {{count}} more"
+    },
+    "methodTotals": {
+      "heading": "Payments by method (window)",
+      "cash": "Cash",
+      "square": "Square",
+      "cashapp": "Cash App",
+      "credit": "Reschedule credit"
+    },
+    "col": {
+      "eventDate": "Date",
+      "eventName": "Event",
+      "reservations": "Confirmed / Total",
+      "collected": "Collected",
+      "expected": "Expected",
+      "outstanding": "Outstanding",
+      "overdue": "Overdue"
+    }
+  },
   "adminUsers": {
     "listTitle": "Staff & Admin Users",
     "listDescription": "Manage Cognito staff/admin accounts.",

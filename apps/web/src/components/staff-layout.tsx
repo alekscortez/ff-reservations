@@ -22,6 +22,7 @@ const STAFF_NAV: NavEntry[] = [
 ];
 
 const ADMIN_NAV: NavEntry[] = [
+  { to: '/admin/financials', labelKey: 'financials.listTitle', adminOnly: true },
   { to: '/admin/users', labelKey: 'adminUsers.listTitle', adminOnly: true },
   { to: '/admin/settings', labelKey: 'settings.listTitle', adminOnly: true },
 ];

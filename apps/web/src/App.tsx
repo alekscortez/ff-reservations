@@ -31,6 +31,7 @@ import { StaffClients } from '@/features/staff/clients';
 import { AdminUsers } from '@/features/admin/users';
 import { AdminUserForm } from '@/features/admin/user-form';
 import { AdminSettings } from '@/features/admin/settings';
+import { AdminFinancials } from '@/features/admin/financials';
 
 function LazyFallback() {
   const { t } = useTranslation();
@@ -112,6 +113,7 @@ export function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/users/new" element={<AdminUserForm />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
+          <Route path="/admin/financials" element={<AdminFinancials />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

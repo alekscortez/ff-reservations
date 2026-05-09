@@ -184,6 +184,54 @@
     "sectionsHeading": "Por sección",
     "priceRangeHint": "Mesas desde {{min}} hasta {{max}}."
   },
+  "financials": {
+    "adminEyebrow": "Admin",
+    "listTitle": "Financiero",
+    "listDescription": "Cobranza, cuentas por cobrar y rendimiento por evento.",
+    "refresh": "Actualizar",
+    "exportCsv": "Exportar CSV",
+    "from": "Desde",
+    "to": "Hasta",
+    "eventStatus": "Estado del evento",
+    "eventsInRange": "{{count}} evento(s) en el rango",
+    "partialWarning": "Algunos eventos no se pudieron cargar:",
+    "kpi": {
+      "collected": "Cobrado",
+      "expected": "Esperado",
+      "outstanding": "Por cobrar",
+      "overdue": "Vencido",
+      "dueSoon": "Vence pronto (24h)",
+      "courtesy": "Cortesía",
+      "confirmedRatio": "{{confirmed}} confirmadas / {{total}} totales"
+    },
+    "eventSummary": {
+      "heading": "Resumen por evento",
+      "eventsLabel": "eventos",
+      "empty": "Sin eventos en este rango."
+    },
+    "receivables": {
+      "heading": "Cuentas por cobrar",
+      "overdue": "VENCIDO",
+      "dueSoon": "VENCE PRONTO",
+      "more": "+ {{count}} más"
+    },
+    "methodTotals": {
+      "heading": "Pagos por método (ventana)",
+      "cash": "Efectivo",
+      "square": "Square",
+      "cashapp": "Cash App",
+      "credit": "Crédito de reprogramación"
+    },
+    "col": {
+      "eventDate": "Fecha",
+      "eventName": "Evento",
+      "reservations": "Confirmadas / Total",
+      "collected": "Cobrado",
+      "expected": "Esperado",
+      "outstanding": "Por cobrar",
+      "overdue": "Vencido"
+    }
+  },
   "adminUsers": {
     "listTitle": "Personal y administradores",
     "listDescription": "Gestiona cuentas del personal/administrador en Cognito.",
