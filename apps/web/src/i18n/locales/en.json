@@ -103,6 +103,56 @@
     "empty": "No reservations for this event.",
     "tableShort": "T"
   },
+  "reservationDetail": {
+    "notFound": "Reservation not found.",
+    "field": {
+      "phone": "Phone",
+      "eventDate": "Event date",
+      "status": "Status",
+      "paymentStatus": "Payment status",
+      "tablePrice": "Table price",
+      "amountDue": "Amount due",
+      "paid": "Paid",
+      "remaining": "Remaining",
+      "paymentDeadline": "Payment deadline",
+      "package": "Package",
+      "checkedIn": "Checked in"
+    },
+    "payments": {
+      "heading": "Collect payment"
+    },
+    "paymentHistory": {
+      "heading": "Payment history"
+    },
+    "history": {
+      "heading": "Reservation history"
+    },
+    "link": {
+      "title": "Square payment link",
+      "createHint": "Generates a hosted Square checkout for {{amount}}.",
+      "regenerateHint": "An active link exists. Regenerating creates a new one and supersedes the old.",
+      "create": "Create link",
+      "regenerate": "Regenerate link",
+      "expiresAt": "Expires"
+    },
+    "cash": {
+      "heading": "Record cash / credit",
+      "remaining": "Remaining balance",
+      "amount": "Amount",
+      "receipt": "Receipt #",
+      "note": "Note",
+      "record": "Record payment"
+    },
+    "cancel": {
+      "heading": "Cancel reservation",
+      "cta": "Cancel reservation",
+      "resolution": "Resolution",
+      "resolutionHint": "REFUND issues actual Square refunds for paid Square/Cash App entries; only available when at least one provider payment exists.",
+      "reason": "Reason (required)",
+      "confirm": "Cancel reservation",
+      "confirmAgain": "Are you sure? This is irreversible."
+    }
+  },
   "packages": {
     "listTitle": "Birthday Packages",
     "listDescription": "Add-ons offered to customers booking a table.",

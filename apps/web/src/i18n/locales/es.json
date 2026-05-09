@@ -103,6 +103,56 @@
     "empty": "No hay reservaciones para este evento.",
     "tableShort": "M"
   },
+  "reservationDetail": {
+    "notFound": "Reservación no encontrada.",
+    "field": {
+      "phone": "Teléfono",
+      "eventDate": "Fecha del evento",
+      "status": "Estado",
+      "paymentStatus": "Estado de pago",
+      "tablePrice": "Precio de mesa",
+      "amountDue": "Total adeudado",
+      "paid": "Pagado",
+      "remaining": "Restante",
+      "paymentDeadline": "Fecha límite de pago",
+      "package": "Paquete",
+      "checkedIn": "Check-in"
+    },
+    "payments": {
+      "heading": "Cobrar pago"
+    },
+    "paymentHistory": {
+      "heading": "Historial de pagos"
+    },
+    "history": {
+      "heading": "Historial de la reservación"
+    },
+    "link": {
+      "title": "Link de pago Square",
+      "createHint": "Genera un checkout Square hospedado por {{amount}}.",
+      "regenerateHint": "Hay un link activo. Regenerar crea uno nuevo y reemplaza al anterior.",
+      "create": "Crear link",
+      "regenerate": "Regenerar link",
+      "expiresAt": "Vence"
+    },
+    "cash": {
+      "heading": "Registrar efectivo / crédito",
+      "remaining": "Saldo pendiente",
+      "amount": "Monto",
+      "receipt": "Recibo #",
+      "note": "Nota",
+      "record": "Registrar pago"
+    },
+    "cancel": {
+      "heading": "Cancelar reservación",
+      "cta": "Cancelar reservación",
+      "resolution": "Resolución",
+      "resolutionHint": "REFUND reembolsa los cargos Square/Cash App pagados; solo disponible cuando exista al menos un pago de proveedor.",
+      "reason": "Motivo (obligatorio)",
+      "confirm": "Cancelar reservación",
+      "confirmAgain": "¿Estás seguro? Esta acción no se puede deshacer."
+    }
+  },
   "packages": {
     "listTitle": "Paquetes de cumpleaños",
     "listDescription": "Complementos disponibles al reservar una mesa.",

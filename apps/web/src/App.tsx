@@ -10,6 +10,7 @@ import { EventForm } from '@/features/staff/event-form';
 import { StaffFrequentClients } from '@/features/staff/frequent-clients';
 import { FrequentClientForm } from '@/features/staff/frequent-client-form';
 import { StaffReservations } from '@/features/staff/reservations';
+import { ReservationDetail } from '@/features/staff/reservation-detail';
 import { StaffPackages } from '@/features/staff/packages';
 import { PackageForm } from '@/features/staff/package-form';
 import { StaffHolds } from '@/features/staff/holds';
@@ -86,6 +87,14 @@ export function App() {
           element={
             <RequireStaffOrAdmin>
               <StaffReservations />
+            </RequireStaffOrAdmin>
+          }
+        />
+        <Route
+          path="/staff/reservations/:eventDate/:reservationId"
+          element={
+            <RequireStaffOrAdmin>
+              <ReservationDetail />
             </RequireStaffOrAdmin>
           }
         />

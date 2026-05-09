@@ -104,8 +104,11 @@ export function StaffReservations() {
               {reservations.map((r) => {
                 const paymentStatus = r.paymentStatus ?? 'PENDING';
                 return (
-                  <li key={r.reservationId} className="rounded-lg border border-border bg-background p-4">
-                    <div className="flex items-baseline justify-between gap-4">
+                  <li key={r.reservationId} className="rounded-lg border border-border bg-background p-0">
+                    <Link
+                      to={`/staff/reservations/${r.eventDate}/${r.reservationId}`}
+                      className="flex items-baseline justify-between gap-4 p-4 transition hover:bg-muted/30"
+                    >
                       <div>
                         <h2 className={`font-semibold ${STATUS_CLASS[r.status]}`}>
                           {r.customerName}
@@ -125,7 +128,7 @@ export function StaffReservations() {
                           {moneyFormatter.format(r.amountDue ?? r.depositAmount)}
                         </p>
                       </div>
-                    </div>
+                    </Link>
                   </li>
                 );
               })}
