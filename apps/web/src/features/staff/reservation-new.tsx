@@ -145,6 +145,10 @@ export function ReservationNew() {
 
   const [eventDate, setEventDate] = useState<string>('');
   const [hold, setHold] = useState<Hold | null>(null);
+  // Track whether we own the hold or are merely viewing one created elsewhere
+  // (e.g. surfaced via listLocks during a session restore). Only release-prompt
+  // on our own holds — Angular parity.
+  const [holdCreatedByMe, setHoldCreatedByMe] = useState(false);
   // Two-step hold pattern: clicking a table sets selectedTableId; the actual
   // POST /holds fires from the bottom CTA bar's "Hold & Reserve" button. Match
   // Angular's deliberate confirm step instead of the React port's instant hold.
@@ -474,6 +478,7 @@ export function ReservationNew() {
       {
         onSuccess: (created) => {
           setHold(created);
+          setHoldCreatedByMe(true);
           setSelectedTableId(null);
         },
       }
@@ -498,6 +503,13 @@ export function ReservationNew() {
 
   function handleReleaseHold() {
     if (!hold) return;
+    // Only prompt for release if WE created the hold. A foreign hold (e.g.
+    // surfaced via listLocks restoration) just closes the modal — it isn't
+    // ours to release.
+    if (!holdCreatedByMe) {
+      setHold(null);
+      return;
+    }
     setReleaseIntent({ kind: 'release' });
   }
 
@@ -510,6 +522,7 @@ export function ReservationNew() {
     releaseHold.mutate(hold.tableId, {
       onSuccess: () => {
         setHold(null);
+        setHoldCreatedByMe(false);
         if (intent.kind === 'switchEvent') setEventDate(intent.nextEventDate);
       },
     });
@@ -544,6 +557,8 @@ export function ReservationNew() {
         return;
       }
       setHold(data.hold as Hold);
+      // Restored hold is from a prior session of this same user → still ours.
+      setHoldCreatedByMe(true);
       setEventDate(data.eventDate);
       if (data.form) reset(data.form as CustomerForm);
       setAllowCustomDeposit(Boolean(data.allowCustomDeposit));
@@ -576,6 +591,7 @@ export function ReservationNew() {
     );
     if (!stillThere) {
       setHold(null);
+      setHoldCreatedByMe(false);
       setHoldValidationError(t('reservationNew.holdValidation.lost'));
       try {
         window.localStorage.removeItem(HOLD_STORAGE_KEY);
@@ -734,6 +750,7 @@ export function ReservationNew() {
     if (!hold || !expired) return;
     const id = setTimeout(() => {
       setHold(null);
+      setHoldCreatedByMe(false);
       try {
         window.localStorage.removeItem(HOLD_STORAGE_KEY);
       } catch {
@@ -923,6 +940,7 @@ export function ReservationNew() {
       setCreatedReservation(created);
     }
     setHold(null);
+    setHoldCreatedByMe(false);
   }, onInvalidSubmit);
 
   const submitError =
