@@ -131,9 +131,14 @@ export function ReservationNew() {
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : 10;
   })();
+  // Hoisted forward-ref so the polling decision can pause when the form
+  // modal is open. The actual modal-open state is computed further below
+  // (depends on `heldTable` which itself depends on `tablesData`); we wire
+  // it through a state ref so the hook call stays at the top.
+  const [pollingPaused, setPollingPaused] = useState(false);
   const { data: tablesData, isLoading: tablesLoading } = useTablesForEvent(
     eventDate || null,
-    { pollingSeconds: tablePollingSeconds }
+    { pollingSeconds: pollingPaused ? null : tablePollingSeconds }
   );
   const { data: packages } = usePackagesList();
   const createHold = useCreateHold();
@@ -560,6 +565,28 @@ export function ReservationNew() {
   useBodyScrollLock(formModalOpen);
   useBodyScrollLock(pastModalOpen);
   useBodyScrollLock(Boolean(releaseIntent));
+  // Pause the tables refetchInterval while the booking modal is open so the
+  // SVG floor plan doesn't reshuffle out from under the staff mid-form.
+  useEffect(() => {
+    setPollingPaused(formModalOpen);
+  }, [formModalOpen]);
+
+  // Auto-clear the hold (and persisted session) when the timer reaches zero.
+  // The modal already shows the EXPIRED banner via `expired`; this just
+  // transitions the user back to the table picker after a short grace so they
+  // can read it before the modal disappears.
+  useEffect(() => {
+    if (!hold || !expired) return;
+    const id = setTimeout(() => {
+      setHold(null);
+      try {
+        window.localStorage.removeItem(HOLD_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    }, 4000);
+    return () => clearTimeout(id);
+  }, [hold, expired]);
 
   // Mobile keyboard inset: keep the sticky CTA above the on-screen keyboard.
   // visualViewport.height shrinks while the keyboard is up; the diff is the
