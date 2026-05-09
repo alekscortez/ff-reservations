@@ -3,26 +3,28 @@
 Nightclub reservations platform with role-aware staff/admin web app, serverless API, payment links, SMS notifications, check-in passes, and public live table map.
 
 ## Stack
-- Web app: Vite + React 19 + TypeScript + Tailwind 3 + shadcn/ui + react-oidc-context + react-i18next (EN+ES) (`apps/web`)
-- Mobile app (customer-facing, in development): Expo + React Native + expo-router + NativeWind + react-native-reusables (`apps/mobile`)
-- Shared library: typed models + phone normalization (`packages/core`); runtime config helpers (`packages/config`)
-- Backend: AWS Lambda Node.js 22 (ESM) (`backend/lambda`)
+- Web app: Vite 8 + React 19.2 + TypeScript 5.9 + Tailwind 4 (CSS-first `@theme`, no config file) + shadcn/ui + react-oidc-context + Zod 4 + react-i18next 17 (EN+ES) (`apps/web`)
+- Mobile app (customer-facing, in development): Expo SDK 55 + React Native 0.83 + expo-router + NativeWind 4 (Tailwind 3 LTS — NativeWind v5 / Tailwind 4 still pre-release) + react-native-reusables (`apps/mobile`)
+- Shared library: typed models + phone normalization + design tokens (`packages/core`); runtime config helpers (`packages/config`)
+- Backend: AWS Lambda Node.js 22 (ESM) (`backend/lambda` for the API; `backend/cognito-pre-token-gen` and `backend/cognito-customer-auth` for the user-pool triggers)
 - API: API Gateway HTTP API (`$default` stage)
 - Data: DynamoDB
-- Auth: Cognito Hosted UI for staff/admin; Cognito Custom Auth phone OTP for customers (Phase 3)
+- Auth: Cognito Hosted UI for staff/admin; Cognito Custom Auth phone OTP for customers (deployed — mobile consumes `/auth/customer/{start,verify}` + `/me/*`)
 - Hosting: Amplify (web); EAS Build (mobile)
-- Payments: Square payment links (web) + Square In-App Payments SDK (mobile)
+- Payments: Square payment links (web) + Square In-App Payments SDK (mobile, planned)
 - Messaging: Amazon SNS (SMS)
 
 ## Current AWS context
 - API base URL: `https://api.famosofuego.com` (custom domain mapped to API Gateway HTTP API `oxk1adhl3a`)
 - Cognito user pool: `us-east-1_Upsi9Q2Tc`
-- Cognito app client: `1kdkvis45qo915plp7lvj03u16`
+- App clients: staff/admin `1kdkvis45qo915plp7lvj03u16` (Hosted UI + code/PKCE), customer `21n3rd1sp4o9ka4l7tld45f0ka` (`ALLOW_CUSTOM_AUTH`, no client secret).
+- API Gateway authorizers: `5ea6tk` (staff audience) on staff/admin routes; `lngm05` (customer audience) on `/me/*`. Customer tokens 401 against staff routes; staff tokens 401 against `/me/*`.
 - Amplify URL: `https://main.d1gxn3rvy5gfn4.amplifyapp.com`
 - Pre Token Generation v2 Lambda `ff-reservations-pretoken` is wired on the user pool — required for `cognito:groups` to land in the access token (source under `backend/cognito-pre-token-gen/`).
+- Customer custom-auth Lambda `ff-reservations-customer-auth` handles four user-pool triggers (PreSignUp / DefineAuthChallenge / CreateAuthChallenge / VerifyAuthChallengeResponse) for the customer App Client phone-OTP flow. Source under `backend/cognito-customer-auth/`.
 - EventBridge rule `ff-reservations-overdue-release` fires `rate(1 minute)` and triggers `runScheduledMaintenance` in the lambda.
 - Lambda async-invocation DLQ: SQS `ff-reservations-api-dlq` (14-day retention). Failed scheduled invocations land here; `ff-res-lambda-dlq-depth` alarm pages on ≥1 visible message in 5min.
-- API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides).
+- API Gateway `$default` stage throttle: 200 burst / 100 RPS (default-route, no per-route overrides). WAF v2 rate-based rule on `/auth/customer/*` is still pending.
 - CloudWatch alarms publish to SNS `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration p95 / errors / throttles / SMS-route errors / reservation-history write failures / lambda DLQ depth.
 
 For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE.md).
@@ -51,18 +53,19 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 ## Repository layout
 - `apps/web/` — Vite + React staff/admin web app
 - `apps/mobile/` — Expo + React Native customer mobile app
-- `packages/core/` — shared types, models, phone normalization
+- `packages/core/` — shared types, models, phone normalization, design tokens (consumed by both web `@theme` and mobile Tailwind config)
 - `packages/config/` — runtime config helpers
 - `backend/lambda/` — Lambda handler and service modules (deployed independently)
-- `backend/cognito-pre-token-gen/` — Cognito Pre Token Generation v2 trigger
+- `backend/cognito-pre-token-gen/` — Cognito Pre Token Generation v2 trigger (injects `cognito:groups` into access tokens)
+- `backend/cognito-customer-auth/` — Cognito custom-auth Lambda for the customer App Client phone-OTP flow (4 trigger handlers in one function, routed by `event.triggerSource`)
 - `http/` — HTTP client requests for smoke/debug testing
 - `apps/web/public/maps/FF_Reservations_Map.normalized.svg` — live table map asset
 
 ## Local development
 
 ### Prerequisites
-- Node.js 20+
-- pnpm 9+ (`npm install -g pnpm`)
+- Node.js 22+ (root `package.json` engines pin)
+- pnpm 11+ via Corepack (`corepack enable`); root `package.json` declares `packageManager: pnpm@11.0.9`
 - AWS CLI configured for deployment/testing
 - Xcode + iOS Simulator (for mobile development on macOS)
 - Android Studio + Android Emulator (for mobile development)
@@ -117,6 +120,7 @@ Main expected keys:
 - `CHECKIN_PASSES_TABLE`
 - `SETTINGS_TABLE`
 - `USER_POOL_ID`
+- `CUSTOMER_CLIENT_ID` (gates `/auth/customer/{start,verify}`; routes no-op if unset)
 - `SQUARE_SECRET_ARN`
 - `SQUARE_ENV`
 - `SQUARE_LOCATION_ID`
@@ -133,10 +137,12 @@ Main expected keys:
 - `SQUARE_CURRENCY`
 
 ## Required IAM highlights (Lambda role)
-- DynamoDB read/write/query/update/txn on all project tables + indexes.
-- `cognito-idp:AdminGetUser` on user pool.
+- DynamoDB read/write/query/update/txn on all project tables + indexes (including the new `ff-reservations.byCustomerSub` GSI used by `/me/reservations`).
+- Cognito on user pool: `AdminGetUser` (existing) + `AdminCreateUser` / `AdminAddUserToGroup` / `AdminEnableUser` / `AdminDisableUser` / `AdminListGroupsForUser` / `AdminResetUserPassword` / `ListUsers` (existing). Phase 3 added inline policies `customer-auth-cognito-public-api` (`SignUp` / `InitiateAuth` / `RespondToAuthChallenge` for `/auth/customer/*`) and `me-routes-cognito-admin` (`AdminDeleteUser` for `DELETE /me`).
 - `secretsmanager:GetSecretValue` on Square secret ARN.
 - `sns:Publish` for SMS sends.
+
+The customer custom-auth Lambda runs on its own role `ff-reservations-customer-auth-role` (basic execution + `sns:Publish`).
 
 ## HTTP smoke/debug requests
 Use files in `/http`:
@@ -151,6 +157,9 @@ Use files in `/http`:
 - `square-webhook.http`
 - `smoke-debug.http`
 - `public-availability.http`
+- `admin.http` (`/admin/whoami` for the staff `AuthHealthBanner`)
+- `customer-auth.http` (`POST /auth/customer/{start,verify}` mediator routes — public, no auth)
+- `me.http` (`GET /me/profile`, `GET /me/reservations`, `DELETE /me` — customer access token via `customerAccessToken` env var)
 
 Environment variables for `.http` runs should be kept local (not committed), for example:
 - `/http-client/http-client.private.env.json`
@@ -175,9 +184,9 @@ Environment variables for `.http` runs should be kept local (not committed), for
 
 ## Build and test
 ```bash
-npm run build
-npm run test
-npx tsc -p tsconfig.app.json --noEmit
+pnpm build       # builds packages/* then apps/web
+pnpm test        # vitest across all workspaces
+pnpm typecheck   # tsc --noEmit across all workspaces
 ```
 
 ## Notes for contributors

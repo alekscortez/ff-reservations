@@ -31,26 +31,52 @@ FUNCTION_NAME=ff-reservations-api AWS_REGION=us-east-1 \
 
 ## Adding a new route
 
-API Gateway uses **explicit per-route definitions** — no `$default` proxy. Adding a route is two steps:
+API Gateway uses **explicit per-route definitions** — no `$default` proxy. Adding a route is three steps:
 
 1. Implement the handler in the relevant `lib/routes-*.mjs`, wire it through `index.mjs`'s router.
-2. Register the route in API Gateway:
+2. Register the route in API Gateway. Pick the authorizer that matches the audience:
    ```bash
+   # Staff/admin routes — JWT authorizer 5ea6tk (audience = staff App Client)
    aws apigatewayv2 create-route --api-id oxk1adhl3a \
      --route-key "GET /your/new/route" \
      --target "integrations/0bj43cm" \
      --authorization-type JWT --authorizer-id 5ea6tk \
      --region us-east-1
+
+   # Customer /me/* routes — JWT authorizer lngm05 (audience = customer App Client)
+   aws apigatewayv2 create-route --api-id oxk1adhl3a \
+     --route-key "GET /me/your-thing" \
+     --target "integrations/0bj43cm" \
+     --authorization-type JWT --authorizer-id lngm05 \
+     --region us-east-1
+
+   # Public routes — no authorizer
+   aws apigatewayv2 create-route --api-id oxk1adhl3a \
+     --route-key "POST /public/your-thing" \
+     --target "integrations/0bj43cm" \
+     --authorization-type NONE \
+     --region us-east-1
    ```
-   For public routes, omit `--authorization-type` / `--authorizer-id` (defaults to `NONE`).
+3. Add a Lambda invoke permission scoped to the route's source-arn. The function's resource policy enumerates routes per-statement; without this step the route returns `500 Internal Server Error` from API Gateway:
+   ```bash
+   aws lambda add-permission \
+     --function-name ff-reservations-api \
+     --statement-id apigw-your-thing \
+     --action lambda:InvokeFunction \
+     --principal apigateway.amazonaws.com \
+     --source-arn "arn:aws:execute-api:us-east-1:908027422124:oxk1adhl3a/*/*/your/new/route" \
+     --region us-east-1
+   ```
 
 ## Operational dependencies (not in this folder)
 
-- **Cognito Pre Token Generation v2 Lambda** (`backend/cognito-pre-token-gen/`) injects `cognito:groups` into the access token. Without it, every authenticated request returns 403.
+- **Cognito Pre Token Generation v2 Lambda** (`backend/cognito-pre-token-gen/`) injects `cognito:groups` into the access token for staff/admin users. Without it, every authenticated staff request returns 403.
+- **Cognito custom-auth Lambda** (`backend/cognito-customer-auth/`) is wired to four user-pool triggers (PreSignUp / DefineAuthChallenge / CreateAuthChallenge / VerifyAuthChallengeResponse) and powers the customer App Client phone-OTP flow. The `/auth/customer/{start,verify}` routes in this lambda call `cognito-idp:SignUp / InitiateAuth / RespondToAuthChallenge` (granted via inline policy `customer-auth-cognito-public-api`); the `DELETE /me` route calls `cognito-idp:AdminDeleteUser` (inline policy `me-routes-cognito-admin`).
+- **`ff-reservations.byCustomerSub` GSI** (sparse: `customerCognitoSub HASH, eventDate RANGE`, projection ALL) is read by `GET /me/reservations`. Only items with `customerCognitoSub` set appear, so legacy reservations and history rows are naturally excluded.
 - **EventBridge rule `ff-reservations-overdue-release`** fires `rate(1 minute)` and invokes this lambda with `event.source = "aws.events"`. The handler dispatches to `runScheduledMaintenance` → `releaseOverdueReservationsForAllActiveEvents`. Disabling the rule means overdue reservations only get cleaned up when a staff member loads `/reservations` or hits a payment route for that event.
 - **Square secret** stored in Secrets Manager at `ff/square/production-QaNJNJ` — JSON with `SQUARE_ACCESS_TOKEN` and `SQUARE_WEBHOOK_SIGNATURE_KEY`. Lambda role needs `secretsmanager:GetSecretValue` on this ARN.
 - **Dead-letter queue `ff-reservations-api-dlq`** (SQS, 14-day retention) catches failed async invocations (mostly the EventBridge cron) via `DeadLetterConfig`. Lambda role's inline `DeadLetterQueueAccess` policy grants `sqs:SendMessage` on the queue ARN only. Alarm `ff-res-lambda-dlq-depth` fires on ≥1 visible message in 5min. Inspect with `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1`.
-- **API Gateway stage throttle** on the `$default` stage: 200 burst / 100 RPS default-route. Per-route overrides via `aws apigatewayv2 update-route --route-settings`.
+- **API Gateway stage throttle** on the `$default` stage: 200 burst / 100 RPS default-route. Per-route overrides via `aws apigatewayv2 update-route --route-settings`. WAF v2 rate-based rule on `/auth/customer/*` is still pending.
 
 ## Verifying a deploy
 
@@ -73,3 +99,4 @@ aws logs tail /aws/lambda/ff-reservations-api --follow --filter-pattern "schedul
 
 - `/CLAUDE.md` — full architecture, conventions, auth model, env vars.
 - `/backend/cognito-pre-token-gen/README.md` — Pre Token Gen Lambda deploy steps.
+- `/backend/cognito-customer-auth/README.md` — customer custom-auth Lambda deploy steps + the synthetic-email pool constraint.
