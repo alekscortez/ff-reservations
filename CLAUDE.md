@@ -171,6 +171,8 @@ Mobile app reads from Expo `app.json` extras + `expo-constants` at runtime (Phas
 - Toll-free `+18557656160` is registered but `Status: PENDING` carrier approval. Once approved, SNS will auto-pick it as origination identity (resource policy already correct). Until then, SNS uses shared shortcodes.
 - SNS-side `MonthlySpendLimit` is $20; AWS End User Messaging cap is $50 (the max AWS authorized). Aligning these is a deferred audit item.
 - IaC baseline (CDK/SAM/Terraform) for everything above.
+- **Phase 3 customer auth — Lambda source committed but NOT yet deployed.** `backend/cognito-customer-auth/` is a single Lambda routed by `event.triggerSource` for the four Cognito phone-OTP triggers (PreSignUp / DefineAuthChallenge / CreateAuthChallenge / VerifyAuthChallengeResponse) plus the customer App Client. Deploy steps + AWS-CLI test recipe live in `backend/cognito-customer-auth/README.md`. Until deployed, the customer App Client + `/me/*` routes can't be exercised.
+- `/me/*` route handlers, CRM merge-by-phone service, `requireCustomerOwnership` helper, `DELETE /me` — not yet written; depend on the customer auth Lambda being deployed first so we can integration-test against real customer access tokens.
 
 ## Where to look first
 

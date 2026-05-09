@@ -1,0 +1,10 @@
+{
+  "name": "ff-reservations-customer-auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-sns": "^3.731.0"
+  }
+}
