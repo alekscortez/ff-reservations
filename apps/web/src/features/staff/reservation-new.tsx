@@ -48,6 +48,21 @@ function nextDayDateString(): string {
 
 const DEFAULT_DEADLINE_TZ = 'America/Chicago';
 const HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
+const FILTERS_STORAGE_KEY = 'ff_new_res_filters_v1';
+
+interface TableFilters {
+  search: string;
+  showAvailable: boolean;
+  showUnavailable: boolean;
+  sections: string[]; // empty = all
+}
+
+const DEFAULT_FILTERS: TableFilters = {
+  search: '',
+  showAvailable: true,
+  showUnavailable: true,
+  sections: [],
+};
 
 interface PersistedHoldSession {
   hold: Hold;
@@ -133,6 +148,51 @@ export function ReservationNew() {
   );
 
   const tablesArray = tablesData?.tables ?? [];
+
+  const [tableView, setTableView] = useState<'map' | 'list'>('map');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<TableFilters>(() => {
+    try {
+      const raw =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem(FILTERS_STORAGE_KEY)
+          : null;
+      if (!raw) return DEFAULT_FILTERS;
+      const parsed = JSON.parse(raw) as Partial<TableFilters>;
+      return {
+        ...DEFAULT_FILTERS,
+        ...parsed,
+        sections: Array.isArray(parsed.sections) ? parsed.sections : [],
+      };
+    } catch {
+      return DEFAULT_FILTERS;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    } catch {
+      /* ignore */
+    }
+  }, [filters]);
+  const filtersActive =
+    filters.search.trim().length > 0 ||
+    !filters.showAvailable ||
+    !filters.showUnavailable ||
+    filters.sections.length > 0;
+  const filteredTables = useMemo(() => {
+    const q = filters.search.trim().toUpperCase();
+    return tablesArray.filter((tb) => {
+      const isAvail = tb.status === 'AVAILABLE';
+      if (isAvail && !filters.showAvailable) return false;
+      if (!isAvail && !filters.showUnavailable) return false;
+      if (filters.sections.length > 0 && !filters.sections.includes(tb.section)) {
+        return false;
+      }
+      if (q && !tb.id.toUpperCase().includes(q)) return false;
+      return true;
+    });
+  }, [tablesArray, filters]);
   const sectionStats = useMemo(() => {
     const map = new Map<string, { total: number; available: number }>();
     for (const tb of tablesArray) {
@@ -602,29 +662,167 @@ export function ReservationNew() {
 
         {eventDate ? (
           <section className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-sm font-semibold text-brand-900">
                 {t('reservationNew.pickTable')}
               </h2>
-              {sectionStats.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  {sectionStats
-                    .map(([s, c]) => `${s}: ${c.available}/${c.total}`)
-                    .join(' · ')}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {sectionStats.length > 0 && (
+                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                    {sectionStats
+                      .map(([s, c]) => `${s}: ${c.available}/${c.total}`)
+                      .join(' · ')}
+                  </span>
+                )}
+                <div
+                  role="tablist"
+                  aria-label={t('reservationNew.view.label')}
+                  className="inline-flex rounded-md border border-border bg-background p-0.5 text-xs"
+                >
+                  {(['map', 'list'] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      role="tab"
+                      aria-selected={tableView === v}
+                      onClick={() => setTableView(v)}
+                      className={`rounded px-3 py-1 font-medium transition ${
+                        tableView === v
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-brand-900 hover:bg-muted'
+                      }`}
+                    >
+                      {t(`reservationNew.view.${v}`)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  className={`relative rounded-md border px-3 py-1 text-xs font-medium ${
+                    filtersActive
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-background text-brand-900 hover:bg-muted'
+                  }`}
+                >
+                  {t('reservationNew.filters.button')}
+                  {filtersActive && (
+                    <span className="absolute -right-1 -top-1 inline-flex h-2 w-2 rounded-full bg-primary" />
+                  )}
+                </button>
+              </div>
             </div>
+            {filtersOpen && (
+              <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 text-xs">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-brand-700">
+                      {t('reservationNew.filters.search')}
+                    </span>
+                    <input
+                      type="search"
+                      value={filters.search}
+                      onChange={(e) =>
+                        setFilters((f) => ({ ...f, search: e.target.value }))
+                      }
+                      placeholder="A04, B12…"
+                      className="rounded-md border border-border bg-background px-2 py-1 text-sm uppercase"
+                    />
+                  </label>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-brand-700">
+                      {t('reservationNew.filters.status')}
+                    </span>
+                    <div className="flex gap-3">
+                      <label className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={filters.showAvailable}
+                          onChange={(e) =>
+                            setFilters((f) => ({ ...f, showAvailable: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-border"
+                        />
+                        {t('reservationNew.filters.available')}
+                      </label>
+                      <label className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={filters.showUnavailable}
+                          onChange={(e) =>
+                            setFilters((f) => ({
+                              ...f,
+                              showUnavailable: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-border"
+                        />
+                        {t('reservationNew.filters.unavailable')}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-col gap-1">
+                  <span className="text-brand-700">
+                    {t('reservationNew.filters.sections')}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {(['A', 'B', 'C', 'D', 'E'] as const).map((s) => {
+                      const on = filters.sections.includes(s);
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() =>
+                            setFilters((f) => ({
+                              ...f,
+                              sections: on
+                                ? f.sections.filter((x) => x !== s)
+                                : [...f.sections, s],
+                            }))
+                          }
+                          className={`rounded-md border px-2 py-0.5 text-xs ${
+                            on
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border bg-background text-brand-900 hover:bg-muted'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {filtersActive && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setFilters(DEFAULT_FILTERS)}
+                      className="text-xs text-muted-foreground hover:text-brand-900"
+                    >
+                      {t('reservationNew.filters.reset')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {holdError && <p className="mt-2 text-xs text-destructive">{holdError}</p>}
             {tablesLoading ? (
               <p className="mt-3 text-muted-foreground">{t('common.loading')}</p>
             ) : tablesArray.length === 0 ? (
               <p className="mt-3 text-muted-foreground">{t('events.empty')}</p>
-            ) : (
+            ) : tableView === 'map' ? (
               <TableMap
                 tables={tablesArray}
                 interactive={!createHold.isPending}
                 onSelect={handleHold}
                 className="mt-3"
+              />
+            ) : (
+              <TableListView
+                tables={filteredTables}
+                disabled={createHold.isPending}
+                onSelect={handleHold}
               />
             )}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
@@ -1232,6 +1430,97 @@ export function ReservationNew() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const SECTION_COLORS: Record<string, string> = {
+  A: '#ec008c',
+  B: '#2e3192',
+  C: '#00aeef',
+  D: '#f7941d',
+  E: '#711411',
+};
+
+function TableListView({
+  tables,
+  disabled,
+  onSelect,
+}: {
+  tables: TableForEvent[];
+  disabled: boolean;
+  onSelect: (t: TableForEvent) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const moneyFormatter = new Intl.NumberFormat(i18n.language, {
+    style: 'currency',
+    currency: 'USD',
+  });
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, TableForEvent[]>();
+    for (const tb of tables) {
+      const arr = map.get(tb.section) ?? [];
+      arr.push(tb);
+      map.set(tb.section, arr);
+    }
+    for (const [, arr] of map) {
+      arr.sort((a, b) => a.id.localeCompare(b.id));
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [tables]);
+
+  if (tables.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-muted-foreground">
+        {t('reservationNew.list.empty')}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-3">
+      {grouped.map(([section, arr]) => (
+        <div key={section}>
+          <p
+            className="mb-1 text-xs font-semibold uppercase tracking-wide"
+            style={{ color: SECTION_COLORS[section] ?? '#374151' }}
+          >
+            {t('reservationNew.section', { section })}
+          </p>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {arr.map((tb) => {
+              const avail = tb.status === 'AVAILABLE';
+              return (
+                <li key={tb.id}>
+                  <button
+                    type="button"
+                    disabled={!avail || disabled}
+                    onClick={() => avail && onSelect(tb)}
+                    className={`flex w-full items-baseline justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
+                      avail
+                        ? 'border-border bg-background hover:border-primary'
+                        : 'cursor-not-allowed border-border bg-muted/40 opacity-60'
+                    }`}
+                    style={
+                      avail
+                        ? { borderLeft: `4px solid ${SECTION_COLORS[section] ?? '#9ca3af'}` }
+                        : undefined
+                    }
+                  >
+                    <span className="font-mono font-semibold text-brand-900">
+                      {tb.id}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {avail ? moneyFormatter.format(tb.price) : tb.status}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

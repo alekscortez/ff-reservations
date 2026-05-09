@@ -357,6 +357,23 @@
     },
     "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación",
+    "view": {
+      "label": "Vista de mesas",
+      "map": "Mapa",
+      "list": "Lista"
+    },
+    "list": {
+      "empty": "Ninguna mesa coincide con los filtros."
+    },
+    "filters": {
+      "button": "Filtros",
+      "search": "ID de mesa",
+      "status": "Estado",
+      "available": "Disponible",
+      "unavailable": "No disponible",
+      "sections": "Secciones",
+      "reset": "Limpiar filtros"
+    },
     "pastEvents": {
       "button": "Eventos pasados ({{count}})",
       "title": "Eventos pasados",

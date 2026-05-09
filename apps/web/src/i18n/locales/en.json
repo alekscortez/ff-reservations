@@ -357,6 +357,23 @@
     },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation",
+    "view": {
+      "label": "Table view",
+      "map": "Map",
+      "list": "List"
+    },
+    "list": {
+      "empty": "No tables match your filters."
+    },
+    "filters": {
+      "button": "Filters",
+      "search": "Table ID",
+      "status": "Status",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "sections": "Sections",
+      "reset": "Clear filters"
+    },
     "pastEvents": {
       "button": "Past events ({{count}})",
       "title": "Past events",
