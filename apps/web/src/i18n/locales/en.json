@@ -408,6 +408,14 @@
     "phoneValidation": {
       "invalid": "Phone must be a valid US or MX number."
     },
+    "formError": {
+      "customerName": "Customer name is required.",
+      "phone": "Phone is required.",
+      "amountDue": "Total amount due must be 0 or greater.",
+      "depositAmount": "Deposit amount must be 0 or greater.",
+      "paymentMethod": "Payment method is required.",
+      "review": "Please review the reservation details."
+    },
     "pastEvents": {
       "button": "Past events ({{count}})",
       "title": "Past events",

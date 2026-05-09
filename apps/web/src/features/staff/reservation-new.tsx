@@ -267,11 +267,12 @@ export function ReservationNew() {
       /* ignore */
     }
   }, [filters]);
-  const filtersActive =
-    filters.search.trim().length > 0 ||
-    !filters.showAvailable ||
-    !filters.showUnavailable ||
-    filters.sections.length > 0;
+  const activeFiltersCount =
+    (filters.search.trim().length > 0 ? 1 : 0) +
+    (!filters.showAvailable ? 1 : 0) +
+    (!filters.showUnavailable ? 1 : 0) +
+    (filters.sections.length > 0 ? 1 : 0);
+  const filtersActive = activeFiltersCount > 0;
   const filteredTables = useMemo(() => {
     const q = filters.search.trim().toUpperCase();
     return tablesArray.filter((tb) => {
@@ -320,7 +321,7 @@ export function ReservationNew() {
   const [allowCustomDeposit, setAllowCustomDeposit] = useState(false);
   const [paymentDeadlineEnabled, setPaymentDeadlineEnabled] = useState(false);
 
-  const { register, handleSubmit, watch, setValue, reset, getValues, formState } = useForm<CustomerForm>({
+  const { register, handleSubmit, watch, setValue, reset, getValues } = useForm<CustomerForm>({
     defaultValues: {
       customerName: '',
       phone: '',
@@ -582,10 +583,53 @@ export function ReservationNew() {
     return () => clearTimeout(id);
   }, [watchedPhone]);
   const crmSearch = useCrmSearch(debouncedPhone);
-  const crmMatches = crmSearch.data ?? [];
-  const showCrmPanel =
-    debouncedPhone.replace(/\D/g, '').length >= 3 && !createdReservation;
-  const noCrmMatch = showCrmPanel && !crmSearch.isLoading && crmMatches.length === 0;
+  const crmMatchesRaw = crmSearch.data ?? [];
+  const enteredDigits = debouncedPhone.replace(/\D/g, '');
+  const showCrmPanel = enteredDigits.length >= 3 && !createdReservation;
+  // Match Angular: only show "no match" once the user has typed a full 10-digit
+  // number — earlier than that, "no match" feels punitive.
+  const noCrmMatch =
+    showCrmPanel &&
+    !crmSearch.isLoading &&
+    crmMatchesRaw.length === 0 &&
+    enteredDigits.length >= 10;
+  // Auto-fill on exact phone match at 10+ digits. Once we recognize the
+  // customer, hide the dropdown so the form looks clean.
+  const [exactMatchPhone, setExactMatchPhone] = useState<string | null>(null);
+  useEffect(() => {
+    if (enteredDigits.length < 10 || crmMatchesRaw.length === 0) {
+      setExactMatchPhone(null);
+      return;
+    }
+    const exact = crmMatchesRaw.find((m) => {
+      const stored = String(m.phone ?? '').replace(/\D/g, '');
+      if (!stored) return false;
+      if (stored === enteredDigits) return true;
+      if (enteredDigits.length === 10) {
+        return (
+          stored === `1${enteredDigits}` ||
+          stored === `52${enteredDigits}` ||
+          stored === `521${enteredDigits}`
+        );
+      }
+      return false;
+    });
+    if (!exact) {
+      setExactMatchPhone(null);
+      return;
+    }
+    setExactMatchPhone(String(exact.phone ?? '').replace(/\D/g, ''));
+    if (exact.name) setValue('customerName', exact.name, { shouldDirty: true });
+    if (exact.phone) setValue('phone', exact.phone, { shouldDirty: true });
+    const inferredCountry = inferPhoneCountryFromE164(exact.phone);
+    const country =
+      exact.phoneCountry === 'US' || exact.phoneCountry === 'MX'
+        ? exact.phoneCountry
+        : inferredCountry;
+    if (country) setValue('phoneCountry', country, { shouldDirty: true });
+  }, [enteredDigits, crmMatchesRaw, setValue]);
+  // Hide the matches list when a row is auto-applied.
+  const crmMatches = exactMatchPhone ? [] : crmMatchesRaw;
 
   // Credits lookup: only fires once we have a CRM-confirmed phone (i.e. at least
   // one match in the search). Backend keys credits on (phone, phoneCountry).
@@ -768,11 +812,21 @@ export function ReservationNew() {
 
   const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const onInvalidSubmit = (errors: Record<string, unknown>) => {
+    if (errors.customerName) setFormError(t('reservationNew.formError.customerName'));
+    else if (errors.phone) setFormError(t('reservationNew.formError.phone'));
+    else if (errors.amountDue) setFormError(t('reservationNew.formError.amountDue'));
+    else if (errors.depositAmount) setFormError(t('reservationNew.formError.depositAmount'));
+    else if (errors.paymentMethod) setFormError(t('reservationNew.formError.paymentMethod'));
+    else setFormError(t('reservationNew.formError.review'));
+  };
   const onSubmit = handleSubmit(async (form) => {
     if (!hold) return;
     setCreditApplyError(null);
     setDeadlineError(null);
     setPhoneError(null);
+    setFormError(null);
     // Pre-validate the phone is a valid US/MX E.164 — backend validates too
     // but surfacing inline saves a network round-trip and matches the
     // Angular original's UX.
@@ -850,7 +904,7 @@ export function ReservationNew() {
       setCreatedReservation(created);
     }
     setHold(null);
-  });
+  }, onInvalidSubmit);
 
   const submitError =
     createReservation.error instanceof ApiError
@@ -975,7 +1029,9 @@ export function ReservationNew() {
                 >
                   {t('reservationNew.filters.button')}
                   {filtersActive && (
-                    <span className="absolute -right-1 -top-1 inline-flex h-2 w-2 rounded-full bg-primary" />
+                    <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
+                      {activeFiltersCount}
+                    </span>
                   )}
                 </button>
               </div>
@@ -1681,6 +1737,11 @@ export function ReservationNew() {
                 {phoneError}
               </p>
             )}
+            {formError && (
+              <p className="text-sm text-destructive" role="alert">
+                {formError}
+              </p>
+            )}
             {submitError && (
               <p className="text-sm text-destructive" role="alert">
                 {submitError}
@@ -1707,7 +1768,6 @@ export function ReservationNew() {
                 type="submit"
                 disabled={
                   createReservation.isPending ||
-                  !formState.isValid ||
                   !depositValid ||
                   expired
                 }

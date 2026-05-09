@@ -408,6 +408,14 @@
     "phoneValidation": {
       "invalid": "El teléfono debe ser un número válido de US o MX."
     },
+    "formError": {
+      "customerName": "El nombre del cliente es obligatorio.",
+      "phone": "El teléfono es obligatorio.",
+      "amountDue": "El total debe ser 0 o mayor.",
+      "depositAmount": "El depósito debe ser 0 o mayor.",
+      "paymentMethod": "El método de pago es obligatorio.",
+      "review": "Revisa los datos de la reservación."
+    },
     "pastEvents": {
       "button": "Eventos pasados ({{count}})",
       "title": "Eventos pasados",
