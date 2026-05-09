@@ -7,12 +7,10 @@ import {
   useAddManualPayment,
   useCancelReservation,
   useCheckInPass,
-  useCreateCashAppLink,
   useCreateSquarePaymentLink,
   useIssueCheckInPass,
   useReservation,
   useReservationHistory,
-  useSendCashAppLinkSms,
   useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { ApiError } from '@/lib/api-client';
@@ -318,85 +316,6 @@ function PaymentLinkSection({
   );
 }
 
-function CashAppLinkSection({
-  reservation,
-  eventDate,
-  remaining,
-}: {
-  reservation: ReservationItem;
-  eventDate: string;
-  remaining: number;
-}) {
-  const { t, i18n } = useTranslation();
-  const create = useCreateCashAppLink(reservation.reservationId, eventDate);
-  const sendSms = useSendCashAppLinkSms(reservation.reservationId, eventDate);
-  const moneyFormatter = new Intl.NumberFormat(i18n.language, {
-    style: 'currency',
-    currency: 'USD',
-  });
-
-  const createError =
-    create.error instanceof ApiError
-      ? `${create.error.status}: ${create.error.message}`
-      : null;
-  const smsError =
-    sendSms.error instanceof ApiError
-      ? `${sendSms.error.status}: ${sendSms.error.message}`
-      : null;
-  const url = create.data?.paymentLinkUrl;
-
-  return (
-    <div className="space-y-2 rounded-md border border-border p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-brand-900">
-            {t('reservationDetail.cashapp.title')}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t('reservationDetail.cashapp.hint', {
-              amount: moneyFormatter.format(remaining),
-            })}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={() => create.mutate()}
-            disabled={create.isPending || remaining <= 0}
-            className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {create.isPending
-              ? t('common.saving')
-              : url
-                ? t('reservationDetail.cashapp.regenerate')
-                : t('reservationDetail.cashapp.create')}
-          </button>
-          {url && (
-            <button
-              type="button"
-              onClick={() => sendSms.mutate()}
-              disabled={sendSms.isPending}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
-            >
-              {sendSms.isPending ? t('common.saving') : t('reservationDetail.cashapp.sendSms')}
-            </button>
-          )}
-        </div>
-      </div>
-      {url && (
-        <div className="rounded-md bg-muted/40 p-2">
-          <p className="text-xs font-mono break-all text-brand-700">{url}</p>
-        </div>
-      )}
-      {createError && <p className="text-xs text-destructive">{createError}</p>}
-      {smsError && <p className="text-xs text-destructive">{smsError}</p>}
-      {sendSms.isSuccess && (
-        <p className="text-xs text-success-700">{t('reservationDetail.cashapp.smsSent')}</p>
-      )}
-    </div>
-  );
-}
-
 function CheckInPassSection({
   reservation,
   eventDate,
@@ -613,11 +532,6 @@ export function ReservationDetail() {
             </h2>
             <div className="mt-3 space-y-4">
               <PaymentLinkSection
-                reservation={reservation}
-                eventDate={reservation.eventDate}
-                remaining={remaining}
-              />
-              <CashAppLinkSection
                 reservation={reservation}
                 eventDate={reservation.eventDate}
                 remaining={remaining}

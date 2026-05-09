@@ -237,14 +237,6 @@
       "smsSent": "SMS sent.",
       "expiresAt": "Expires"
     },
-    "cashapp": {
-      "title": "Cash App link",
-      "hint": "Self-service Cash App pay for the remaining {{amount}}. Customer scans/clicks and pays without staff intervention.",
-      "create": "Create Cash App link",
-      "regenerate": "Regenerate Cash App link",
-      "sendSms": "Send via SMS",
-      "smsSent": "Cash App SMS sent."
-    },
     "checkInPass": {
       "heading": "Check-in pass",
       "issue": "Issue pass",

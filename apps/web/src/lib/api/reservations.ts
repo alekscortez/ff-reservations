@@ -198,43 +198,6 @@ export function useSendSquareLinkSms(reservationId: string, eventDate: string) {
   });
 }
 
-export interface CashAppLinkResponse {
-  paymentLinkUrl: string;
-  paymentLinkId: string;
-  amount: number;
-  expiresAt?: string;
-}
-
-export function useCreateCashAppLink(reservationId: string, eventDate: string) {
-  const api = useApiClient();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await api.post<CashAppLinkResponse>(
-        `/reservations/${reservationId}/cashapp-link/square`,
-        { eventDate }
-      );
-      return res;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: listKey(eventDate) });
-    },
-  });
-}
-
-export function useSendCashAppLinkSms(reservationId: string, eventDate: string) {
-  const api = useApiClient();
-  return useMutation({
-    mutationFn: async () => {
-      const res = await api.post<{ sent: boolean; messageId?: string }>(
-        `/reservations/${reservationId}/cashapp-link/square/sms`,
-        { eventDate }
-      );
-      return res;
-    },
-  });
-}
-
 export interface CheckInPassData {
   passId?: string;
   reservationId?: string;
