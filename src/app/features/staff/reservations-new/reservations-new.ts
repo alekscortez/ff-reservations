@@ -24,6 +24,23 @@ import { CrmClient } from '../../../shared/models/client.model';
 import { debounceTime, distinctUntilChanged, interval, of, Subscription, switchMap } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import {
+  formatCreditExpiry,
+  formatEventDate as formatEventDateUtil,
+  formatHm,
+  isFutureDeadline,
+  isThisWeek as isThisWeekUtil,
+  nextDate,
+  normalizeDeadlineLocalIso,
+  normalizeHour,
+  normalizeMinute,
+  normalizePhone,
+  normalizePollingSeconds,
+  normalizeSectionMapColors,
+  nowInTimeZoneLocalIso,
+  phonesMatch,
+  todayString,
+} from './reservations-new-utils';
+import {
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToE164,
@@ -120,7 +137,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   paymentDeadlineDate = new FormControl('', { nonNullable: true });
   paymentDeadlineTime = new FormControl('00:00', { nonNullable: true });
   paymentDeadlineTz = 'America/Chicago';
-  businessDate = this.todayString();
+  businessDate = todayString();
   tablePollingSeconds = 10;
   defaultPaymentDeadlineHour = 0;
   defaultPaymentDeadlineMinute = 0;
@@ -252,7 +269,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         debounceTime(250),
         distinctUntilChanged(),
         switchMap((value) => {
-          const digits = this.normalizePhone(value);
+          const digits = normalizePhone(value);
           if (digits.length < 4) {
             this.clientMatches = [];
             this.noClientMatch = false;
@@ -268,11 +285,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       .subscribe({
         next: (items: CrmClient[]) => {
           const matches = items ?? [];
-          const entered = this.normalizePhone(this.form.controls.phone.value);
+          const entered = normalizePhone(this.form.controls.phone.value);
           const exact = matches.find(
-            (m) => this.phonesMatch(m.phone, entered) && entered.length >= 10
+            (m) => phonesMatch(m.phone, entered) && entered.length >= 10
           );
-          this.exactMatchPhone = exact ? this.normalizePhone(exact.phone) : null;
+          this.exactMatchPhone = exact ? normalizePhone(exact.phone) : null;
           this.clientMatches = matches;
           this.noClientMatch = entered.length >= 10 && matches.length === 0;
           this.clientLoading = false;
@@ -437,37 +454,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       .reverse();
   }
 
-  isThisWeek(eventDate: string | undefined): boolean {
-    if (!eventDate) return false;
-    const date = new Date(`${eventDate}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return false;
-    const today = new Date();
-    const day = (today.getDay() + 6) % 7;
-    const start = new Date(today);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - day);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return date >= start && date <= end;
-  }
-
-  formatEventDate(eventDate: string | undefined): string {
-    if (!eventDate) return '—';
-    const date = new Date(`${eventDate}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return eventDate;
-    return date.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-    });
-  }
-
-  todayString(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
+  // Template-bound helpers: keep on `this` so the .html bindings can find
+  // them. Implementation lives in reservations-new-utils.ts.
+  isThisWeek = isThisWeekUtil;
+  formatEventDate = formatEventDateUtil;
 
   selectTable(t: TableForEvent): void {
     if (t.status !== 'AVAILABLE') return;
@@ -623,7 +613,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         return;
       }
       paymentDeadlineAt = `${date}T${time}:00`;
-      if (!this.isFutureDeadline(paymentDeadlineAt, this.paymentDeadlineTz)) {
+      if (!isFutureDeadline(paymentDeadlineAt, this.paymentDeadlineTz)) {
         this.error = 'Payment deadline must be in the future.';
         this.loading = false;
         return;
@@ -843,7 +833,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.phoneCountry = inferPhoneCountryFromE164(client.phone) ?? this.phoneCountry;
     this.clientMatches = [];
     this.noClientMatch = false;
-    this.exactMatchPhone = this.normalizePhone(client.phone);
+    this.exactMatchPhone = normalizePhone(client.phone);
     this.refreshClientCreditsForCurrentPhone(true);
   }
 
@@ -863,7 +853,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   clientCreditLabel(credit: RescheduleCredit): string {
     const amount = Number(credit.amountRemaining ?? 0);
-    const expires = this.formatCreditExpiry(credit.expiresAt);
+    const expires = formatCreditExpiry(credit.expiresAt);
     return expires ? `$${amount.toFixed(2)} · Expires ${expires}` : `$${amount.toFixed(2)} · No expiry`;
   }
 
@@ -988,121 +978,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   isExactMatch(client: CrmClient): boolean {
     if (!client) return false;
-    const phone = this.normalizePhone(client.phone);
+    const phone = normalizePhone(client.phone);
     return !!this.exactMatchPhone && phone === this.exactMatchPhone;
-  }
-
-  private normalizePhone(value: string | null | undefined): string {
-    return String(value ?? '').replace(/\D/g, '');
-  }
-
-  private formatCreditExpiry(value: string | null | undefined): string {
-    const raw = String(value ?? '').trim();
-    if (!raw) return '';
-    const date = new Date(`${raw}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return raw;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  private phonesMatch(storedPhone: string | null | undefined, enteredDigits: string): boolean {
-    const stored = this.normalizePhone(storedPhone);
-    if (!stored || !enteredDigits) return false;
-    if (stored === enteredDigits) return true;
-    if (enteredDigits.length === 10) {
-      if (stored === `1${enteredDigits}`) return true;
-      if (stored === `52${enteredDigits}`) return true;
-      if (stored === `521${enteredDigits}`) return true;
-    }
-    return false;
   }
 
   private setDefaultPaymentDeadline(): void {
     if (!this.eventDate) return;
-    this.paymentDeadlineDate.setValue(this.nextDate(this.eventDate));
+    this.paymentDeadlineDate.setValue(nextDate(this.eventDate));
     this.paymentDeadlineTime.setValue(
-      this.formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute)
+      formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute)
     );
-  }
-
-  private nextDate(date: string): string {
-    const parts = date.split('-').map((part) => Number(part));
-    if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
-      return date;
-    }
-    const [year, month, day] = parts;
-    const d = new Date(Date.UTC(year, month - 1, day));
-    d.setUTCDate(d.getUTCDate() + 1);
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  private normalizeDeadlineLocalIso(value: string): string | null {
-    const raw = String(value ?? '').trim();
-    const match = raw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if (!match) return null;
-    const [, ymd, hh, mm, ss] = match;
-    return `${ymd}T${hh}:${mm}:${ss ?? '00'}`;
-  }
-
-  private nowInTimeZoneLocalIso(tz: string): string | null {
-    try {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(new Date());
-      const get = (type: Intl.DateTimeFormatPartTypes) =>
-        parts.find((p) => p.type === type)?.value ?? '';
-      const yyyy = get('year');
-      const mm = get('month');
-      const dd = get('day');
-      const hh = get('hour');
-      const min = get('minute');
-      const sec = get('second');
-      if (!yyyy || !mm || !dd || !hh || !min || !sec) return null;
-      return `${yyyy}-${mm}-${dd}T${hh}:${min}:${sec}`;
-    } catch {
-      return null;
-    }
-  }
-
-  private isFutureDeadline(deadlineAt: string, tz: string): boolean {
-    const normalizedDeadline = this.normalizeDeadlineLocalIso(deadlineAt);
-    if (!normalizedDeadline) return false;
-    const nowIso = this.nowInTimeZoneLocalIso(tz || 'America/Chicago');
-    if (!nowIso) return false;
-    return normalizedDeadline > nowIso;
-  }
-
-  private normalizePollingSeconds(value: number | null | undefined, fallback: number): number {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(120, Math.max(5, Math.round(parsed)));
-  }
-
-  private normalizeHour(value: number | null | undefined, fallback: number): number {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(23, Math.max(0, Math.round(parsed)));
-  }
-
-  private normalizeMinute(value: number | null | undefined, fallback: number): number {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(59, Math.max(0, Math.round(parsed)));
-  }
-
-  private formatHm(hour: number, minute: number): string {
-    return `${String(this.normalizeHour(hour, 0)).padStart(2, '0')}:${String(
-      this.normalizeMinute(minute, 0)
-    ).padStart(2, '0')}`;
   }
 
   private formErrorMessage(): string {
@@ -1694,22 +1579,22 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private loadRuntimeContext(): void {
     this.eventsApi.getCurrentContext().subscribe({
       next: (ctx) => {
-        this.businessDate = String(ctx?.businessDate ?? '').trim() || this.todayString();
+        this.businessDate = String(ctx?.businessDate ?? '').trim() || todayString();
         this.paymentDeadlineTz = String(ctx?.settings?.operatingTz ?? '').trim() || 'America/Chicago';
-        this.defaultPaymentDeadlineHour = this.normalizeHour(
+        this.defaultPaymentDeadlineHour = normalizeHour(
           ctx?.settings?.defaultPaymentDeadlineHour,
           0
         );
-        this.defaultPaymentDeadlineMinute = this.normalizeMinute(
+        this.defaultPaymentDeadlineMinute = normalizeMinute(
           ctx?.settings?.defaultPaymentDeadlineMinute,
           0
         );
-        this.paymentDeadlineTime.setValue(this.formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute));
-        this.tablePollingSeconds = this.normalizePollingSeconds(
+        this.paymentDeadlineTime.setValue(formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute));
+        this.tablePollingSeconds = normalizePollingSeconds(
           ctx?.settings?.tableAvailabilityPollingSeconds,
           10
         );
-        this.tableSectionColors = this.normalizeSectionMapColors(ctx?.settings?.sectionMapColors);
+        this.tableSectionColors = normalizeSectionMapColors(ctx?.settings?.sectionMapColors);
         if (this.eventDate) {
           this.startPolling();
           return;
@@ -1726,30 +1611,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         }
       },
       error: () => {
-        this.businessDate = this.todayString();
+        this.businessDate = todayString();
       },
     });
-  }
-
-  private normalizeSectionMapColors(raw: unknown): Record<string, string> {
-    const fallback = {
-      A: '#ec008c',
-      B: '#2e3192',
-      C: '#00aeef',
-      D: '#f7941d',
-      E: '#711411',
-    };
-    if (!raw || typeof raw !== 'object') return fallback;
-    const isHexColor = (value: unknown): value is string =>
-      /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(String(value ?? '').trim());
-    const value = raw as Record<string, unknown>;
-    return {
-      A: isHexColor(value['A']) ? String(value['A']).toLowerCase() : fallback.A,
-      B: isHexColor(value['B']) ? String(value['B']).toLowerCase() : fallback.B,
-      C: isHexColor(value['C']) ? String(value['C']).toLowerCase() : fallback.C,
-      D: isHexColor(value['D']) ? String(value['D']).toLowerCase() : fallback.D,
-      E: isHexColor(value['E']) ? String(value['E']).toLowerCase() : fallback.E,
-    };
   }
 
   @HostListener('window:resize')
