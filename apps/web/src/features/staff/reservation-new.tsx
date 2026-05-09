@@ -1252,20 +1252,27 @@ export function ReservationNew() {
                 <h2 className="text-lg font-semibold text-brand-900">
                   {t('reservationNew.customerHeading')}
                 </h2>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-brand-900" htmlFor="customerName">
-                {t('reservationNew.field.customerName')} *
-              </label>
-              <input
-                id="customerName"
-                {...register('customerName', { required: true })}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="grid grid-cols-[1fr_120px] gap-3">
+            <div className="grid grid-cols-[120px_1fr] gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-brand-900" htmlFor="phone">
-                  {t('reservationNew.field.phone')} *
+                <label
+                  className="mb-1 block text-sm font-medium text-brand-900"
+                  htmlFor="phoneCountry"
+                >
+                  {t('reservationNew.field.phone')}
+                </label>
+                <select
+                  id="phoneCountry"
+                  aria-label={t('frequentClients.field.country')}
+                  {...register('phoneCountry')}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="MX">🇲🇽 +52</option>
+                  <option value="US">🇺🇸 +1</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-transparent" htmlFor="phone">
+                  &nbsp;
                 </label>
                 <input
                   id="phone"
@@ -1275,22 +1282,16 @@ export function ReservationNew() {
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label
-                  className="mb-1 block text-sm font-medium text-brand-900"
-                  htmlFor="phoneCountry"
-                >
-                  {t('frequentClients.field.country')}
-                </label>
-                <select
-                  id="phoneCountry"
-                  {...register('phoneCountry')}
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                >
-                  <option value="MX">🇲🇽 +52</option>
-                  <option value="US">🇺🇸 +1</option>
-                </select>
-              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brand-900" htmlFor="customerName">
+                {t('reservationNew.field.customerName')}
+              </label>
+              <input
+                id="customerName"
+                {...register('customerName', { required: true })}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
             </div>
 
             {showCrmPanel && (
@@ -1569,7 +1570,7 @@ export function ReservationNew() {
                       className="mb-1 block text-xs text-brand-700"
                       htmlFor="paymentDeadlineTime"
                     >
-                      {t('reservationNew.field.deadlineTime')}
+                      {t('reservationNew.field.deadlineTime', { tz: operatingTz })}
                     </label>
                     <input
                       id="paymentDeadlineTime"
@@ -1648,7 +1649,11 @@ export function ReservationNew() {
               >
                 {createReservation.isPending
                   ? t('common.saving')
-                  : t('reservationNew.confirmCta')}
+                  : watchedMethod === 'square'
+                    ? t('reservationNew.confirmCtaWith.square')
+                    : watchedMethod === 'cashapp'
+                      ? t('reservationNew.confirmCtaWith.cashapp')
+                      : t('reservationNew.confirmCta')}
               </button>
             </div>
           </form>

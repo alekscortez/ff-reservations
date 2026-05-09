@@ -297,7 +297,7 @@
     "holdExpired": "EXPIRED — restart by picking a table",
     "confirmRelease": "Release this hold? You'll have to pick a table again.",
     "confirmSwitchEvent": "Switching events releases the current hold. Continue?",
-    "customerHeading": "Customer + payment",
+    "customerHeading": "Reservation Details",
     "field": {
       "customerName": "Customer name",
       "phone": "Phone",
@@ -314,7 +314,7 @@
       "receiptNumber": "Receipt # (cash only)",
       "deadlineToggle": "Set payment deadline",
       "deadlineDate": "Deadline date",
-      "deadlineTime": "Deadline time",
+      "deadlineTime": "Deadline time ({{tz}})",
       "deadlineHint": "Timezone {{tz}}. Default: next day at {{time}}."
     },
     "method": {
@@ -357,6 +357,10 @@
     },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation",
+    "confirmCtaWith": {
+      "square": "Confirm & Generate Square Link",
+      "cashapp": "Confirm & Generate Cash App Link"
+    },
     "eventCard": {
       "thisWeek": "This week"
     },

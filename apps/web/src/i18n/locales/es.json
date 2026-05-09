@@ -297,7 +297,7 @@
     "holdExpired": "EXPIRADO — vuelve a elegir una mesa",
     "confirmRelease": "¿Liberar este apartado? Tendrás que elegir mesa otra vez.",
     "confirmSwitchEvent": "Cambiar de evento libera el apartado actual. ¿Continuar?",
-    "customerHeading": "Cliente y pago",
+    "customerHeading": "Detalles de la reservación",
     "field": {
       "customerName": "Nombre del cliente",
       "phone": "Teléfono",
@@ -314,7 +314,7 @@
       "receiptNumber": "Recibo # (solo efectivo)",
       "deadlineToggle": "Establecer fecha límite de pago",
       "deadlineDate": "Fecha límite",
-      "deadlineTime": "Hora límite",
+      "deadlineTime": "Hora límite ({{tz}})",
       "deadlineHint": "Zona horaria {{tz}}. Por defecto: día siguiente a las {{time}}."
     },
     "method": {
@@ -357,6 +357,10 @@
     },
     "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación",
+    "confirmCtaWith": {
+      "square": "Confirmar y generar link de Square",
+      "cashapp": "Confirmar y generar link de Cash App"
+    },
     "eventCard": {
       "thisWeek": "Esta semana"
     },
