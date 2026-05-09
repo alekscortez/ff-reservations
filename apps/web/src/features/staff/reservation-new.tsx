@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/lib/api-client';
 import { useApiClient } from '@/lib/use-api-client';
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import type { ReservationItem } from '@ff/core';
 import { formatPhoneForDisplay, inferPhoneCountryFromE164 } from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
@@ -551,6 +552,14 @@ export function ReservationNew() {
     : watchedAmountDue || 0;
   const apiClient = useApiClient();
   const [creditApplyError, setCreditApplyError] = useState<string | null>(null);
+
+  // Lock background scroll while any modal in this view is open. Stacked
+  // modals (e.g. past-events open over the hold form) are ref-counted so the
+  // body unlocks only when all close.
+  const formModalOpen = Boolean(createdReservation) || Boolean(hold && heldTable);
+  useBodyScrollLock(formModalOpen);
+  useBodyScrollLock(pastModalOpen);
+  useBodyScrollLock(Boolean(releaseIntent));
 
   // Mobile keyboard inset: keep the sticky CTA above the on-screen keyboard.
   // visualViewport.height shrinks while the keyboard is up; the diff is the
