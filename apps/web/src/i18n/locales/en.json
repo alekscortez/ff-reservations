@@ -15,6 +15,10 @@
     "edit": "Edit",
     "confirm": "Confirm"
   },
+  "layout": {
+    "toggleNav": "Open navigation",
+    "closeNav": "Close navigation"
+  },
   "auth": {
     "login": "Sign in",
     "logout": "Sign out",

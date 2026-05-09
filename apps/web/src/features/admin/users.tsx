@@ -97,14 +97,9 @@ export function AdminUsers() {
   return (
     <main className="min-h-screen bg-brand-50 p-8">
       <div className="mx-auto max-w-3xl">
-        <header className="flex items-baseline justify-between">
-          <h1 className="text-3xl font-semibold text-brand-900">
-            {t('adminUsers.listTitle')}
-          </h1>
-          <Link to="/staff/dashboard" className="text-sm text-muted-foreground hover:text-brand-900">
-            ← {t('staff.dashboardTitle')}
-          </Link>
-        </header>
+        <h1 className="text-3xl font-semibold text-brand-900">
+          {t('adminUsers.listTitle')}
+        </h1>
 
         <div className="mt-4 flex justify-end">
           <Link

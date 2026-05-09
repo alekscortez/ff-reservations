@@ -1,6 +1,7 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthHealthBanner } from '@/components/auth-health-banner';
 import { RequireAdmin, RequireStaffOrAdmin } from '@/components/route-guards';
+import { StaffLayout } from '@/components/staff-layout';
 import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
@@ -19,6 +20,26 @@ import { AdminUsers } from '@/features/admin/users';
 import { AdminUserForm } from '@/features/admin/user-form';
 import { AdminSettings } from '@/features/admin/settings';
 
+function StaffShell() {
+  return (
+    <RequireStaffOrAdmin>
+      <StaffLayout>
+        <Outlet />
+      </StaffLayout>
+    </RequireStaffOrAdmin>
+  );
+}
+
+function AdminShell() {
+  return (
+    <RequireAdmin>
+      <StaffLayout>
+        <Outlet />
+      </StaffLayout>
+    </RequireAdmin>
+  );
+}
+
 export function App() {
   return (
     <>
@@ -30,134 +51,35 @@ export function App() {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/map" element={<PublicMap />} />
         <Route path="/availability" element={<PublicMap />} />
-        <Route
-          path="/staff/dashboard"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffDashboard />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/events"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffEvents />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/events/new"
-          element={
-            <RequireStaffOrAdmin>
-              <EventForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/events/:eventId/edit"
-          element={
-            <RequireStaffOrAdmin>
-              <EventForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/frequent-clients"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffFrequentClients />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/frequent-clients/new"
-          element={
-            <RequireStaffOrAdmin>
-              <FrequentClientForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/frequent-clients/:clientId/edit"
-          element={
-            <RequireStaffOrAdmin>
-              <FrequentClientForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/reservations"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffReservations />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/reservations/:eventDate/:reservationId"
-          element={
-            <RequireStaffOrAdmin>
-              <ReservationDetail />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/packages"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffPackages />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/packages/new"
-          element={
-            <RequireStaffOrAdmin>
-              <PackageForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/packages/:packageId/edit"
-          element={
-            <RequireStaffOrAdmin>
-              <PackageForm />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/staff/holds"
-          element={
-            <RequireStaffOrAdmin>
-              <StaffHolds />
-            </RequireStaffOrAdmin>
-          }
-        />
-        <Route
-          path="/admin/users"
-          element={
-            <RequireAdmin>
-              <AdminUsers />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/admin/users/new"
-          element={
-            <RequireAdmin>
-              <AdminUserForm />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="/admin/settings"
-          element={
-            <RequireAdmin>
-              <AdminSettings />
-            </RequireAdmin>
-          }
-        />
+
+        <Route element={<StaffShell />}>
+          <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/events" element={<StaffEvents />} />
+          <Route path="/staff/events/new" element={<EventForm />} />
+          <Route path="/staff/events/:eventId/edit" element={<EventForm />} />
+          <Route path="/staff/frequent-clients" element={<StaffFrequentClients />} />
+          <Route path="/staff/frequent-clients/new" element={<FrequentClientForm />} />
+          <Route
+            path="/staff/frequent-clients/:clientId/edit"
+            element={<FrequentClientForm />}
+          />
+          <Route path="/staff/reservations" element={<StaffReservations />} />
+          <Route
+            path="/staff/reservations/:eventDate/:reservationId"
+            element={<ReservationDetail />}
+          />
+          <Route path="/staff/packages" element={<StaffPackages />} />
+          <Route path="/staff/packages/new" element={<PackageForm />} />
+          <Route path="/staff/packages/:packageId/edit" element={<PackageForm />} />
+          <Route path="/staff/holds" element={<StaffHolds />} />
+        </Route>
+
+        <Route element={<AdminShell />}>
+          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/users/new" element={<AdminUserForm />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
+        </Route>
+
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>
