@@ -33,5 +33,10 @@
     "listDescription": "Browse the events catalog.",
     "empty": "No events yet.",
     "minDeposit": "Min deposit"
+  },
+  "frequentClients": {
+    "listTitle": "Frequent Clients",
+    "listDescription": "Recurring guests with table-booking privileges.",
+    "empty": "No frequent clients yet."
   }
 }

@@ -33,5 +33,10 @@
     "listDescription": "Explora el catálogo de eventos.",
     "empty": "Aún no hay eventos.",
     "minDeposit": "Depósito mínimo"
+  },
+  "frequentClients": {
+    "listTitle": "Clientes frecuentes",
+    "listDescription": "Huéspedes recurrentes con privilegios de reserva.",
+    "empty": "Aún no hay clientes frecuentes."
   }
 }
