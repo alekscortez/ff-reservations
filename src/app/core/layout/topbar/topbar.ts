@@ -1,4 +1,5 @@
-import { Component, OnDestroy, OnInit, Renderer2, inject } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, Renderer2, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { AuthService } from '../../auth/auth.service';
@@ -22,6 +23,7 @@ export class Topbar implements OnInit, OnDestroy {
   private reservationsApi = inject(ReservationsService);
   private renderer = inject(Renderer2);
   private doc = inject(DOCUMENT);
+  private destroyRef = inject(DestroyRef);
   private mobileNavOpen = false;
 
   isAuthenticated$ = this.auth.isAuthenticated$();
@@ -34,35 +36,37 @@ export class Topbar implements OnInit, OnDestroy {
   quickAvailabilityNotice: string | null = null;
   quickAvailabilityError: string | null = null;
 
-  private roleSub: Subscription | null = null;
-  private routeSub: Subscription | null = null;
   private contextSub: Subscription | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private topbarPollingSeconds = 30;
   private urgentPaymentWindowMinutes = 360;
 
   ngOnInit(): void {
-    this.roleSub = this.auth.groups$().subscribe((groups) => {
-      this.isStaffOrAdmin = groups.includes('Staff') || groups.includes('Admin');
-      if (this.isStaffOrAdmin) {
-        this.loadTopbarContext();
-        this.startPolling();
-      } else {
-        this.clearContext();
-        this.stopPolling();
-      }
-    });
+    this.auth
+      .groups$()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((groups) => {
+        this.isStaffOrAdmin = groups.includes('Staff') || groups.includes('Admin');
+        if (this.isStaffOrAdmin) {
+          this.loadTopbarContext();
+          this.startPolling();
+        } else {
+          this.clearContext();
+          this.stopPolling();
+        }
+      });
 
-    this.routeSub = this.router.events
-      .pipe(filter((event) => event instanceof NavigationEnd))
+    this.router.events
+      .pipe(
+        filter((event) => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe(() => {
         this.isQuickActionsOpen = false;
       });
   }
 
   ngOnDestroy(): void {
-    this.roleSub?.unsubscribe();
-    this.routeSub?.unsubscribe();
     this.contextSub?.unsubscribe();
     this.stopPolling();
   }

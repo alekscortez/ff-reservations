@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   Component,
+  DestroyRef,
   DoCheck,
   ElementRef,
   HostListener,
@@ -9,6 +10,7 @@ import {
   ViewChild,
   inject,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -86,6 +88,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private holdsApi = inject(HoldsService);
   private reservationsApi = inject(ReservationsService);
   private clientsApi = inject(ClientsService);
+  private destroyRef = inject(DestroyRef);
   @ViewChild('desktopSplitPanel') desktopSplitPanel?: ElementRef<HTMLElement>;
   @ViewChild('compactMapShell') compactMapShell?: ElementRef<HTMLElement>;
   @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
@@ -188,47 +191,61 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.restoreSavedFilters();
     this.activeHoldSession = this.readActiveHoldSession();
     this.loadRuntimeContext();
-    this.route.queryParamMap.subscribe((params) => {
-      this.eventDate = params.get('date');
-      if (this.eventDate) {
-        this.loadTables(this.eventDate);
-        this.startPolling();
-        return;
-      }
-      if (this.activeHoldSession?.eventDate) {
-        this.selectEvent(this.activeHoldSession.eventDate);
-      }
-    });
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        this.eventDate = params.get('date');
+        if (this.eventDate) {
+          this.loadTables(this.eventDate);
+          this.startPolling();
+          return;
+        }
+        if (this.activeHoldSession?.eventDate) {
+          this.selectEvent(this.activeHoldSession.eventDate);
+        }
+      });
     this.loadEvents();
 
-    this.form.controls.amountDue.valueChanges.subscribe((value) => {
-      const status = this.form.controls.paymentStatus.value;
-      const method = this.form.controls.paymentMethod.value;
-      if (method !== 'cash') return;
-      if (status === 'PAID') {
-        this.form.controls.depositAmount.setValue(value, { emitEvent: false });
-      }
-      if (status === 'COURTESY') {
-        this.form.controls.amountDue.setValue(0, { emitEvent: false });
-        this.form.controls.depositAmount.setValue(0, { emitEvent: false });
-      }
-    });
+    this.form.controls.amountDue.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => {
+        const status = this.form.controls.paymentStatus.value;
+        const method = this.form.controls.paymentMethod.value;
+        if (method !== 'cash') return;
+        if (status === 'PAID') {
+          this.form.controls.depositAmount.setValue(value, { emitEvent: false });
+        }
+        if (status === 'COURTESY') {
+          this.form.controls.amountDue.setValue(0, { emitEvent: false });
+          this.form.controls.depositAmount.setValue(0, { emitEvent: false });
+        }
+      });
 
-    this.form.controls.paymentMethod.valueChanges.subscribe(() => {
-      this.onPaymentMethodChange();
-    });
-    this.form.controls.useCredit.valueChanges.subscribe(() => {
-      this.onUseClientCreditChanged();
-    });
-    this.form.controls.creditId.valueChanges.subscribe(() => {
-      this.onClientCreditChanged();
-    });
-    this.form.controls.remainingMethod.valueChanges.subscribe(() => {
-      this.onClientCreditRemainingMethodChanged();
-    });
-    this.form.valueChanges.subscribe(() => {
-      this.saveActiveHoldSessionIfNeeded();
-    });
+    this.form.controls.paymentMethod.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.onPaymentMethodChange();
+      });
+    this.form.controls.useCredit.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.onUseClientCreditChanged();
+      });
+    this.form.controls.creditId.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.onClientCreditChanged();
+      });
+    this.form.controls.remainingMethod.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.onClientCreditRemainingMethodChanged();
+      });
+    this.form.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.saveActiveHoldSessionIfNeeded();
+      });
 
     this.form.controls.phone.valueChanges
       .pipe(
@@ -245,7 +262,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           }
           this.clientLoading = true;
           return this.clientsApi.searchByPhone(digits);
-        })
+        }),
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
         next: (items: CrmClient[]) => {

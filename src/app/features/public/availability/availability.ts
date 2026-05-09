@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
@@ -21,6 +22,7 @@ export class PublicAvailability implements OnInit, OnDestroy {
   private api = inject(PublicAvailabilityService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
   private readonly defaultSectionColors: Record<string, string> = {
     A: '#ec008c',
     B: '#2e3192',
@@ -37,22 +39,21 @@ export class PublicAvailability implements OnInit, OnDestroy {
   search = new FormControl('', { nonNullable: true });
   availableOnly = new FormControl(true, { nonNullable: true });
 
-  private routeSub: Subscription | null = null;
   private pollSub: Subscription | null = null;
   private pollingSeconds = 0;
   private queryEventDate = '';
 
   ngOnInit(): void {
-    this.routeSub = this.route.queryParamMap.subscribe((params) => {
-      const date = String(params.get('eventDate') ?? '').trim();
-      this.queryEventDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
-      this.loadAvailability(this.queryEventDate || undefined);
-    });
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        const date = String(params.get('eventDate') ?? '').trim();
+        this.queryEventDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
+        this.loadAvailability(this.queryEventDate || undefined);
+      });
   }
 
   ngOnDestroy(): void {
-    this.routeSub?.unsubscribe();
-    this.routeSub = null;
     this.pollSub?.unsubscribe();
     this.pollSub = null;
   }
