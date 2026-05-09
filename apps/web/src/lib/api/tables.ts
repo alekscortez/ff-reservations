@@ -32,3 +32,28 @@ export function useTablesForEvent(eventDate: string | null | undefined) {
     refetchInterval: 10000,
   });
 }
+
+export interface TableTemplateEntry {
+  id: string;
+  number: number | string;
+  section: string;
+  price: number;
+}
+
+export interface TableTemplate {
+  version: string;
+  sections: Record<string, number>;
+  tables: TableTemplateEntry[];
+}
+
+export function useTableTemplate() {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: ['tables', 'template'],
+    queryFn: async () => {
+      const res = await api.get<{ template: TableTemplate }>('/tables/template');
+      return res.template;
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+}

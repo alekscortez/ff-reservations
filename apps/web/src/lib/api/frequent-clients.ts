@@ -8,12 +8,22 @@ interface FrequentClientsListResponse {
 
 const LIST_KEY = ['frequent-clients', 'list'] as const;
 
+export interface FrequentClientTableSettingInput {
+  tableId: string;
+  paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
+  amountDue: number;
+  amountPaid?: number;
+  paymentDeadlineTime?: string;
+  paymentDeadlineTz?: string;
+}
+
 export interface FrequentClientInput {
   name: string;
   phone: string;
   phoneCountry?: 'US' | 'MX';
   notes?: string;
   status?: 'ACTIVE' | 'DISABLED';
+  tableSettings?: FrequentClientTableSettingInput[];
 }
 
 export function useFrequentClientsList() {

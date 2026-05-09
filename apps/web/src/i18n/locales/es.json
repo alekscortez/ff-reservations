@@ -68,6 +68,15 @@
       "country": "País",
       "notes": "Notas",
       "status": "Estado"
+    },
+    "tables": {
+      "heading": "Mesas predefinidas",
+      "hint": "Reservaciones de mesa y configuraciones de pago predeterminadas para este cliente frecuente. Una fila por mesa.",
+      "empty": "Aún no hay mesas. Añade la primera abajo.",
+      "tableId": "Mesa",
+      "amountDue": "Por cobrar",
+      "amountPaid": "Pagado",
+      "addRow": "Añadir mesa"
     }
   },
   "settings": {

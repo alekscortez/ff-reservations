@@ -68,6 +68,15 @@
       "country": "Country",
       "notes": "Notes",
       "status": "Status"
+    },
+    "tables": {
+      "heading": "Default tables",
+      "hint": "Pre-set table reservations and payment defaults for this frequent client. One row per table.",
+      "empty": "No tables yet. Add the first one below.",
+      "tableId": "Table",
+      "amountDue": "Amount due",
+      "amountPaid": "Amount paid",
+      "addRow": "Add table"
     }
   },
   "settings": {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/lib/api-client';
 import {
@@ -9,6 +9,16 @@ import {
   useUpdateFrequentClient,
   type FrequentClientInput,
 } from '@/lib/api/frequent-clients';
+import { useTableTemplate } from '@/lib/api/tables';
+
+interface TableSettingRow {
+  tableId: string;
+  paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY';
+  amountDue: number;
+  amountPaid: number;
+  paymentDeadlineTime: string;
+  paymentDeadlineTz: string;
+}
 
 interface FormShape {
   name: string;
@@ -16,6 +26,7 @@ interface FormShape {
   phoneCountry: 'US' | 'MX';
   notes: string;
   status: 'ACTIVE' | 'DISABLED';
+  tableSettings: TableSettingRow[];
 }
 
 const EMPTY_FORM: FormShape = {
@@ -24,7 +35,10 @@ const EMPTY_FORM: FormShape = {
   phoneCountry: 'MX',
   notes: '',
   status: 'ACTIVE',
+  tableSettings: [],
 };
+
+const DEFAULT_TZ = 'America/Chicago';
 
 export function FrequentClientForm() {
   const { t } = useTranslation();
@@ -33,12 +47,15 @@ export function FrequentClientForm() {
   const isEdit = Boolean(clientId);
 
   const { data: existing, isLoading: loadingExisting } = useFrequentClient(clientId);
+  const { data: template } = useTableTemplate();
   const createMutation = useCreateFrequentClient();
   const updateMutation = useUpdateFrequentClient(clientId ?? '');
 
-  const { register, handleSubmit, reset, formState } = useForm<FormShape>({
+  const { register, handleSubmit, reset, control, formState, watch } = useForm<FormShape>({
     defaultValues: EMPTY_FORM,
   });
+
+  const tableSettings = useFieldArray({ control, name: 'tableSettings' });
 
   useEffect(() => {
     if (existing) {
@@ -48,9 +65,20 @@ export function FrequentClientForm() {
         phoneCountry: (existing.phoneCountry as 'US' | 'MX') ?? 'MX',
         notes: existing.notes ?? '',
         status: existing.status,
+        tableSettings: (existing.tableSettings ?? []).map((s) => ({
+          tableId: s.tableId,
+          paymentStatus:
+            (s.paymentStatus as TableSettingRow['paymentStatus']) ?? 'PENDING',
+          amountDue: Number(s.amountDue ?? 0),
+          amountPaid: Number(s.amountPaid ?? 0),
+          paymentDeadlineTime: s.paymentDeadlineTime ?? '00:00',
+          paymentDeadlineTz: s.paymentDeadlineTz ?? DEFAULT_TZ,
+        })),
       });
     }
   }, [existing, reset]);
+
+  const usedTableIds = new Set(watch('tableSettings').map((row) => row.tableId).filter(Boolean));
 
   const onSubmit = handleSubmit(async (form) => {
     const payload: FrequentClientInput = {
@@ -58,6 +86,16 @@ export function FrequentClientForm() {
       phone: form.phone.trim(),
       phoneCountry: form.phoneCountry,
       notes: form.notes.trim() || undefined,
+      tableSettings: form.tableSettings
+        .filter((s) => s.tableId)
+        .map((s) => ({
+          tableId: s.tableId,
+          paymentStatus: s.paymentStatus,
+          amountDue: Number(s.amountDue) || 0,
+          amountPaid: Number(s.amountPaid) || 0,
+          paymentDeadlineTime: s.paymentDeadlineTime || '00:00',
+          paymentDeadlineTz: s.paymentDeadlineTz || DEFAULT_TZ,
+        })),
     };
     if (isEdit && clientId) {
       await updateMutation.mutateAsync({ ...payload, status: form.status });
@@ -66,6 +104,17 @@ export function FrequentClientForm() {
     }
     navigate('/staff/frequent-clients');
   });
+
+  function addTableRow() {
+    tableSettings.append({
+      tableId: '',
+      paymentStatus: 'PENDING',
+      amountDue: 0,
+      amountPaid: 0,
+      paymentDeadlineTime: '00:00',
+      paymentDeadlineTz: DEFAULT_TZ,
+    });
+  }
 
   const submitting = createMutation.isPending || updateMutation.isPending;
   const submitError =
@@ -76,7 +125,7 @@ export function FrequentClientForm() {
         : null;
 
   return (
-    <main className="min-h-screen bg-brand-50 p-8">
+    <div className="p-6 sm:p-8">
       <div className="mx-auto max-w-2xl">
         <header className="flex items-baseline justify-between">
           <h1 className="text-3xl font-semibold text-brand-900">
@@ -170,6 +219,92 @@ export function FrequentClientForm() {
               </div>
             )}
 
+            <fieldset className="rounded-md border border-border bg-background p-4">
+              <legend className="px-2 text-sm font-medium text-brand-900">
+                {t('frequentClients.tables.heading')}
+              </legend>
+              <p className="text-xs text-muted-foreground">
+                {t('frequentClients.tables.hint')}
+              </p>
+
+              {tableSettings.fields.length === 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {t('frequentClients.tables.empty')}
+                </p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {tableSettings.fields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="grid grid-cols-2 gap-2 rounded-md bg-muted/30 p-2 sm:grid-cols-[120px_120px_120px_120px_120px_auto]"
+                    >
+                      <select
+                        {...register(`tableSettings.${index}.tableId`)}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      >
+                        <option value="">— {t('frequentClients.tables.tableId')} —</option>
+                        {(template?.tables ?? []).map((t) => {
+                          const used = usedTableIds.has(t.id);
+                          const current = watch(`tableSettings.${index}.tableId`) === t.id;
+                          if (used && !current) return null;
+                          return (
+                            <option key={t.id} value={t.id}>
+                              {t.id} (${t.price})
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <select
+                        {...register(`tableSettings.${index}.paymentStatus`)}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="PARTIAL">PARTIAL</option>
+                        <option value="PAID">PAID</option>
+                        <option value="COURTESY">COURTESY</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        {...register(`tableSettings.${index}.amountDue`, { valueAsNumber: true })}
+                        placeholder={t('frequentClients.tables.amountDue')}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        {...register(`tableSettings.${index}.amountPaid`, { valueAsNumber: true })}
+                        placeholder={t('frequentClients.tables.amountPaid')}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      />
+                      <input
+                        type="time"
+                        {...register(`tableSettings.${index}.paymentDeadlineTime`)}
+                        className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => tableSettings.remove(index)}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={addTableRow}
+                className="mt-3 inline-flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-brand-900 hover:bg-muted"
+              >
+                + {t('frequentClients.tables.addRow')}
+              </button>
+            </fieldset>
+
             {submitError && (
               <p className="text-sm text-destructive" role="alert">
                 {submitError}
@@ -194,6 +329,6 @@ export function FrequentClientForm() {
           </form>
         )}
       </div>
-    </main>
+    </div>
   );
 }
