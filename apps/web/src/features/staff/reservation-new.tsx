@@ -443,6 +443,27 @@ export function ReservationNew() {
   const apiClient = useApiClient();
   const [creditApplyError, setCreditApplyError] = useState<string | null>(null);
 
+  // Mobile keyboard inset: keep the sticky CTA above the on-screen keyboard.
+  // visualViewport.height shrinks while the keyboard is up; the diff is the
+  // keyboard height. Stash it as a CSS var on the modal root.
+  const [kbInset, setKbInset] = useState(0);
+  useEffect(() => {
+    const vv =
+      typeof window !== 'undefined' ? window.visualViewport ?? null : null;
+    if (!vv) return;
+    const update = () => {
+      const diff = window.innerHeight - vv.height - vv.offsetTop;
+      setKbInset(diff > 50 ? diff : 0);
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   // Persist the active hold session whenever any captured field changes. The
   // load effect above will restore it on next mount if the hold hasn't expired.
   useEffect(() => {
@@ -917,6 +938,7 @@ export function ReservationNew() {
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-6"
           role="dialog"
           aria-modal="true"
+          style={kbInset > 0 ? { paddingBottom: `${kbInset}px` } : undefined}
         >
           <div className="relative my-4 w-full max-w-3xl rounded-2xl bg-background p-5 shadow-xl">
             <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-3">
@@ -1359,7 +1381,17 @@ export function ReservationNew() {
               </p>
             )}
 
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="sticky bottom-0 -mx-5 -mb-5 flex flex-col-reverse gap-2 border-t border-border bg-background px-5 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+              {heldTable && (
+                <p className="text-xs text-muted-foreground">
+                  {t('reservationNew.heldTable', {
+                    section: heldTable.section,
+                    id: heldTable.id,
+                  })}
+                  {' · '}
+                  {moneyFormatter.format(Number(watchedAmountDue) || 0)}
+                </p>
+              )}
               <button
                 type="submit"
                 disabled={
@@ -1368,7 +1400,7 @@ export function ReservationNew() {
                   !depositValid ||
                   expired
                 }
-                className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 sm:h-10"
               >
                 {createReservation.isPending
                   ? t('common.saving')
