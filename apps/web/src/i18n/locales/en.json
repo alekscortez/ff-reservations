@@ -357,6 +357,9 @@
     },
     "closeModal": "Close",
     "confirmCta": "Confirm reservation",
+    "eventCard": {
+      "thisWeek": "This week"
+    },
     "view": {
       "label": "Table view",
       "map": "Map",

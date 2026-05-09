@@ -357,6 +357,9 @@
     },
     "closeModal": "Cerrar",
     "confirmCta": "Confirmar reservación",
+    "eventCard": {
+      "thisWeek": "Esta semana"
+    },
     "view": {
       "label": "Vista de mesas",
       "map": "Mapa",

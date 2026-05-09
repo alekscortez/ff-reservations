@@ -99,6 +99,11 @@ export function ReservationNew() {
   }, [events]);
 
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const inAWeekStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  }, []);
   const pastEvents = useMemo(() => {
     if (!events) return [];
     return [...events]
@@ -614,9 +619,60 @@ export function ReservationNew() {
               </button>
             )}
           </div>
+          {sortedEvents.length > 0 && (
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {sortedEvents.slice(0, 8).map((evt) => {
+                const selected = evt.eventDate === eventDate;
+                const thisWeek =
+                  evt.eventDate >= todayStr && evt.eventDate <= inAWeekStr;
+                return (
+                  <button
+                    key={evt.eventId}
+                    type="button"
+                    onClick={() => {
+                      if (hold && evt.eventDate !== eventDate) {
+                        setReleaseIntent({
+                          kind: 'switchEvent',
+                          nextEventDate: evt.eventDate,
+                        });
+                        return;
+                      }
+                      setEventDate(evt.eventDate);
+                    }}
+                    className={`relative rounded-lg border p-3 text-left text-sm transition ${
+                      selected
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary'
+                        : thisWeek
+                          ? 'border-amber-300 bg-amber-50 hover:border-amber-400'
+                          : 'border-border bg-background hover:border-primary/60'
+                    }`}
+                  >
+                    {thisWeek && !selected && (
+                      <span className="absolute right-1 top-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white">
+                        {t('reservationNew.eventCard.thisWeek')}
+                      </span>
+                    )}
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {dateFormatter.format(new Date(evt.eventDate + 'T00:00:00'))}
+                    </p>
+                    <p className="mt-1 font-semibold text-brand-900">{evt.eventName}</p>
+                    {Number(evt.minDeposit ?? 0) > 0 && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {t('reservationNew.minDeposit')}:{' '}
+                        {moneyFormatter.format(evt.minDeposit)}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <select
             id="evt"
-            className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            className={`w-full rounded-md border border-border bg-background px-3 py-2 text-sm ${
+              sortedEvents.length > 0 ? 'mt-3' : 'mt-2'
+            }`}
+            aria-label={t('reservationNew.eventLabel')}
             value={eventDate}
             onChange={(e) => {
               const next = e.target.value;
