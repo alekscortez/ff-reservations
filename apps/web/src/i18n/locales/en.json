@@ -133,6 +133,25 @@
       "regenerateHint": "An active link exists. Regenerating creates a new one and supersedes the old.",
       "create": "Create link",
       "regenerate": "Regenerate link",
+      "sendSms": "Send via SMS",
+      "smsSent": "SMS sent.",
+      "expiresAt": "Expires"
+    },
+    "cashapp": {
+      "title": "Cash App link",
+      "hint": "Self-service Cash App pay for the remaining {{amount}}. Customer scans/clicks and pays without staff intervention.",
+      "create": "Create Cash App link",
+      "regenerate": "Regenerate Cash App link",
+      "sendSms": "Send via SMS",
+      "smsSent": "Cash App SMS sent."
+    },
+    "checkInPass": {
+      "heading": "Check-in pass",
+      "issue": "Issue pass",
+      "reissue": "Reissue pass",
+      "none": "No pass issued yet.",
+      "consumed": "Already consumed at the door on {{at}}.",
+      "openQr": "Open QR image",
       "expiresAt": "Expires"
     },
     "cash": {

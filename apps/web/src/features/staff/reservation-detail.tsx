@@ -6,9 +6,14 @@ import type { ReservationItem } from '@ff/core';
 import {
   useAddManualPayment,
   useCancelReservation,
+  useCheckInPass,
+  useCreateCashAppLink,
   useCreateSquarePaymentLink,
+  useIssueCheckInPass,
   useReservation,
   useReservationHistory,
+  useSendCashAppLinkSms,
+  useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { ApiError } from '@/lib/api-client';
 
@@ -237,14 +242,20 @@ function PaymentLinkSection({
 }) {
   const { t, i18n } = useTranslation();
   const create = useCreateSquarePaymentLink(reservation.reservationId, eventDate);
+  const sendSms = useSendSquareLinkSms(reservation.reservationId, eventDate);
   const moneyFormatter = new Intl.NumberFormat(i18n.language, {
     style: 'currency',
     currency: 'USD',
   });
-  const error =
+  const createError =
     create.error instanceof ApiError
       ? `${create.error.status}: ${create.error.message}`
       : null;
+  const smsError =
+    sendSms.error instanceof ApiError
+      ? `${sendSms.error.status}: ${sendSms.error.message}`
+      : null;
+  const smsSuccess = sendSms.isSuccess;
 
   return (
     <div className="space-y-2 rounded-md border border-border p-4">
@@ -261,18 +272,30 @@ function PaymentLinkSection({
                 })}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => create.mutate({ eventDate })}
-          disabled={create.isPending || remaining <= 0}
-          className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {create.isPending
-            ? t('common.saving')
-            : reservation.paymentLinkUrl
-              ? t('reservationDetail.link.regenerate')
-              : t('reservationDetail.link.create')}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => create.mutate({ eventDate })}
+            disabled={create.isPending || remaining <= 0}
+            className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {create.isPending
+              ? t('common.saving')
+              : reservation.paymentLinkUrl
+                ? t('reservationDetail.link.regenerate')
+                : t('reservationDetail.link.create')}
+          </button>
+          {reservation.paymentLinkUrl && (
+            <button
+              type="button"
+              onClick={() => sendSms.mutate()}
+              disabled={sendSms.isPending}
+              className="text-xs text-primary hover:underline disabled:opacity-50"
+            >
+              {sendSms.isPending ? t('common.saving') : t('reservationDetail.link.sendSms')}
+            </button>
+          )}
+        </div>
       </div>
       {reservation.paymentLinkUrl && (
         <div className="rounded-md bg-muted/40 p-2">
@@ -286,8 +309,183 @@ function PaymentLinkSection({
           )}
         </div>
       )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {createError && <p className="text-xs text-destructive">{createError}</p>}
+      {smsError && <p className="text-xs text-destructive">{smsError}</p>}
+      {smsSuccess && (
+        <p className="text-xs text-success-700">{t('reservationDetail.link.smsSent')}</p>
+      )}
     </div>
+  );
+}
+
+function CashAppLinkSection({
+  reservation,
+  eventDate,
+  remaining,
+}: {
+  reservation: ReservationItem;
+  eventDate: string;
+  remaining: number;
+}) {
+  const { t, i18n } = useTranslation();
+  const create = useCreateCashAppLink(reservation.reservationId, eventDate);
+  const sendSms = useSendCashAppLinkSms(reservation.reservationId, eventDate);
+  const moneyFormatter = new Intl.NumberFormat(i18n.language, {
+    style: 'currency',
+    currency: 'USD',
+  });
+
+  const createError =
+    create.error instanceof ApiError
+      ? `${create.error.status}: ${create.error.message}`
+      : null;
+  const smsError =
+    sendSms.error instanceof ApiError
+      ? `${sendSms.error.status}: ${sendSms.error.message}`
+      : null;
+  const url = create.data?.paymentLinkUrl;
+
+  return (
+    <div className="space-y-2 rounded-md border border-border p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-brand-900">
+            {t('reservationDetail.cashapp.title')}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t('reservationDetail.cashapp.hint', {
+              amount: moneyFormatter.format(remaining),
+            })}
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => create.mutate()}
+            disabled={create.isPending || remaining <= 0}
+            className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {create.isPending
+              ? t('common.saving')
+              : url
+                ? t('reservationDetail.cashapp.regenerate')
+                : t('reservationDetail.cashapp.create')}
+          </button>
+          {url && (
+            <button
+              type="button"
+              onClick={() => sendSms.mutate()}
+              disabled={sendSms.isPending}
+              className="text-xs text-primary hover:underline disabled:opacity-50"
+            >
+              {sendSms.isPending ? t('common.saving') : t('reservationDetail.cashapp.sendSms')}
+            </button>
+          )}
+        </div>
+      </div>
+      {url && (
+        <div className="rounded-md bg-muted/40 p-2">
+          <p className="text-xs font-mono break-all text-brand-700">{url}</p>
+        </div>
+      )}
+      {createError && <p className="text-xs text-destructive">{createError}</p>}
+      {smsError && <p className="text-xs text-destructive">{smsError}</p>}
+      {sendSms.isSuccess && (
+        <p className="text-xs text-success-700">{t('reservationDetail.cashapp.smsSent')}</p>
+      )}
+    </div>
+  );
+}
+
+function CheckInPassSection({
+  reservation,
+  eventDate,
+}: {
+  reservation: ReservationItem;
+  eventDate: string;
+}) {
+  const { t, i18n } = useTranslation();
+  const isPaid = reservation.paymentStatus === 'PAID';
+  const fetchPass = useCheckInPass(eventDate, reservation.reservationId, isPaid);
+  const issue = useIssueCheckInPass(reservation.reservationId, eventDate);
+
+  if (!isPaid) return null;
+
+  const active = fetchPass.data?.pass ?? null;
+  const latest = fetchPass.data?.latestPass ?? null;
+  const error =
+    issue.error instanceof ApiError
+      ? `${issue.error.status}: ${issue.error.message}`
+      : null;
+
+  return (
+    <section className="rounded-lg border border-border bg-background p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold text-brand-900">
+          {t('reservationDetail.checkInPass.heading')}
+        </h2>
+        <button
+          type="button"
+          onClick={() => issue.mutate(Boolean(active))}
+          disabled={issue.isPending}
+          className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {issue.isPending
+            ? t('common.saving')
+            : active
+              ? t('reservationDetail.checkInPass.reissue')
+              : t('reservationDetail.checkInPass.issue')}
+        </button>
+      </div>
+
+      {fetchPass.isLoading && (
+        <p className="mt-3 text-sm text-muted-foreground">{t('common.loading')}</p>
+      )}
+
+      {active ? (
+        <div className="mt-3 space-y-2">
+          <div className="rounded-md bg-muted/40 p-2">
+            {active.url && (
+              <p className="text-xs font-mono break-all text-brand-700">{active.url}</p>
+            )}
+            {active.expiresAt && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('reservationDetail.checkInPass.expiresAt')}:{' '}
+                {new Intl.DateTimeFormat(i18n.language, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }).format(new Date(active.expiresAt * 1000))}
+              </p>
+            )}
+            {active.qrUrl && (
+              <a
+                href={active.qrUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-xs text-primary hover:underline"
+              >
+                {t('reservationDetail.checkInPass.openQr')}
+              </a>
+            )}
+          </div>
+        </div>
+      ) : latest && latest.consumedAt ? (
+        <div className="mt-3 rounded-md bg-success-100 px-3 py-2 text-xs text-success-700">
+          {t('reservationDetail.checkInPass.consumed', {
+            at: new Intl.DateTimeFormat(i18n.language, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            }).format(new Date(latest.consumedAt * 1000)),
+          })}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">
+          {t('reservationDetail.checkInPass.none')}
+        </p>
+      )}
+
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+    </section>
   );
 }
 
@@ -419,6 +617,11 @@ export function ReservationDetail() {
                 eventDate={reservation.eventDate}
                 remaining={remaining}
               />
+              <CashAppLinkSection
+                reservation={reservation}
+                eventDate={reservation.eventDate}
+                remaining={remaining}
+              />
               <CashPaymentSection
                 reservation={reservation}
                 eventDate={reservation.eventDate}
@@ -426,6 +629,13 @@ export function ReservationDetail() {
               />
             </div>
           </section>
+        )}
+
+        {!isCancelled && (
+          <CheckInPassSection
+            reservation={reservation}
+            eventDate={reservation.eventDate}
+          />
         )}
 
         {(reservation.payments ?? []).length > 0 && (

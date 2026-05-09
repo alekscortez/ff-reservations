@@ -133,6 +133,25 @@
       "regenerateHint": "Hay un link activo. Regenerar crea uno nuevo y reemplaza al anterior.",
       "create": "Crear link",
       "regenerate": "Regenerar link",
+      "sendSms": "Enviar por SMS",
+      "smsSent": "SMS enviado.",
+      "expiresAt": "Vence"
+    },
+    "cashapp": {
+      "title": "Link de Cash App",
+      "hint": "Pago Cash App autoservicio por los {{amount}} restantes. El cliente escanea/clica y paga sin intervención del personal.",
+      "create": "Crear link Cash App",
+      "regenerate": "Regenerar link Cash App",
+      "sendSms": "Enviar por SMS",
+      "smsSent": "SMS de Cash App enviado."
+    },
+    "checkInPass": {
+      "heading": "Pase de entrada",
+      "issue": "Emitir pase",
+      "reissue": "Reemitir pase",
+      "none": "Aún no se ha emitido pase.",
+      "consumed": "Pase ya consumido en la entrada el {{at}}.",
+      "openQr": "Abrir imagen QR",
       "expiresAt": "Vence"
     },
     "cash": {

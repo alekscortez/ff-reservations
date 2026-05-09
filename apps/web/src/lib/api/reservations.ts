@@ -146,3 +146,118 @@ export function useCancelReservation(reservationId: string, eventDate: string) {
     },
   });
 }
+
+export function useSendSquareLinkSms(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<{ sent: boolean; messageId?: string }>(
+        `/reservations/${reservationId}/payment-link/square/sms`,
+        { eventDate }
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: listKey(eventDate) });
+    },
+  });
+}
+
+export interface CashAppLinkResponse {
+  paymentLinkUrl: string;
+  paymentLinkId: string;
+  amount: number;
+  expiresAt?: string;
+}
+
+export function useCreateCashAppLink(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<CashAppLinkResponse>(
+        `/reservations/${reservationId}/cashapp-link/square`,
+        { eventDate }
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: listKey(eventDate) });
+    },
+  });
+}
+
+export function useSendCashAppLinkSms(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post<{ sent: boolean; messageId?: string }>(
+        `/reservations/${reservationId}/cashapp-link/square/sms`,
+        { eventDate }
+      );
+      return res;
+    },
+  });
+}
+
+export interface CheckInPassData {
+  passId?: string;
+  reservationId?: string;
+  token?: string | null;
+  url?: string | null;
+  qrUrl?: string | null;
+  status?: string;
+  issuedAt?: number;
+  issuedBy?: string;
+  expiresAt?: number;
+  consumedAt?: number;
+  consumedBy?: string | null;
+}
+
+export interface CheckInPassFetch {
+  issued?: boolean;
+  reused?: boolean;
+  pass?: CheckInPassData | null;
+  latestPass?: CheckInPassData | null;
+}
+
+const passKey = (reservationId: string, eventDate: string) =>
+  ['reservations', 'check-in-pass', reservationId, eventDate] as const;
+
+export function useCheckInPass(
+  eventDate: string | undefined,
+  reservationId: string | undefined,
+  enabled: boolean
+) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: passKey(reservationId ?? '', eventDate ?? ''),
+    enabled: enabled && Boolean(eventDate && reservationId),
+    queryFn: async () => {
+      const res = await api.get<CheckInPassFetch>(
+        `/reservations/${reservationId}/check-in-pass`,
+        { eventDate }
+      );
+      return res;
+    },
+  });
+}
+
+export function useIssueCheckInPass(reservationId: string, eventDate: string) {
+  const api = useApiClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (reissue: boolean) => {
+      const res = await api.post<CheckInPassFetch>(
+        `/reservations/${reservationId}/check-in-pass`,
+        { eventDate, reissue }
+      );
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: passKey(reservationId, eventDate) });
+      qc.invalidateQueries({ queryKey: listKey(eventDate) });
+    },
+  });
+}
