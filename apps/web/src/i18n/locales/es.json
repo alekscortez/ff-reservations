@@ -315,7 +315,7 @@
       "deadlineToggle": "Establecer fecha límite de pago",
       "deadlineDate": "Fecha límite",
       "deadlineTime": "Hora límite",
-      "deadlineHint": "Zona horaria America/Chicago. Por defecto: día siguiente a las 12:00 AM."
+      "deadlineHint": "Zona horaria {{tz}}. Por defecto: día siguiente a las {{time}}."
     },
     "method": {
       "square": "Square",

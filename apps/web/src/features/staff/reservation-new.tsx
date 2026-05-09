@@ -15,6 +15,7 @@ import {
   useSendSquareLinkSms,
 } from '@/lib/api/reservations';
 import { usePackagesList } from '@/lib/api/packages';
+import { useEventContext } from '@/lib/api/settings';
 import {
   useCrmSearch,
   useRescheduleCredits,
@@ -46,7 +47,9 @@ function nextDayDateString(): string {
   return d.toISOString().slice(0, 10);
 }
 
-const DEFAULT_DEADLINE_TZ = 'America/Chicago';
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
 const HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
 const FILTERS_STORAGE_KEY = 'ff_new_res_filters_v1';
 
@@ -85,7 +88,27 @@ export function ReservationNew() {
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
   const { data: events, isLoading: eventsLoading } = useEventsList();
-  const { data: tablesData, isLoading: tablesLoading } = useTablesForEvent(eventDate || null);
+  const { data: ctx } = useEventContext();
+  const operatingTz = ctx?.operatingTz || ctx?.settings?.operatingTz || 'America/Chicago';
+  const defaultDeadlineHour =
+    Number.isFinite(ctx?.settings?.defaultPaymentDeadlineHour)
+      ? Number(ctx?.settings?.defaultPaymentDeadlineHour)
+      : 0;
+  const defaultDeadlineMinute =
+    Number.isFinite(ctx?.settings?.defaultPaymentDeadlineMinute)
+      ? Number(ctx?.settings?.defaultPaymentDeadlineMinute)
+      : 0;
+  const sectionMapColors = ctx?.settings?.sectionMapColors;
+  const tablePollingSeconds = (() => {
+    const raw = ctx?.settings?.tableAvailabilityPollingSeconds;
+    if (raw === undefined || raw === null) return 10;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 10;
+  })();
+  const { data: tablesData, isLoading: tablesLoading } = useTablesForEvent(
+    eventDate || null,
+    { pollingSeconds: tablePollingSeconds }
+  );
   const { data: packages } = usePackagesList();
   const createHold = useCreateHold();
   const releaseHold = useReleaseHold(eventDate);
@@ -254,6 +277,31 @@ export function ReservationNew() {
       setValue('amountDue', tablePrice);
     }
   }, [heldTable, tablePrice, setValue, getValues]);
+
+  // Apply context-driven deadline defaults once on hold creation. We only
+  // touch the field if the user hasn't typed a non-default value (the
+  // restored-session check is implicit: the date/time fields will be set by
+  // the restore effect before this runs).
+  const [deadlineDefaultsApplied, setDeadlineDefaultsApplied] = useState(false);
+  useEffect(() => {
+    if (!hold || deadlineDefaultsApplied || !ctx) return;
+    // The form's defaultValues set the time to '00:00' and date to next-day
+    // (browser-local). Only override when those literal defaults are still in
+    // place, so we don't clobber an explicit user choice or a restored session.
+    if (
+      getValues('paymentDeadlineTime') === '00:00' &&
+      (defaultDeadlineHour !== 0 || defaultDeadlineMinute !== 0)
+    ) {
+      setValue(
+        'paymentDeadlineTime',
+        `${pad2(defaultDeadlineHour)}:${pad2(defaultDeadlineMinute)}`
+      );
+    }
+    setDeadlineDefaultsApplied(true);
+  }, [hold, ctx, deadlineDefaultsApplied, defaultDeadlineHour, defaultDeadlineMinute, getValues, setValue]);
+  useEffect(() => {
+    if (!hold) setDeadlineDefaultsApplied(false);
+  }, [hold]);
 
   // Digital payments are always PENDING and need a deadline.
   useEffect(() => {
@@ -563,7 +611,7 @@ export function ReservationNew() {
       packageId: form.packageId || undefined,
       receiptNumber: form.receiptNumber.trim() || undefined,
       paymentDeadlineAt,
-      paymentDeadlineTz: wantsDeadline ? DEFAULT_DEADLINE_TZ : undefined,
+      paymentDeadlineTz: wantsDeadline ? operatingTz : undefined,
     });
     if (useCredit && selectedCredit) {
       try {
@@ -897,6 +945,7 @@ export function ReservationNew() {
                       tables={tablesArray}
                       interactive={!createHold.isPending}
                       onSelect={handleHold}
+                      sectionColors={sectionMapColors}
                       className="mt-3"
                     />
                   ) : (
@@ -913,6 +962,7 @@ export function ReservationNew() {
                     tables={tablesArray}
                     interactive={!createHold.isPending}
                     onSelect={handleHold}
+                    sectionColors={sectionMapColors}
                   />
                   <div className="max-h-[70vh] overflow-y-auto rounded-md border border-border bg-background p-2">
                     <TableListView
@@ -1368,7 +1418,10 @@ export function ReservationNew() {
                     />
                   </div>
                   <p className="col-span-2 text-xs text-muted-foreground">
-                    {t('reservationNew.field.deadlineHint')}
+                    {t('reservationNew.field.deadlineHint', {
+                      tz: operatingTz,
+                      time: `${pad2(defaultDeadlineHour)}:${pad2(defaultDeadlineMinute)}`,
+                    })}
                   </p>
                 </div>
               )}

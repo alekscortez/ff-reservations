@@ -21,15 +21,29 @@ export interface TablesForEventResponse {
   tables: TableForEvent[];
 }
 
-export function useTablesForEvent(eventDate: string | null | undefined) {
+export interface UseTablesForEventOptions {
+  /** Polling interval in seconds. Pass 0 / null to disable polling. */
+  pollingSeconds?: number | null;
+}
+
+export function useTablesForEvent(
+  eventDate: string | null | undefined,
+  options?: UseTablesForEventOptions
+) {
   const api = useApiClient();
+  const seconds =
+    options?.pollingSeconds === null
+      ? 0
+      : Number.isFinite(options?.pollingSeconds)
+        ? Number(options?.pollingSeconds)
+        : 10;
   return useQuery({
     queryKey: ['tables', 'for-event', eventDate ?? ''],
     enabled: Boolean(eventDate),
     queryFn: async () => {
       return await api.get<TablesForEventResponse>(`/tables/for-event/${eventDate}`);
     },
-    refetchInterval: 10000,
+    refetchInterval: seconds > 0 ? seconds * 1000 : false,
   });
 }
 

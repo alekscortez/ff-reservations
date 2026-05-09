@@ -315,7 +315,7 @@
       "deadlineToggle": "Set payment deadline",
       "deadlineDate": "Deadline date",
       "deadlineTime": "Deadline time",
-      "deadlineHint": "Timezone America/Chicago. Default: next day at 12:00 AM."
+      "deadlineHint": "Timezone {{tz}}. Default: next day at {{time}}."
     },
     "method": {
       "square": "Square",

@@ -45,6 +45,48 @@ export function useAppSettings() {
   });
 }
 
+// Public-ish (staff/admin) runtime context loaded by the reservation flows.
+// Mirror of `runtimeSettingsSubset` on the backend.
+export interface RuntimeSettings {
+  operatingTz: string;
+  operatingDayCutoffHour: number;
+  defaultPaymentDeadlineHour: number;
+  defaultPaymentDeadlineMinute: number;
+  cashReceiptNumberRequired: boolean;
+  rescheduleCutoffHour: number;
+  rescheduleCutoffMinute: number;
+  dashboardPollingSeconds: number;
+  tableAvailabilityPollingSeconds: number;
+  clientAvailabilityPollingSeconds: number;
+  urgentPaymentWindowMinutes: number;
+  showClientFacingMap: boolean;
+  squareEnvMode?: string;
+  squareApplicationId?: string;
+  squareLocationId?: string;
+  squareWebPaymentsEnabled?: boolean;
+  sectionMapColors?: Record<string, string>;
+}
+
+export interface CurrentEventContext {
+  businessDate: string;
+  event: { eventId: string; eventDate: string; eventName: string } | null;
+  nextEvent: { eventId: string; eventDate: string; eventName: string } | null;
+  settings: RuntimeSettings;
+  operatingTz: string;
+  operatingDayCutoffHour: number;
+}
+
+const CONTEXT_KEY = ['events', 'context', 'current'] as const;
+
+export function useEventContext() {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: CONTEXT_KEY,
+    queryFn: async () => api.get<CurrentEventContext>('/events/context/current'),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useUpdateAppSettings() {
   const api = useApiClient();
   const qc = useQueryClient();
