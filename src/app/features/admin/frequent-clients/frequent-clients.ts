@@ -1,4 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
@@ -27,6 +28,7 @@ export class FrequentClients implements OnInit {
   private clientsApi = inject(FrequentClientsService);
   private tablesApi = inject(TablesService);
   private settingsApi = inject(SettingsService);
+  private destroyRef = inject(DestroyRef);
 
   items: FrequentClient[] = [];
   loading = false;
@@ -225,7 +227,9 @@ export class FrequentClients implements OnInit {
       const setting = this.editTableSettings[tableId];
       if (setting) {
         const group = this.buildSettingGroup(setting);
-        group.controls['paymentStatus'].valueChanges.subscribe((status) => {
+        group.controls['paymentStatus'].valueChanges
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe((status) => {
           const current = group.getRawValue() as FrequentClientTableSetting;
           const next = this.applyRules({
             ...current,
@@ -356,7 +360,9 @@ export class FrequentClients implements OnInit {
       const setting = this.editTableSettings[id];
       if (setting) {
         const group = this.buildSettingGroup(setting);
-        group.controls['paymentStatus'].valueChanges.subscribe((status) => {
+        group.controls['paymentStatus'].valueChanges
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe((status) => {
           const current = group.getRawValue() as FrequentClientTableSetting;
           const next = this.applyRules({
             ...current,

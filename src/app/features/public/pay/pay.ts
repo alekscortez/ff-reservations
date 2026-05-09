@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
-import { Subscription } from 'rxjs';
 import {
   CashAppChargeResponse,
   CashAppSessionResponse,
@@ -20,6 +20,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
   private api = inject(PublicPayService);
   private squareWebPayments = inject(SquareWebPaymentsService);
   private zone = inject(NgZone);
+  private destroyRef = inject(DestroyRef);
 
   loading = false;
   preparing = false;
@@ -34,26 +35,25 @@ export class PublicPayPage implements OnInit, OnDestroy {
   token = '';
 
   @ViewChild('cashAppHost') cashAppHost?: ElementRef<HTMLElement>;
-  private routeSub: Subscription | null = null;
   private cashAppDestroy: (() => Promise<void>) | null = null;
   private prepareRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly maxPrepareAttempts = 6;
 
   ngOnInit(): void {
-    this.routeSub = this.route.queryParamMap.subscribe((params) => {
-      this.eventDate = String(params.get('eventDate') ?? '').trim();
-      this.reservationId = String(params.get('reservationId') ?? '').trim();
-      this.token = String(params.get('token') ?? '').trim();
-      this.result = null;
-      this.clearPrepareRetryTimer();
-      void this.destroyCashAppWidget();
-      this.loadSession();
-    });
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        this.eventDate = String(params.get('eventDate') ?? '').trim();
+        this.reservationId = String(params.get('reservationId') ?? '').trim();
+        this.token = String(params.get('token') ?? '').trim();
+        this.result = null;
+        this.clearPrepareRetryTimer();
+        void this.destroyCashAppWidget();
+        this.loadSession();
+      });
   }
 
   ngOnDestroy(): void {
-    this.routeSub?.unsubscribe();
-    this.routeSub = null;
     this.clearPrepareRetryTimer();
     void this.destroyCashAppWidget();
   }
