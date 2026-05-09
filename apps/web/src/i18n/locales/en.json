@@ -66,6 +66,15 @@
       "status": "Status"
     }
   },
+  "publicMap": {
+    "title": "Live Table Availability",
+    "totalTables": "Total tables",
+    "available": "Available",
+    "unavailable": "Unavailable",
+    "lastUpdated": "Updated",
+    "sectionsHeading": "By section",
+    "priceRangeHint": "Tables from {{min}} to {{max}}."
+  },
   "adminUsers": {
     "listTitle": "Staff & Admin Users",
     "listDescription": "Manage Cognito staff/admin accounts.",

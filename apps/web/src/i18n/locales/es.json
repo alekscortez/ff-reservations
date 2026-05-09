@@ -66,6 +66,15 @@
       "status": "Estado"
     }
   },
+  "publicMap": {
+    "title": "Disponibilidad de mesas en vivo",
+    "totalTables": "Mesas totales",
+    "available": "Disponibles",
+    "unavailable": "No disponibles",
+    "lastUpdated": "Actualizado",
+    "sectionsHeading": "Por sección",
+    "priceRangeHint": "Mesas desde {{min}} hasta {{max}}."
+  },
   "adminUsers": {
     "listTitle": "Personal y administradores",
     "listDescription": "Gestiona cuentas del personal/administrador en Cognito.",

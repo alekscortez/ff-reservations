@@ -4,6 +4,7 @@ import { RequireAdmin, RequireStaffOrAdmin } from '@/components/route-guards';
 import { Login } from '@/features/auth/login';
 import { AuthCallback } from '@/features/auth/auth-callback';
 import { Unauthorized } from '@/features/auth/unauthorized';
+import { PublicMap } from '@/features/public/map';
 import { StaffDashboard } from '@/features/staff/dashboard';
 import { StaffEvents } from '@/features/staff/events';
 import { EventForm } from '@/features/staff/event-form';
@@ -26,6 +27,8 @@ export function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route path="/map" element={<PublicMap />} />
+        <Route path="/availability" element={<PublicMap />} />
         <Route
           path="/staff/dashboard"
           element={
