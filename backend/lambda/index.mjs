@@ -91,7 +91,12 @@ const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
 const TABLE_TEMPLATE = JSON.parse(fs.readFileSync(TABLE_TEMPLATE_PATH, "utf8"));
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+// maxAttempts: 2 keeps p95 down on TransactWrite contention (hold->reserve,
+// payment recording). SDK default is 3 with exponential backoff, which can
+// stack 1-2s of retry latency before the caller sees the failure. Two
+// attempts is one retry; the rest of the system handles ConditionalCheck
+// failures explicitly anyway.
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 2 }));
 const cognito = new CognitoIdentityProviderClient({});
 const secretsManager = new SecretsManagerClient({});
 const sns = new SNSClient({});
