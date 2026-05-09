@@ -66,6 +66,22 @@ export function normalizePhoneToDigits(
   return e164 ? e164.replace(/\D/g, '') : '';
 }
 
+export function formatPhoneForDisplay(phone: string | null | undefined): string {
+  const raw = String(phone ?? '').trim();
+  if (!raw) return '';
+  const e164 = normalizePhoneToE164(raw, 'US');
+  if (!e164) return raw;
+  if (e164.startsWith('+1') && e164.length === 12) {
+    const n = e164.slice(2);
+    return `+1 (${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`;
+  }
+  if (e164.startsWith('+52') && e164.length === 13) {
+    const n = e164.slice(3);
+    return `+52 ${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}`;
+  }
+  return e164;
+}
+
 export function inferPhoneCountryFromE164(
   phone: string | null | undefined
 ): PhoneCountry | null {

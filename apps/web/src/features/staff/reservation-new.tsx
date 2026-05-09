@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@/lib/api-client';
 import { useApiClient } from '@/lib/use-api-client';
 import type { ReservationItem } from '@ff/core';
+import { formatPhoneForDisplay, inferPhoneCountryFromE164 } from '@ff/core';
 import { useEventsList } from '@/lib/api/events';
 import { useTablesForEvent, type TableForEvent } from '@/lib/api/tables';
 import { useCreateHold, useReleaseHold, type Hold } from '@/lib/api/holds';
@@ -62,6 +63,7 @@ interface PersistedHoldSession {
 export function ReservationNew() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [eventDate, setEventDate] = useState<string>('');
   const [hold, setHold] = useState<Hold | null>(null);
@@ -82,12 +84,21 @@ export function ReservationNew() {
   }, [events]);
 
   useEffect(() => {
-    if (!eventDate && sortedEvents.length > 0) {
-      const today = new Date().toISOString().slice(0, 10);
-      const next = sortedEvents.find((e) => e.eventDate >= today) ?? sortedEvents[0];
-      setEventDate(next.eventDate);
+    if (eventDate || sortedEvents.length === 0) return;
+    // Deep-link: ?eventDate=YYYY-MM-DD takes priority over the auto-pick if it
+    // matches an active event.
+    const requested = searchParams.get('eventDate') ?? '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(requested)) {
+      const match = sortedEvents.find((e) => e.eventDate === requested);
+      if (match) {
+        setEventDate(match.eventDate);
+        return;
+      }
     }
-  }, [eventDate, sortedEvents]);
+    const today = new Date().toISOString().slice(0, 10);
+    const next = sortedEvents.find((e) => e.eventDate >= today) ?? sortedEvents[0];
+    setEventDate(next.eventDate);
+  }, [eventDate, sortedEvents, searchParams]);
 
   useEffect(() => {
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
@@ -397,8 +408,16 @@ export function ReservationNew() {
   function applyCrmMatch(client: CrmClient) {
     if (client.name) setValue('customerName', client.name, { shouldDirty: true });
     if (client.phone) setValue('phone', client.phone, { shouldDirty: true });
-    if (client.phoneCountry === 'US' || client.phoneCountry === 'MX') {
-      setValue('phoneCountry', client.phoneCountry, { shouldDirty: true });
+    // Prefer the explicit phoneCountry the CRM stores; fall back to inferring
+    // from the E.164 phone (covers legacy rows with no phoneCountry field).
+    const explicit =
+      client.phoneCountry === 'US' || client.phoneCountry === 'MX'
+        ? client.phoneCountry
+        : null;
+    const inferred = inferPhoneCountryFromE164(client.phone);
+    const country = explicit ?? inferred;
+    if (country) {
+      setValue('phoneCountry', country, { shouldDirty: true });
     }
   }
 
@@ -715,8 +734,8 @@ export function ReservationNew() {
                   {...register('phoneCountry')}
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 >
-                  <option value="MX">MX</option>
-                  <option value="US">US</option>
+                  <option value="MX">🇲🇽 +52</option>
+                  <option value="US">🇺🇸 +1</option>
                 </select>
               </div>
             </div>
@@ -744,7 +763,7 @@ export function ReservationNew() {
                             {c.name ?? '—'}
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">
-                            {c.phone}
+                            {formatPhoneForDisplay(c.phone)}
                           </span>
                         </button>
                       </li>
