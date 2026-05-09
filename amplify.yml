@@ -1,0 +1,23 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm install 22 && nvm use 22
+        - node --version
+        - corepack enable
+        - corepack prepare pnpm@11.0.9 --activate
+        - pnpm --version
+        - pnpm install --frozen-lockfile
+    build:
+      commands:
+        - pnpm run build
+  artifacts:
+    baseDirectory: apps/web/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - apps/**/node_modules/**/*
+      - packages/**/node_modules/**/*
