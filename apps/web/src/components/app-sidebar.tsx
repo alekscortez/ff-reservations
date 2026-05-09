@@ -6,7 +6,6 @@ import {
   IconCheck,
   IconChartBar,
   IconDashboard,
-  IconFlame,
   IconGift,
   IconListDetails,
   IconLock,
@@ -117,7 +116,11 @@ export function AppSidebar({ showAdmin, user, onSignOut, ...props }: AppSidebarP
               className="cursor-pointer data-[slot=sidebar-menu-button]:p-1.5!"
               onClick={() => navigate('/staff/dashboard')}
             >
-              <IconFlame className="size-5! text-orange-500" />
+              <img
+                src="/assets/ff-logo.svg"
+                alt="Famoso Fuego"
+                className="size-7 shrink-0 object-contain"
+              />
               <span className="text-base font-semibold">
                 {t('app.brandShort')}
               </span>
