@@ -345,38 +345,30 @@ export function ReservationNew() {
                 className="mt-3"
               />
             )}
-            <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: '#16a34a' }}
-                />{' '}
-                {t('reservationNew.legend.available')}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: '#f59e0b' }}
-                />{' '}
-                {t('reservationNew.legend.hold')}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 rounded-full"
-                  style={{ background: '#dc2626' }}
-                />{' '}
-                {t('reservationNew.legend.reserved')}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <span className="text-brand-700">
+                  {t('reservationNew.legend.available')}
+                </span>
+                {(['A', 'B', 'C', 'D', 'E'] as const).map((s) => (
+                  <span
+                    key={s}
+                    aria-hidden
+                    title={`Section ${s}`}
+                    className="inline-block h-3 w-3 rounded-full"
+                    style={{
+                      background: { A: '#ec008c', B: '#2e3192', C: '#00aeef', D: '#f7941d', E: '#711411' }[s],
+                    }}
+                  />
+                ))}
               </span>
               <span className="inline-flex items-center gap-1">
                 <span
                   aria-hidden
                   className="inline-block h-3 w-3 rounded-full"
                   style={{ background: '#9ca3af' }}
-                />{' '}
-                {t('reservationNew.legend.disabled')}
+                />
+                {t('reservationNew.legend.unavailable')}
               </span>
             </div>
           </section>

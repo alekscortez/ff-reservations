@@ -290,10 +290,8 @@
     "pickTable": "Pick a table",
     "section": "Section {{section}}",
     "legend": {
-      "available": "Available",
-      "hold": "On hold",
-      "reserved": "Reserved",
-      "disabled": "Disabled"
+      "available": "Available — color by section:",
+      "unavailable": "Held / reserved / disabled"
     },
     "heldTable": "Holding {{section}}-{{id}}",
     "holdExpired": "EXPIRED — restart by picking a table",

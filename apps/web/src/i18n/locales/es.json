@@ -290,10 +290,8 @@
     "pickTable": "Selecciona una mesa",
     "section": "Sección {{section}}",
     "legend": {
-      "available": "Disponible",
-      "hold": "Apartada",
-      "reserved": "Reservada",
-      "disabled": "Inhabilitada"
+      "available": "Disponible — color por sección:",
+      "unavailable": "Apartada / reservada / inhabilitada"
     },
     "heldTable": "Apartando {{section}}-{{id}}",
     "holdExpired": "EXPIRADO — vuelve a elegir una mesa",
