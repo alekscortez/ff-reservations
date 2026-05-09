@@ -443,6 +443,7 @@ export const handler = async (event) => {
       json,
       requireCustomerOwnership,
       getProfile: meService.getProfile,
+      deleteAccount: meService.deleteAccount,
     });
     if (meRouteResponse) return meRouteResponse;
 

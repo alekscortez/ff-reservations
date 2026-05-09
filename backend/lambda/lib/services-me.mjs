@@ -14,6 +14,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import {
   AdminGetUserCommand,
+  AdminDeleteUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 export function createMeService({
@@ -114,5 +115,62 @@ export function createMeService({
     };
   }
 
-  return { getProfile };
+  async function deleteAccount(sub) {
+    // Soft-delete the CRM record before deleting the Cognito user so
+    // the timestamp + sub are preserved for audit. CRM records are
+    // load-bearing for staff history (totalReservations / totalSpend
+    // referenced from reservation flows), so we never hard-delete.
+    let phone = null;
+    try {
+      const identity = await fetchCognitoUser(sub);
+      phone = identity.phone;
+    } catch (err) {
+      if (err?.name !== "UserNotFoundException") throw err;
+      // User already gone — idempotent delete, nothing more to do.
+      return { deleted: true, alreadyGone: true };
+    }
+
+    if (phone && CLIENTS_TABLE) {
+      try {
+        await ddb.send(
+          new UpdateCommand({
+            TableName: CLIENTS_TABLE,
+            Key: { PK: "CLIENT", SK: `PHONE#${phone}` },
+            UpdateExpression:
+              "SET deletedAt = :now, deletedSub = :s, cognitoSub = :nullsub",
+            ExpressionAttributeValues: {
+              ":now": Date.now(),
+              ":s": sub,
+              ":nullsub": null,
+            },
+            ConditionExpression: "attribute_exists(SK)",
+          })
+        );
+      } catch (err) {
+        // ConditionalCheckFailed = no CRM record for this phone, fine.
+        if (err?.name !== "ConditionalCheckFailedException") {
+          console.warn("me_delete_crm_softdelete_failed", {
+            sub,
+            errorName: err?.name,
+          });
+        }
+      }
+    }
+
+    try {
+      await cognito.send(
+        new AdminDeleteUserCommand({
+          UserPoolId: userPoolId,
+          Username: sub,
+        })
+      );
+    } catch (err) {
+      if (err?.name !== "UserNotFoundException") throw err;
+      // Race: user disappeared between fetch and delete; treat as success.
+    }
+
+    return { deleted: true };
+  }
+
+  return { getProfile, deleteAccount };
 }

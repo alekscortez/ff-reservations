@@ -21,3 +21,9 @@ GET {{baseUrl}}/me/profile
 ### Staff endpoints reject the customer token (audience mismatch) → 401
 GET {{baseUrl}}/events
 Authorization: Bearer {{customerAccessToken}}
+
+### DELETE /me — soft-deletes the CRM record (sets deletedAt + clears
+### cognitoSub) and AdminDeleteUser the Cognito user. Idempotent — a
+### second call returns { deleted: true, alreadyGone: true }.
+DELETE {{baseUrl}}/me
+Authorization: Bearer {{customerAccessToken}}
