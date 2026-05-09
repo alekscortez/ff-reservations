@@ -1,6 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, Renderer2, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { AuthService } from '../../auth/auth.service';
 
 @Component({
@@ -11,6 +11,8 @@ import { AuthService } from '../../auth/auth.service';
 })
 export class Sidebar {
   private auth = inject(AuthService);
+  private renderer = inject(Renderer2);
+  private doc = inject(DOCUMENT);
 
   groups$ = this.auth.groups$();
   isAdmin$ = this.auth.hasGroup$('Admin');
@@ -20,8 +22,8 @@ export class Sidebar {
   role$ = this.auth.roleLabel$();
 
   closeMobileNav(): void {
-    document.body.classList.remove('mobile-nav-open');
-    document.documentElement.classList.remove('mobile-nav-open');
+    this.renderer.removeClass(this.doc.body, 'mobile-nav-open');
+    this.renderer.removeClass(this.doc.documentElement, 'mobile-nav-open');
   }
 
   logout(): void {

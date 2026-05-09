@@ -1,6 +1,6 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, Renderer2, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { AuthService } from '../../auth/auth.service';
 import { Subscription, catchError, filter, map, of, switchMap } from 'rxjs';
 import { EventsService } from '../../http/events.service';
@@ -20,6 +20,9 @@ export class Topbar implements OnInit, OnDestroy {
   private router = inject(Router);
   private eventsApi = inject(EventsService);
   private reservationsApi = inject(ReservationsService);
+  private renderer = inject(Renderer2);
+  private doc = inject(DOCUMENT);
+  private mobileNavOpen = false;
 
   isAuthenticated$ = this.auth.isAuthenticated$();
 
@@ -69,8 +72,10 @@ export class Topbar implements OnInit, OnDestroy {
   }
 
   toggleMobileNav(): void {
-    document.body.classList.toggle('mobile-nav-open');
-    document.documentElement.classList.toggle('mobile-nav-open');
+    this.mobileNavOpen = !this.mobileNavOpen;
+    const apply = this.mobileNavOpen ? 'addClass' : 'removeClass';
+    this.renderer[apply](this.doc.body, 'mobile-nav-open');
+    this.renderer[apply](this.doc.documentElement, 'mobile-nav-open');
   }
 
   toggleQuickActions(): void {
