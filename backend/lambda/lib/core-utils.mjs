@@ -17,14 +17,19 @@ export function noContent(statusCode = 204, extraHeaders = {}) {
   };
 }
 
+// Distinguish "no body" (returns null — caller decides if that's a 400)
+// from "malformed JSON" (throws 400 here so we don't conflate the two).
+// Previously both returned null and route handlers couldn't tell.
 export function getBody(event) {
   if (!event.body) return null;
+  const raw = event.isBase64Encoded
+    ? Buffer.from(event.body, "base64").toString("utf8")
+    : String(event.body);
+  if (!raw.trim()) return null;
   try {
-    return event.isBase64Encoded
-      ? JSON.parse(Buffer.from(event.body, "base64").toString("utf8"))
-      : JSON.parse(event.body);
+    return JSON.parse(raw);
   } catch {
-    return null;
+    throw httpError(400, "Request body must be valid JSON");
   }
 }
 
