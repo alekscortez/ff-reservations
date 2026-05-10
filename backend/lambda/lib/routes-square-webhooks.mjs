@@ -1,4 +1,4 @@
-function getHeader(headers, name) {
+export function getHeader(headers, name) {
   if (!headers || typeof headers !== "object") return "";
   const target = String(name ?? "").toLowerCase();
   for (const [key, value] of Object.entries(headers)) {
@@ -9,7 +9,7 @@ function getHeader(headers, name) {
   return "";
 }
 
-function getRawBody(event) {
+export function getRawBody(event) {
   if (!event?.body) return "";
   if (event.isBase64Encoded) {
     return Buffer.from(event.body, "base64").toString("utf8");
@@ -17,7 +17,7 @@ function getRawBody(event) {
   return String(event.body);
 }
 
-function buildRequestUrl(event) {
+export function buildRequestUrl(event) {
   const headers = event?.headers ?? {};
   const proto = getHeader(headers, "x-forwarded-proto") || "https";
   const host =
