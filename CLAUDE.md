@@ -4,6 +4,8 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 > **Branch state (2026-05-09):** `main` runs the Angular 21 SPA in production. A React + Expo monorepo port of this app exists on the `react` branch (snapshot tag `react-port-snapshot-2026-05-09`) — paused mid-Phase 5 with known parity gaps documented in `.line-by-line-audit-2026-05-10.md` on that branch. Resume that work on the `react` branch; do not introduce React, pnpm, Vite, or `apps/`/`packages/` changes on `main`.
 
+> **Companion mobile app (2026-05-10):** Customer-facing iOS/Android mobile app lives in a SEPARATE repo at `github.com/alekscortez/ff-customer-mobile` (Expo SDK 54 monorepo). Backend `/auth/customer/*` and `/me/*` routes power it. End-to-end booking loop runs in Expo Go today against production: phone OTP → events list → table picker → confirm → Square hosted checkout (WebView fallback) → QR check-in pass. Native Square In-App Payments SDK is scaffolded but gated on an EAS Build dev-client. See `~/.claude/projects/-Users-alekscortez-WebstormProjects-ff-reservations/memory/ff_customer_mobile_status.md` for the current state of that initiative.
+
 ## Stack
 
 - **Frontend:** Angular 21 (standalone components), Tailwind, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering
@@ -89,6 +91,7 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 - Cash App "session" routes are public, gated by a 256-bit hex token (two concatenated UUIDs), compared via `crypto.timingSafeEqual`.
 - Reservation history lives in `RES_TABLE` under `SK = HIST#{reservationId}#{epoch}#{eventId}`. Writes are fire-and-forget; failures emit `console.error("reservation_history_write_error", ...)` which is mapped to the `ReservationHistoryWriteFailureCount` metric (CW filter `ff-res-history-write-error`) and alarms via `ff-res-history-write-errors-5m` to the `ff-res-ops-alerts` SNS topic (audit M9 closed via observability — DLQ deferred).
 - `releaseOverdueReservationsForEventDate` is owned by an EventBridge cron (audit P2-M2). The Lambda handler dispatches scheduled invocations to `runScheduledMaintenance`, which calls `releaseOverdueReservationsForAllActiveEvents`. Anonymous request paths (`/public/availability`, `/cashapp/session*`) never trigger release; staff `GET /reservations` and payment routes still do for short-window freshness.
+- **`createReservation` auto-clamps past *default* `paymentDeadlineAt` (PR #42, 2026-05-10).** When the caller omits `paymentDeadlineAt` and the computed default (`event_date + 1 day at defaultPaymentDeadlineHour:Minute`) lands `<= now` — typical at 2-5 AM on the active business day's event because the operating-day cutoff hasn't rolled yet — the backend extends the deadline to `now + 4h` in the same tz instead of throwing 400. Explicit past deadlines from clients still throw (user error the staff form should surface, not silently fix). Cron sweep auto-releases unpaid reservations regardless, so the 4h extension doesn't lock tables longer than necessary. See `services-reservations.mjs:createReservation` + the `usingDefault` branch.
 
 ## DynamoDB tables
 
