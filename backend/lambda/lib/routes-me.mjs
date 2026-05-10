@@ -8,7 +8,8 @@
 //   DELETE /me                                        — delete account
 //   POST   /me/holds                                  — create own hold (rate-limited)
 //   POST   /me/reservations                           — upgrade own hold → reservation
-//   POST   /me/reservations/{id}/payment/square       — pay via Square SDK
+//   POST   /me/reservations/{id}/payment/square       — pay via Square SDK (in-app)
+//   POST   /me/reservations/{id}/payment-link/square  — Square hosted payment link (WebView)
 //   PUT    /me/reservations/{id}/cancel               — self-cancel (≥24h, credit only)
 //   GET    /me/reservations/{id}/check-in-pass        — re-fetch own pass
 //   POST   /me/reservations/{id}/wallet-pass          — Apple Wallet (501 until cert)
@@ -66,6 +67,8 @@ export async function handleMeRoute(ctx) {
     getActivePassForReservation,
     // payments
     createSquarePayment,
+    createSquarePaymentLink,
+    setReservationPaymentLinkWindow,
     addReservationPayment,
     refundSquarePayment,
     appendReservationHistory,
@@ -364,6 +367,99 @@ export async function handleMeRoute(ctx) {
           paymentId: squarePaymentId,
           status: String(square?.payment?.status ?? "").trim(),
           receiptUrl: String(square?.payment?.receipt_url ?? "").trim() || null,
+        },
+      },
+      cors
+    );
+  }
+
+  const meReservationPaymentLinkMatch = path.match(
+    /^\/me\/reservations\/([^/]+)\/payment-link\/square$/
+  );
+  if (meReservationPaymentLinkMatch && method === "POST") {
+    const sub = requireCustomerOwnership(event);
+    const reservationId = meReservationPaymentLinkMatch[1];
+    const body = (await getBody(event)) ?? {};
+    const eventDate = String(body?.eventDate ?? "").trim();
+    if (!isValidEventDate(eventDate)) {
+      return json(400, { message: "eventDate must be YYYY-MM-DD" }, cors);
+    }
+
+    const reservation = await getReservationById(eventDate, reservationId);
+    if (!reservation) return json(404, { message: "Reservation not found" }, cors);
+    if (String(reservation?.customerCognitoSub ?? "") !== sub) {
+      return json(403, { message: "Reservation is not yours" }, cors);
+    }
+    if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
+      return json(409, { message: "Reservation is not in a payable state" }, cors);
+    }
+    const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
+    if (paymentStatus === "PAID" || paymentStatus === "COURTESY") {
+      return json(409, { message: "Reservation is already settled" }, cors);
+    }
+    if (paymentStatus !== "PENDING" && paymentStatus !== "PARTIAL") {
+      return json(409, { message: "Reservation is not eligible for online payment" }, cors);
+    }
+
+    const amountDue = Number(reservation?.amountDue ?? 0);
+    const paid = Number(reservation?.depositAmount ?? 0);
+    const remainingAmount = Math.max(0, Number((amountDue - paid).toFixed(2)));
+    if (remainingAmount <= 0) {
+      return json(409, { message: "Reservation is already paid" }, cors);
+    }
+
+    if (typeof createSquarePaymentLink !== "function") {
+      return json(503, { message: "Payment link service is unavailable" }, cors);
+    }
+
+    const actor = actorLabelFromSub(sub);
+    const square = await createSquarePaymentLink({
+      reservationId,
+      eventDate,
+      tableId: String(reservation?.tableId ?? "").trim(),
+      customerName: String(reservation?.customerName ?? "").trim(),
+      phone: String(reservation?.phone ?? "").trim(),
+      amount: remainingAmount,
+      note: "Customer self-payment",
+    });
+    const paymentLink = square?.paymentLink ?? {};
+    const paymentLinkUrl = String(paymentLink?.url ?? "").trim();
+    const paymentLinkId = String(paymentLink?.id ?? "").trim();
+    if (!paymentLinkUrl) {
+      return json(502, { message: "Square payment link response missing url" }, cors);
+    }
+
+    let reservationAfterLink = reservation;
+    if (typeof setReservationPaymentLinkWindow === "function") {
+      reservationAfterLink = await setReservationPaymentLinkWindow({
+        eventDate,
+        reservationId,
+        paymentLinkId,
+        paymentLinkUrl,
+        actor,
+      });
+    }
+
+    return json(
+      200,
+      {
+        reservation: {
+          reservationId,
+          eventDate,
+          paymentStatus:
+            reservationAfterLink?.paymentStatus ?? reservation?.paymentStatus ?? null,
+          amountDue,
+          paid,
+          remainingAmount,
+          paymentDeadlineAt:
+            reservationAfterLink?.paymentDeadlineAt ??
+            reservation?.paymentDeadlineAt ??
+            null,
+        },
+        paymentLink: {
+          id: paymentLinkId || null,
+          url: paymentLinkUrl,
+          amount: remainingAmount,
         },
       },
       cors
