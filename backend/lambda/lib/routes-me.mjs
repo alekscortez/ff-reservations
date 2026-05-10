@@ -10,6 +10,7 @@
 //   POST   /me/reservations                           — upgrade own hold → reservation
 //   POST   /me/reservations/{id}/payment/square       — pay via Square SDK (in-app)
 //   POST   /me/reservations/{id}/payment-link/square  — Square hosted payment link (WebView)
+//   POST   /me/reservations/{id}/reschedule           — atomic cancel-with-credit + rebook
 //   PUT    /me/reservations/{id}/cancel               — self-cancel (≥24h, credit only)
 //   GET    /me/reservations/{id}/check-in-pass        — re-fetch own pass
 //   POST   /me/reservations/{id}/wallet-pass          — Apple Wallet (501 until cert)
@@ -22,6 +23,7 @@
 // not trusted (defense in depth).
 
 const SELF_CANCEL_HOURS_BEFORE_EVENT = 24;
+const RESCHEDULE_HOURS_BEFORE_EVENT = 24;
 const HOLD_TTL_FOR_CUSTOMER_SECONDS = 600; // 10 minutes (informational; service uses settings)
 
 function actorLabelFromSub(sub) {
@@ -63,6 +65,7 @@ export async function handleMeRoute(ctx) {
     createHold,
     createReservation,
     cancelReservation,
+    rescheduleReservationForCustomer,
     // pass
     getActivePassForReservation,
     // payments
@@ -464,6 +467,57 @@ export async function handleMeRoute(ctx) {
       },
       cors
     );
+  }
+
+  const meReservationRescheduleMatch = path.match(
+    /^\/me\/reservations\/([^/]+)\/reschedule$/
+  );
+  if (meReservationRescheduleMatch && method === "POST") {
+    const sub = requireCustomerOwnership(event);
+    const originalReservationId = meReservationRescheduleMatch[1];
+    const body = (await getBody(event)) ?? {};
+
+    const originalEventDate = String(body?.originalEventDate ?? "").trim();
+    const newEventDate = String(body?.newEventDate ?? "").trim();
+    const newTableId = String(body?.newTableId ?? "").trim();
+    const newHoldId = String(body?.newHoldId ?? "").trim();
+    const customerName = String(body?.customerName ?? "").trim();
+    const newPaymentDeadlineAt = String(body?.newPaymentDeadlineAt ?? "").trim();
+    const newPaymentDeadlineTz = String(body?.newPaymentDeadlineTz ?? "").trim();
+    const reason =
+      String(body?.reason ?? "").trim() || "Customer rescheduled via mobile app";
+
+    if (!isValidEventDate(originalEventDate)) {
+      return json(400, { message: "originalEventDate must be YYYY-MM-DD" }, cors);
+    }
+    if (!isValidEventDate(newEventDate)) {
+      return json(400, { message: "newEventDate must be YYYY-MM-DD" }, cors);
+    }
+    if (!newTableId) return json(400, { message: "newTableId is required" }, cors);
+    if (!newHoldId) return json(400, { message: "newHoldId is required" }, cors);
+    if (!customerName) {
+      return json(400, { message: "customerName is required" }, cors);
+    }
+    if (typeof rescheduleReservationForCustomer !== "function") {
+      return json(503, { message: "Reschedule service is unavailable" }, cors);
+    }
+
+    const result = await rescheduleReservationForCustomer({
+      originalEventDate,
+      originalReservationId,
+      newEventDate,
+      newTableId,
+      newHoldId,
+      newCustomerName: customerName,
+      customerCognitoSub: sub,
+      newPaymentDeadlineAt: newPaymentDeadlineAt || undefined,
+      newPaymentDeadlineTz: newPaymentDeadlineTz || undefined,
+      reason,
+      actor: actorLabelFromSub(sub),
+      hoursBefore: RESCHEDULE_HOURS_BEFORE_EVENT,
+    });
+
+    return json(201, result, cors);
   }
 
   const meReservationCancelMatch = path.match(

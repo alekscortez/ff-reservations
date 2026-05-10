@@ -839,6 +839,8 @@ export function createReservationsService(
       },
       at: cancelAt,
     });
+
+    return cancelled;
   }
 
   async function createReservation(payload, user, isAdmin) {
@@ -1159,6 +1161,240 @@ export function createReservationsService(
     };
   }
 
+  // Customer-side reschedule. Cancels the original with RESCHEDULE_CREDIT,
+  // creates the new reservation from a hold the mobile already created,
+  // then applies the credit to the new reservation. Each step has its own
+  // transactional guard inside the subroutine; this orchestrator's job is
+  // ordering + customer-facing validation (24h gate, ownership, payment
+  // status). The cancel-credit-rebook ordering is deliberate: if cancel
+  // succeeds but createReservation fails afterward, the customer keeps
+  // the credit and can re-book manually. If createReservation succeeds
+  // but credit application fails, the new reservation simply remains
+  // PENDING and the credit stays ACTIVE for retry — strictly better than
+  // a half-rolled-back state.
+  async function rescheduleReservationForCustomer(payload) {
+    const originalEventDate = String(payload?.originalEventDate ?? "").trim();
+    const originalReservationId = String(payload?.originalReservationId ?? "").trim();
+    const newEventDate = String(payload?.newEventDate ?? "").trim();
+    const newTableId = String(payload?.newTableId ?? "").trim();
+    const newHoldId = String(payload?.newHoldId ?? "").trim();
+    const newCustomerName = String(payload?.newCustomerName ?? "").trim();
+    const customerCognitoSub = String(payload?.customerCognitoSub ?? "").trim();
+    const newPaymentDeadlineAt = String(payload?.newPaymentDeadlineAt ?? "").trim();
+    const newPaymentDeadlineTz = String(payload?.newPaymentDeadlineTz ?? "").trim();
+    const reason = String(payload?.reason ?? "").trim() || "Customer rescheduled via mobile app";
+    const actor = String(payload?.actor ?? "").trim();
+    const hoursBefore =
+      Number.isFinite(Number(payload?.hoursBefore)) && Number(payload?.hoursBefore) > 0
+        ? Number(payload?.hoursBefore)
+        : 24;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(originalEventDate)) {
+      throw httpError(400, "originalEventDate must be YYYY-MM-DD");
+    }
+    if (!originalReservationId) {
+      throw httpError(400, "originalReservationId is required");
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newEventDate)) {
+      throw httpError(400, "newEventDate must be YYYY-MM-DD");
+    }
+    if (!newTableId) throw httpError(400, "newTableId is required");
+    if (!newHoldId) throw httpError(400, "newHoldId is required");
+    if (!newCustomerName) throw httpError(400, "newCustomerName is required");
+    if (!customerCognitoSub) {
+      throw httpError(400, "customerCognitoSub is required");
+    }
+    if (!actor) throw httpError(400, "actor is required");
+
+    const original = await getReservationById(originalEventDate, originalReservationId);
+    if (!original) {
+      throw httpError(404, "Original reservation not found");
+    }
+    if (String(original?.customerCognitoSub ?? "") !== customerCognitoSub) {
+      throw httpError(403, "Reservation is not yours");
+    }
+    if (String(original?.status ?? "").toUpperCase() !== "CONFIRMED") {
+      throw httpError(
+        409,
+        `Reservation must be CONFIRMED to reschedule. Current status: ${
+          String(original?.status ?? "").toUpperCase() || "UNKNOWN"
+        }`
+      );
+    }
+    const paymentStatus = String(original?.paymentStatus ?? "").toUpperCase();
+    if (paymentStatus !== "PAID" && paymentStatus !== "PARTIAL") {
+      throw httpError(
+        409,
+        "Only paid or partially paid reservations can be rescheduled. Cancel and book a new table instead."
+      );
+    }
+
+    // 24h-before-event gate. Mirrors routes-me self-cancel: 23:59:59Z of
+    // the event date as the effective end-of-event marker, minus the
+    // policy hours. Slightly conservative (pushes the cutoff earlier in
+    // local time) which is the right direction for a customer-facing
+    // rule.
+    const eventEndUtcMs = Date.parse(`${originalEventDate}T23:59:59Z`);
+    if (!Number.isFinite(eventEndUtcMs)) {
+      throw httpError(500, "Invalid event date");
+    }
+    const cutoffMs = eventEndUtcMs - hoursBefore * 60 * 60 * 1000;
+    if (Date.now() >= cutoffMs) {
+      throw httpError(
+        409,
+        `Reschedule is only allowed at least ${hoursBefore} hours before the event.`
+      );
+    }
+
+    const originalTableId = String(original?.tableId ?? "").trim();
+    if (!originalTableId) {
+      throw httpError(500, "Original reservation is missing tableId");
+    }
+
+    // Step 1: cancel original with RESCHEDULE_CREDIT.
+    const cancelled = await cancelReservation(
+      originalEventDate,
+      originalReservationId,
+      originalTableId,
+      actor,
+      reason,
+      { resolutionType: "RESCHEDULE_CREDIT" }
+    );
+    const creditId = String(cancelled?.creditId ?? "").trim();
+    const creditAmountTotal = Number(cancelled?.creditAmount ?? 0);
+    const creditRemainingFromCancel = Number(cancelled?.creditRemainingAmount ?? 0);
+
+    // Step 2: create the new reservation from the hold the mobile already
+    // made. If this throws, the customer is left with a credit they can
+    // apply manually — surface that explicitly so the mobile UX can
+    // direct them to /me/credits.
+    let newReservationId = null;
+    try {
+      const created = await createReservation(
+        {
+          eventDate: newEventDate,
+          tableId: newTableId,
+          holdId: newHoldId,
+          customerName: newCustomerName,
+          phone: String(original?.phone ?? "").trim(),
+          phoneCountry: String(original?.phoneCountry ?? "US").trim() || "US",
+          customerCognitoSub,
+          paymentDeadlineAt: newPaymentDeadlineAt || undefined,
+          paymentDeadlineTz: newPaymentDeadlineTz || undefined,
+        },
+        actor,
+        false
+      );
+      newReservationId = String(created?.reservationId ?? "").trim();
+    } catch (err) {
+      const message = String(err?.message ?? err ?? "");
+      throw httpError(
+        502,
+        `Reschedule could not complete: ${message}. Your previous reservation has been cancelled and a credit (${creditId || "pending"}) is on your account. Apply it on a new booking.`
+      );
+    }
+
+    if (!newReservationId) {
+      throw httpError(
+        502,
+        `Reschedule did not return a new reservation id. Credit ${creditId || "pending"} is on your account.`
+      );
+    }
+
+    // Step 3: apply credit to the new reservation. Best-effort: if it
+    // fails, the new reservation stays PENDING and the credit stays
+    // ACTIVE. The mobile UX can prompt the customer to re-apply or pay
+    // via Square.
+    let appliedCredit = null;
+    if (creditId && creditRemainingFromCancel > 0) {
+      const newReservation = await getReservationById(newEventDate, newReservationId);
+      const newAmountDue = Number(newReservation?.amountDue ?? 0);
+      const newPaid = Number(newReservation?.depositAmount ?? 0);
+      const newRemaining = Math.max(0, Number((newAmountDue - newPaid).toFixed(2)));
+      if (newRemaining > 0) {
+        const applyAmount = Number(
+          Math.min(creditRemainingFromCancel, newRemaining).toFixed(2)
+        );
+        try {
+          const updated = await paymentRecording.addReservationPayment(
+            newReservationId,
+            {
+              eventDate: newEventDate,
+              amount: applyAmount,
+              method: "credit",
+              creditId,
+              note: `Reschedule credit from ${originalEventDate}`,
+              source: "reschedule-credit",
+            },
+            actor
+          );
+          appliedCredit = {
+            creditId,
+            amountApplied: applyAmount,
+            creditRemainingAfter: Number(
+              Math.max(0, creditRemainingFromCancel - applyAmount).toFixed(2)
+            ),
+            applied: true,
+            updatedReservation: updated ?? null,
+          };
+        } catch (err) {
+          console.error("reschedule_credit_apply_failed", {
+            creditId,
+            newReservationId,
+            newEventDate,
+            applyAmount,
+            errorMessage: String(err?.message ?? err ?? ""),
+          });
+          appliedCredit = {
+            creditId,
+            amountApplied: 0,
+            creditRemainingAfter: creditRemainingFromCancel,
+            applied: false,
+            errorMessage:
+              "Credit could not be applied automatically. It is available on your account.",
+          };
+        }
+      } else {
+        // New reservation already had no remaining balance (e.g. zero-
+        // priced table). Leave the credit untouched.
+        appliedCredit = {
+          creditId,
+          amountApplied: 0,
+          creditRemainingAfter: creditRemainingFromCancel,
+          applied: false,
+          errorMessage: null,
+        };
+      }
+    }
+
+    const finalReservation =
+      appliedCredit?.updatedReservation ??
+      (await getReservationById(newEventDate, newReservationId));
+
+    return {
+      newReservation: finalReservation ?? { reservationId: newReservationId, eventDate: newEventDate },
+      cancelled: {
+        reservationId: originalReservationId,
+        eventDate: originalEventDate,
+      },
+      creditIssued: creditId
+        ? {
+            creditId,
+            amountTotal: Number(creditAmountTotal.toFixed(2)),
+          }
+        : null,
+      appliedCredit: appliedCredit
+        ? {
+            creditId: appliedCredit.creditId,
+            amountApplied: appliedCredit.amountApplied,
+            creditRemainingAfter: appliedCredit.creditRemainingAfter,
+            applied: appliedCredit.applied,
+            errorMessage: appliedCredit.errorMessage ?? null,
+          }
+        : null,
+    };
+  }
+
   return {
     listReservations,
     listReservationHistory,
@@ -1166,5 +1402,6 @@ export function createReservationsService(
     createReservation,
     releaseOverdueReservationsForEventDate,
     releaseOverdueReservationsForAllActiveEvents,
+    rescheduleReservationForCustomer,
   };
 }

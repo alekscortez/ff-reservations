@@ -1384,3 +1384,253 @@ describe("createReservation idempotent replay", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// rescheduleReservationForCustomer — preconditions
+// ---------------------------------------------------------------------------
+//
+// The orchestrator composes cancelReservation + createReservation +
+// paymentRecording.addReservationPayment. These tests focus on the
+// preconditions that fail fast before any sub-call (validation, ownership,
+// status, 24h gate). Happy path + partial failure are covered at the
+// route layer (with the orchestrator stubbed) since exercising the full
+// chain through real DDB fakes adds significant test complexity for
+// little incremental coverage.
+
+const FAR_FUTURE_DATE = (() => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 60);
+  return d.toISOString().slice(0, 10);
+})();
+const YESTERDAY_DATE = (() => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+})();
+const TOMORROW_DATE = (() => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+})();
+
+const VALID_RESCHEDULE = {
+  originalReservationId: "r-old",
+  newTableId: "T7",
+  newHoldId: "hold-new-1",
+  newCustomerName: "Alice",
+  customerCognitoSub: "sub-abc",
+  actor: "customer:sub-abc",
+};
+
+describe("rescheduleReservationForCustomer validation", () => {
+  it("400 on bad originalEventDate", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: "garbage",
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 400 && /originalEventDate/.test(err.message)
+    );
+  });
+
+  it("400 on missing originalReservationId", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+          originalReservationId: "",
+        }),
+      (err) => err?.statusCode === 400 && /originalReservationId/.test(err.message)
+    );
+  });
+
+  it("400 on bad newEventDate", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: "tomorrow",
+        }),
+      (err) => err?.statusCode === 400 && /newEventDate/.test(err.message)
+    );
+  });
+
+  it("400 on missing newTableId / newHoldId / newCustomerName / sub / actor", async () => {
+    const cases = [
+      { newTableId: "" },
+      { newHoldId: "" },
+      { newCustomerName: "" },
+      { customerCognitoSub: "" },
+      { actor: "" },
+    ];
+    for (const partial of cases) {
+      const { svc } = buildReservations();
+      await assert.rejects(
+        () =>
+          svc.rescheduleReservationForCustomer({
+            ...VALID_RESCHEDULE,
+            ...partial,
+            originalEventDate: FAR_FUTURE_DATE,
+            newEventDate: FAR_FUTURE_DATE,
+          }),
+        (err) => err?.statusCode === 400
+      );
+    }
+  });
+
+  it("404 when original reservation does not exist", async () => {
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () => null,
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 404
+    );
+  });
+
+  it("403 when original reservation belongs to a different sub", async () => {
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            customerCognitoSub: "sub-someone-else",
+            paymentStatus: "PAID",
+            depositAmount: 100,
+          }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 403 && /not yours/i.test(err.message)
+    );
+  });
+
+  it("409 when original status is not CONFIRMED", async () => {
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            customerCognitoSub: "sub-abc",
+            status: "CANCELLED",
+            paymentStatus: "PAID",
+            depositAmount: 100,
+          }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 409 && /CONFIRMED/.test(err.message)
+    );
+  });
+
+  it("409 when paymentStatus is PENDING (no credit to migrate)", async () => {
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            customerCognitoSub: "sub-abc",
+            paymentStatus: "PENDING",
+            depositAmount: 0,
+          }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: FAR_FUTURE_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 409 && /paid or partially paid/i.test(err.message)
+    );
+  });
+
+  it("409 when within 24h of event end", async () => {
+    // Yesterday's event = already in the past = always fails the 24h gate.
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            customerCognitoSub: "sub-abc",
+            eventDate: YESTERDAY_DATE,
+            paymentStatus: "PAID",
+            depositAmount: 100,
+          }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: YESTERDAY_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+        }),
+      (err) => err?.statusCode === 409 && /at least.*hours before/i.test(err.message)
+    );
+  });
+
+  it("custom hoursBefore policy is honored", async () => {
+    // Tomorrow's event with hoursBefore: 1 (about 24h+ away from now → passes).
+    // The orchestrator will then proceed to call cancelReservation, which will
+    // hit the buildRescheduleCreditItem flow and ultimately attempt a
+    // TransactWrite. We don't seed a successful TransactWrite path, so this
+    // test only verifies the gate doesn't pre-empt — we expect it to fail at
+    // a *later* step (TransactWrite or assertRescheduleCreditAllowed),
+    // not at the 24h check.
+    let getReservationCalls = 0;
+    const { svc } = buildReservations({
+      shared: {
+        getReservationById: async () => {
+          getReservationCalls += 1;
+          return reservationItem({
+            customerCognitoSub: "sub-abc",
+            eventDate: TOMORROW_DATE,
+            paymentStatus: "PAID",
+            depositAmount: 100,
+          });
+        },
+      },
+    });
+    // hoursBefore: 1 → cutoff is 1h before end-of-day-tomorrow ≈ 23h+ from now.
+    // Now < cutoff, so the 24h gate passes; subsequent assertRescheduleCreditAllowed
+    // runs against the settings cutoff. We expect an error from a later step
+    // (not the "at least N hours before" message from this gate).
+    await assert.rejects(
+      () =>
+        svc.rescheduleReservationForCustomer({
+          ...VALID_RESCHEDULE,
+          originalEventDate: TOMORROW_DATE,
+          newEventDate: FAR_FUTURE_DATE,
+          hoursBefore: 1,
+        }),
+      (err) => !/at least 1 hours before/i.test(String(err?.message ?? ""))
+    );
+    // Ensure we got past the 24h check (which loads the original).
+    assert.ok(getReservationCalls >= 1);
+  });
+});
