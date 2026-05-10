@@ -60,9 +60,13 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 ```
 
 > Backend tests use Node 22's built-in `node:test` runner (no extra runner
-> dep). `@aws-sdk/lib-dynamodb` is a devDep at the repo root so test files
-> can resolve modules that import it; the production Lambda doesn't bundle
-> it because the AWS Lambda nodejs22.x runtime ships @aws-sdk/* v3 modules.
+> dep). Several `@aws-sdk/*` clients are devDeps at the repo root
+> (`lib-dynamodb`, `client-cognito-identity-provider`,
+> `client-secrets-manager`, `client-sns`) so test files can resolve
+> modules that import them; the production Lambda doesn't bundle them
+> because the AWS Lambda nodejs22.x runtime ships @aws-sdk/* v3 modules.
+> The `test:backend` glob covers `backend/lambda/lib/`,
+> `backend/cognito-pre-token-gen/`, and `backend/cognito-customer-auth/`.
 
 ## Auth model — read this before touching auth
 
@@ -129,7 +133,9 @@ There is no per-environment config file yet.
 ## Known gotchas
 
 - `qrcode` triggers a CommonJS optimization warning during build — cosmetic, ignore.
-- Tests use Vitest with a shared OIDC mock at `src/app/testing/oidc-mock.ts`. **If you add a component that injects `OidcSecurityService`, use `provideMockOidc()` plus `provideRouter([])` in the spec's TestBed providers** — see `src/app/app.spec.ts` for the pattern.
+- Tests use Vitest with a shared OIDC mock at `src/app/testing/oidc-mock.ts`. **If you add a component that injects `OidcSecurityService`, use `provideMockOidc()` plus `provideRouter([])` in the spec's TestBed providers** — see `src/app/app.spec.ts` for the pattern. For tests that need to drive `isAuthenticated$` / `getIdToken()` / `getAccessToken()` per-test, provide your own `{ provide: OidcSecurityService, useValue: {...} }` instead of `provideMockOidc()` (the shared mock is hard-coded to unauthenticated). See `src/app/core/auth/auth.service.spec.ts` (drives `getIdToken` to a built JWT, stubs `revokeRefreshToken`/`logoffLocal`) for the pattern. AuthService's logout test stubs `window.location` via `Object.defineProperty(window, 'location', { configurable: true, writable: true, value: { ...originalLocation, replace: vi.fn() } })` because jsdom's `Location.replace` is non-configurable.
+- Functional `CanMatchFn` guards (`src/app/core/guards/`) are tested by invoking them inside `TestBed.runInInjectionContext(() => guard(null as any, []))` with a stub `OidcSecurityService` (for `authGuard`) or stub `AuthService` (for `roleGuard`/`adminGuard`). See `src/app/core/guards/auth.guard.spec.ts` for the pattern.
+- HTTP service wrappers in `src/app/core/http/*.service.ts` are tested by faking `ApiClient` (not `HttpClient`) — capture call args + return controlled `of(...)` observables, then assert on URL pattern (with `encodeURIComponent` on path params), payload contracts, and response unwrapping. See `src/app/core/http/clients.service.spec.ts` for the pattern. `ApiClient` itself is tested via `HttpTestingController` (its retry policy applies to GET only on 5xx + status 0; POST/PUT/DELETE never retry).
 - `backend/lambda/function.zip` is the built artifact; do not hand-edit and never commit.
 - `backend/lambda/code_url.txt` may contain a presigned S3 URL from a previous deploy — never commit.
 - `app.config.ts:provideAppInitializer` calls `oidc.checkAuth()` before bootstrap; navigation happens after.
@@ -183,7 +189,7 @@ There is no per-environment config file yet.
   - **`services-holds.mjs`** — `createHold` / `releaseHold` / `listHolds` (small, ~150 lines)
   - **`services-reservations-shared.mjs`** — anything that's a pure utility, settings resolver, history-write helper, check-in-pass orchestrator, or read-only DDB query
   - **`services-reservations-holds.mjs`** — 67-line barrel; only edit if you're changing the public surface seen by `index.mjs`. Read the existing TransactWrite + ConditionExpression patterns in `services-reservations.mjs` and `services-payment-recording.mjs` before adding new writes.
-- Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver.
+- Touching payments → `services-square-payments.mjs` for Square API calls; `routes-square-webhooks.mjs` for the webhook receiver. The 6 staff/customer-facing payment routes (POST `/reservations/{id}/payment/square`, `/payment-link/square`, `/payment-link/square/sms`, `/cashapp-link/square`, `/cashapp-link/square/sms`, public `/cashapp/session/charge`) live in `routes-reservations-holds.mjs` and share the audit-C2 `autoRefundAfterRecordFailure` safety net (idempotency-keyed by Square paymentId so retries are safe). All 6 are covered in `routes-reservations-holds.test.mjs`.
 - Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin`.
 - "Did SMS X arrive?" → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure). Logs include `messageId`, `destination`, `providerResponse`, `dwellTimeMs`, `status`.
 - "Did the cron sweep run?" → `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance"`.
