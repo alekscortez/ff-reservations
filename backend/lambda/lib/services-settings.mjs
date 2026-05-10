@@ -7,7 +7,7 @@ const SETTINGS_PK = "APP";
 const SETTINGS_SK = "CONFIG";
 const CACHE_TTL_MS = 30_000;
 const SECTION_KEYS = ["A", "B", "C", "D", "E"];
-const DEFAULT_SECTION_MAP_COLORS = Object.freeze({
+export const DEFAULT_SECTION_MAP_COLORS = Object.freeze({
   A: "#ec008c",
   B: "#2e3192",
   C: "#00aeef",
@@ -15,7 +15,7 @@ const DEFAULT_SECTION_MAP_COLORS = Object.freeze({
   E: "#711411",
 });
 
-function parseBoolean(value, fallback) {
+export function parseBoolean(value, fallback) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {
@@ -27,19 +27,19 @@ function parseBoolean(value, fallback) {
   return fallback;
 }
 
-function parseInteger(value, fallback) {
+export function parseInteger(value, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.round(parsed);
 }
 
-function clampInteger(value, min, max, fallback) {
+export function clampInteger(value, min, max, fallback) {
   const parsed = parseInteger(value, fallback);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
 }
 
-function isValidTimeZone(timeZone) {
+export function isValidTimeZone(timeZone) {
   const raw = String(timeZone ?? "").trim();
   if (!raw) return false;
   try {
@@ -50,17 +50,17 @@ function isValidTimeZone(timeZone) {
   }
 }
 
-function normalizeIsoDate(value) {
+export function normalizeIsoDate(value) {
   const raw = String(value ?? "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
   return raw;
 }
 
-function isHexColor(value) {
+export function isHexColor(value) {
   return /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/.test(String(value ?? "").trim());
 }
 
-function normalizeSectionMapColors(value, fallback) {
+export function normalizeSectionMapColors(value, fallback) {
   const base = {
     ...DEFAULT_SECTION_MAP_COLORS,
     ...(fallback && typeof fallback === "object" ? fallback : {}),
@@ -85,7 +85,7 @@ function normalizeSectionMapColors(value, fallback) {
   return out;
 }
 
-function subtractOneIsoDay(isoDate) {
+export function subtractOneIsoDay(isoDate) {
   const normalized = normalizeIsoDate(isoDate);
   if (!normalized) return isoDate;
   const [yyyy, mm, dd] = normalized.split("-").map((part) => Number(part));
@@ -97,7 +97,7 @@ function subtractOneIsoDay(isoDate) {
   return `${outY}-${outM}-${outD}`;
 }
 
-function localPartsForZone(nowMs, timeZone) {
+export function localPartsForZone(nowMs, timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -126,7 +126,7 @@ function localPartsForZone(nowMs, timeZone) {
   };
 }
 
-function buildDefaults(env) {
+export function buildDefaults(env) {
   const operatingTzCandidate = String(env?.OPERATING_TZ ?? "").trim();
   const operatingTz = isValidTimeZone(operatingTzCandidate)
     ? operatingTzCandidate
@@ -215,7 +215,7 @@ function buildDefaults(env) {
 
 const KNOWN_KEYS = new Set(Object.keys(buildDefaults({})));
 
-function normalizeValueForKey(key, value, fallback) {
+export function normalizeValueForKey(key, value, fallback) {
   switch (key) {
     case "operatingTz": {
       const candidate = String(value ?? "").trim();
@@ -276,7 +276,7 @@ function normalizeValueForKey(key, value, fallback) {
   }
 }
 
-function normalizePatch(current, patch, { strictUnknown }) {
+export function normalizePatch(current, patch, { strictUnknown }) {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     throw new Error("Settings payload must be an object");
   }
