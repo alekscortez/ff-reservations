@@ -1,6 +1,6 @@
-const MANAGED_GROUPS = ["Admin", "Staff"];
+export const MANAGED_GROUPS = ["Admin", "Staff"];
 
-function toBoolean(value, fallback = false) {
+export function toBoolean(value, fallback = false) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {
@@ -11,13 +11,13 @@ function toBoolean(value, fallback = false) {
   return fallback;
 }
 
-function normalizeRole(rawRole) {
+export function normalizeRole(rawRole) {
   const role = String(rawRole ?? "").trim();
   if (role === "Admin" || role === "Staff") return role;
   return null;
 }
 
-function mapAttrs(attrs) {
+export function mapAttrs(attrs) {
   const out = {};
   for (const attr of attrs ?? []) {
     const key = String(attr?.Name ?? "").trim();
@@ -27,7 +27,7 @@ function mapAttrs(attrs) {
   return out;
 }
 
-function mapCognitoUserBase(raw, attrs, groups) {
+export function mapCognitoUserBase(raw, attrs, groups) {
   const groupNames = (groups ?? [])
     .map((g) => String(g ?? "").trim())
     .filter(Boolean);
@@ -54,7 +54,7 @@ function mapCognitoUserBase(raw, attrs, groups) {
   };
 }
 
-function asHttpError(err, httpError) {
+export function asHttpError(err, httpError) {
   const code = String(err?.name ?? "");
   if (code === "UsernameExistsException") return httpError(409, "User already exists");
   if (code === "UserNotFoundException") return httpError(404, "User not found");
