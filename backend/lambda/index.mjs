@@ -534,6 +534,9 @@ export const handler = async (event) => {
       getActivePassForReservation: checkInPassesService.getActivePassForReservation,
       // payments
       createSquarePayment: squarePaymentsService.createPayment,
+      createSquarePaymentLink: squarePaymentsService.createPaymentLink,
+      setReservationPaymentLinkWindow:
+        reservationsHoldsService.setReservationPaymentLinkWindow,
       addReservationPayment: reservationsHoldsService.addReservationPayment,
       refundSquarePayment: squarePaymentsService.refundPayment,
       appendReservationHistory: reservationsHoldsService.appendReservationHistory,

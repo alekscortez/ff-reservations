@@ -161,6 +161,8 @@ function makeFullCtx(overrides = {}) {
     cancelReservation: [],
     getActivePassForReservation: [],
     createSquarePayment: [],
+    createSquarePaymentLink: [],
+    setReservationPaymentLinkWindow: [],
     addReservationPayment: [],
     refundSquarePayment: [],
     appendReservationHistory: [],
@@ -247,6 +249,28 @@ function makeFullCtx(overrides = {}) {
             receipt_url: "https://sqr/r",
           },
         };
+      },
+      createSquarePaymentLink:
+        overrides.createSquarePaymentLink === null
+          ? undefined
+          : overrides.createSquarePaymentLink ??
+            (async (args) => {
+              calls.createSquarePaymentLink.push(args);
+              if (overrides.createSquarePaymentLinkThrows) {
+                throw overrides.createSquarePaymentLinkThrows;
+              }
+              return (
+                overrides.squarePaymentLinkResult ?? {
+                  paymentLink: {
+                    id: "plnk-1",
+                    url: "https://checkout.square.site/plnk-1",
+                  },
+                }
+              );
+            }),
+      setReservationPaymentLinkWindow: async (args) => {
+        calls.setReservationPaymentLinkWindow.push(args);
+        return overrides.reservationAfterLink ?? null;
       },
       addReservationPayment: async (reservationId, body, user) => {
         calls.addReservationPayment.push({ reservationId, body, user });
@@ -783,5 +807,153 @@ describe("DELETE /me/push-tokens/{token}", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(calls.unregisterPushToken[0].sub, SUB);
     assert.equal(calls.unregisterPushToken[0].token, raw);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /me/reservations/{id}/payment-link/square
+// ---------------------------------------------------------------------------
+
+describe("POST /me/reservations/{id}/payment-link/square", () => {
+  const baseBody = { eventDate: "2026-05-09" };
+  const baseReservation = {
+    reservationId: "r1",
+    customerCognitoSub: SUB,
+    status: "CONFIRMED",
+    paymentStatus: "PENDING",
+    amountDue: 100,
+    depositAmount: 0,
+    tableId: "T1",
+    customerName: "Alice",
+    phone: "+12025550100",
+  };
+
+  it("400 on bad eventDate", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: { eventDate: "garbage" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("404 when reservation missing", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 404);
+  });
+
+  it("403 when reservation belongs to a different sub", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: { ...baseReservation, customerCognitoSub: "other-sub" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 403);
+  });
+
+  it("409 when status is not CONFIRMED", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: { ...baseReservation, status: "CANCELLED" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 409);
+  });
+
+  it("409 when paymentStatus is PAID", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: { ...baseReservation, paymentStatus: "PAID" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 409);
+  });
+
+  it("409 when remaining balance is zero (depositAmount >= amountDue)", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: { ...baseReservation, depositAmount: 100 },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 409);
+  });
+
+  it("503 when createSquarePaymentLink dep is unavailable", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: baseReservation,
+      createSquarePaymentLink: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 503);
+  });
+
+  it("502 when Square returns no URL", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: baseReservation,
+      squarePaymentLinkResult: { paymentLink: { id: "plnk-1", url: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 502);
+  });
+
+  it("happy path: returns paymentLink.url + persists window via setReservationPaymentLinkWindow", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: baseReservation,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.paymentLink.url, "https://checkout.square.site/plnk-1");
+    assert.equal(res.body.paymentLink.id, "plnk-1");
+    assert.equal(res.body.paymentLink.amount, 100);
+    assert.equal(res.body.reservation.remainingAmount, 100);
+    // Square link service called with the full remaining balance + customer
+    // identity from the reservation row.
+    assert.equal(calls.createSquarePaymentLink[0].amount, 100);
+    assert.equal(calls.createSquarePaymentLink[0].customerName, "Alice");
+    // Persists the link to the reservation row.
+    assert.equal(calls.setReservationPaymentLinkWindow.length, 1);
+    assert.equal(calls.setReservationPaymentLinkWindow[0].paymentLinkUrl, "https://checkout.square.site/plnk-1");
+    assert.equal(calls.setReservationPaymentLinkWindow[0].actor, `customer:${SUB}`);
+  });
+
+  it("uses remaining balance (amountDue - depositAmount) when reservation is PARTIAL", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/payment-link/square",
+      event: { body: baseBody },
+      reservation: {
+        ...baseReservation,
+        paymentStatus: "PARTIAL",
+        depositAmount: 30,
+      },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.reservation.remainingAmount, 70);
+    assert.equal(calls.createSquarePaymentLink[0].amount, 70);
   });
 });
