@@ -159,6 +159,7 @@ function makeFullCtx(overrides = {}) {
     createHold: [],
     createReservation: [],
     cancelReservation: [],
+    rescheduleReservationForCustomer: [],
     getActivePassForReservation: [],
     createSquarePayment: [],
     createSquarePaymentLink: [],
@@ -234,6 +235,36 @@ function makeFullCtx(overrides = {}) {
           status: "CANCELLED",
         };
       },
+      rescheduleReservationForCustomer:
+        overrides.rescheduleReservationForCustomer === null
+          ? undefined
+          : overrides.rescheduleReservationForCustomer ??
+            (async (payload) => {
+              calls.rescheduleReservationForCustomer.push(payload);
+              if (overrides.rescheduleThrows) throw overrides.rescheduleThrows;
+              return (
+                overrides.rescheduleResult ?? {
+                  newReservation: {
+                    reservationId: "res-new",
+                    eventDate: payload.newEventDate,
+                    tableId: payload.newTableId,
+                    paymentStatus: "PAID",
+                  },
+                  cancelled: {
+                    reservationId: payload.originalReservationId,
+                    eventDate: payload.originalEventDate,
+                  },
+                  creditIssued: { creditId: "cr-1", amountTotal: 50 },
+                  appliedCredit: {
+                    creditId: "cr-1",
+                    amountApplied: 50,
+                    creditRemainingAfter: 0,
+                    applied: true,
+                    errorMessage: null,
+                  },
+                }
+              );
+            }),
       getActivePassForReservation: async (reservationId, opts) => {
         calls.getActivePassForReservation.push({ reservationId, opts });
         return overrides.activePass === undefined ? null : overrides.activePass;
@@ -556,6 +587,157 @@ describe("POST /me/reservations/{id}/payment/square", () => {
       (h) => h.eventType === "AUTO_REFUND_FAILED"
     );
     assert.ok(histEntry);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /me/reservations/{id}/reschedule
+// ---------------------------------------------------------------------------
+
+describe("POST /me/reservations/{id}/reschedule", () => {
+  const validBody = {
+    originalEventDate: "2026-06-01",
+    newEventDate: "2026-06-15",
+    newTableId: "T7",
+    newHoldId: "hold-new-1",
+    customerName: "Alice",
+    newPaymentDeadlineAt: "2026-06-16T05:00:00",
+    newPaymentDeadlineTz: "UTC",
+    reason: "Switching dates",
+  };
+
+  it("400 when originalEventDate is invalid", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, originalEventDate: "not-a-date" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /originalEventDate/);
+  });
+
+  it("400 when newEventDate is invalid", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, newEventDate: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /newEventDate/);
+  });
+
+  it("400 when newTableId is missing", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, newTableId: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /newTableId/);
+  });
+
+  it("400 when newHoldId is missing", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, newHoldId: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /newHoldId/);
+  });
+
+  it("400 when customerName is missing", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, customerName: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /customerName/);
+  });
+
+  it("503 when service is not wired", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: validBody },
+      rescheduleReservationForCustomer: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 503);
+  });
+
+  it("requires customer ownership before doing anything", async () => {
+    const denied = Object.assign(new Error("forbidden"), { statusCode: 403 });
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: validBody },
+      requireOwnershipThrows: denied,
+    });
+    await assert.rejects(() => handleMeRoute(ctx), (err) => err?.statusCode === 403);
+    assert.equal(calls.rescheduleReservationForCustomer.length, 0);
+  });
+
+  it("happy path: forwards body + sub + actor + 24h policy and returns 201", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: validBody },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 201);
+
+    assert.equal(calls.rescheduleReservationForCustomer.length, 1);
+    const recorded = calls.rescheduleReservationForCustomer[0];
+    assert.equal(recorded.originalEventDate, validBody.originalEventDate);
+    assert.equal(recorded.originalReservationId, "r-old");
+    assert.equal(recorded.newEventDate, validBody.newEventDate);
+    assert.equal(recorded.newTableId, validBody.newTableId);
+    assert.equal(recorded.newHoldId, validBody.newHoldId);
+    assert.equal(recorded.newCustomerName, validBody.customerName);
+    assert.equal(recorded.newPaymentDeadlineAt, validBody.newPaymentDeadlineAt);
+    assert.equal(recorded.newPaymentDeadlineTz, validBody.newPaymentDeadlineTz);
+    assert.equal(recorded.customerCognitoSub, SUB);
+    assert.equal(recorded.actor, `customer:${SUB}`);
+    assert.equal(recorded.hoursBefore, 24);
+    assert.equal(recorded.reason, validBody.reason);
+
+    assert.equal(res.body.newReservation.reservationId, "res-new");
+    assert.equal(res.body.appliedCredit.applied, true);
+  });
+
+  it("uses default reason when body omits one", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: { ...validBody, reason: "" } },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 201);
+    assert.equal(
+      calls.rescheduleReservationForCustomer[0].reason,
+      "Customer rescheduled via mobile app"
+    );
+  });
+
+  it("propagates 502 when service partially fails (cancel succeeded, create failed)", async () => {
+    const partialFail = Object.assign(
+      new Error("Reschedule could not complete: hold expired. Your previous reservation has been cancelled..."),
+      { statusCode: 502 }
+    );
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r-old/reschedule",
+      event: { body: validBody },
+      rescheduleThrows: partialFail,
+    });
+    await assert.rejects(() => handleMeRoute(ctx), (err) => err?.statusCode === 502);
   });
 });
 

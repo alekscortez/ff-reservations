@@ -52,6 +52,7 @@ export function createReservationsHoldsService(deps) {
       reservations.releaseOverdueReservationsForAllActiveEvents,
     cancelReservation: reservations.cancelReservation,
     createReservation: reservations.createReservation,
+    rescheduleReservationForCustomer: reservations.rescheduleReservationForCustomer,
     // payment recording + payment-link / Cash App session state
     addReservationPayment: paymentRecording.addReservationPayment,
     setReservationPaymentLinkWindow:

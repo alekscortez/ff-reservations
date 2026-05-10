@@ -530,6 +530,8 @@ export const handler = async (event) => {
       createHold: reservationsHoldsService.createHold,
       createReservation: reservationsHoldsService.createReservation,
       cancelReservation: reservationsHoldsService.cancelReservation,
+      rescheduleReservationForCustomer:
+        reservationsHoldsService.rescheduleReservationForCustomer,
       // pass
       getActivePassForReservation: checkInPassesService.getActivePassForReservation,
       // payments
