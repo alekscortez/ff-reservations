@@ -37,7 +37,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import crypto from "node:crypto";
 
-const cognito = new CognitoIdentityProviderClient({});
+const defaultCognito = new CognitoIdentityProviderClient({});
 const SYNTH_EMAIL_DOMAIN = "customer.famosofuego.local";
 
 // Tokens / identity must never be cached by intermediaries.
@@ -46,20 +46,20 @@ const NO_STORE_HEADERS = Object.freeze({
   pragma: "no-cache",
 });
 
-function syntheticEmailFromPhone(phoneE164) {
+export function syntheticEmailFromPhone(phoneE164) {
   const digits = String(phoneE164 || "").replace(/^\+/, "").replace(/\D/g, "");
   return `customer-${digits}@${SYNTH_EMAIL_DOMAIN}`;
 }
 
-function isValidE164(phone) {
+export function isValidE164(phone) {
   return typeof phone === "string" && /^\+[1-9]\d{6,14}$/.test(phone);
 }
 
-function isSixDigitOtp(value) {
+export function isSixDigitOtp(value) {
   return typeof value === "string" && /^\d{6}$/.test(value);
 }
 
-function generateThrowawayPassword() {
+export function generateThrowawayPassword() {
   // Cognito default policy: ≥8 chars, mixed case, digit, symbol.
   // The password is never used (CUSTOM_AUTH bypasses it) but must satisfy
   // the policy at SignUp time.
@@ -76,6 +76,9 @@ export async function handleCustomerAuthRoute(ctx) {
     getBody,
     customerClientId,
     checkAndIncrementSmsRateLimit,
+    // Test seam: tests inject a fake Cognito client; production uses
+    // the module-level instance.
+    cognito = defaultCognito,
   } = ctx;
   if (!customerClientId) return null;
 
