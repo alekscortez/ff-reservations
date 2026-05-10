@@ -847,6 +847,8 @@ export function createReservationsService(
     const tableId = String(payload?.tableId ?? "").trim();
     const holdId = String(payload?.holdId ?? "").trim();
     const customerName = String(payload?.customerName ?? "").trim();
+    const customerCognitoSub =
+      String(payload?.customerCognitoSub ?? "").trim() || null;
     const phoneRaw = String(payload?.phone ?? "").trim();
     const phoneCountry = normalizePhoneCountry(payload?.phoneCountry ?? "US");
     const phone = normalizePhoneE164(phoneRaw, phoneCountry);
@@ -1017,6 +1019,10 @@ export function createReservationsService(
                   status: "CONFIRMED",
                   createdAt: now,
                   createdBy: user,
+                  // Conditionally attached. byCustomerSub GSI is sparse;
+                  // omitting the attribute on staff-created reservations
+                  // keeps them out of /me/reservations.
+                  ...(customerCognitoSub ? { customerCognitoSub } : {}),
                 },
                 ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
               },
@@ -1081,7 +1087,7 @@ export function createReservationsService(
       reservationId,
       eventType: "RESERVATION_CREATED",
       actor: user,
-      source: "staff",
+      source: historySourceFromActor(user),
       tableId,
       customerName,
       at: now,
@@ -1098,7 +1104,7 @@ export function createReservationsService(
         reservationId,
         eventType: "PAYMENT_RECORDED",
         actor: user,
-        source: "staff",
+        source: historySourceFromActor(user),
         tableId,
         customerName,
         at: now,

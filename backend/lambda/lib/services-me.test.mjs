@@ -54,6 +54,14 @@ function makeFakeCognito({ userAttributes = [], throwOnCommand } = {}) {
   };
 }
 
+function httpError(status, message) {
+  const err = new Error(message);
+  err.statusCode = status;
+  return err;
+}
+
+const FIXED_NOW_EPOCH = 1_700_000_000;
+
 function buildService(overrides = {}) {
   const ddb = overrides.ddb ?? makeFakeDdb();
   const cognito = overrides.cognito ?? makeFakeCognito();
@@ -63,6 +71,9 @@ function buildService(overrides = {}) {
     userPoolId: "us-east-1_test",
     CLIENTS_TABLE: overrides.CLIENTS_TABLE === null ? null : "ff-clients",
     RES_TABLE: overrides.RES_TABLE === null ? null : "ff-reservations",
+    httpError: overrides.httpError ?? httpError,
+    nowEpoch: overrides.nowEpoch ?? (() => FIXED_NOW_EPOCH),
+    listRescheduleCreditsByPhone: overrides.listRescheduleCreditsByPhone,
   });
   return { ddb, cognito, svc };
 }
@@ -478,5 +489,222 @@ describe("listReservations", () => {
     assert.equal(out.tablePrice, null);
     assert.equal(out.amountDue, null); // missing → null
     assert.equal(out.depositAmount, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listCreditsForCustomer
+// ---------------------------------------------------------------------------
+
+describe("listCreditsForCustomer", () => {
+  it("returns empty when listRescheduleCreditsByPhone dep is missing", async () => {
+    const cognito = makeFakeCognito({
+      userAttributes: [{ Name: "phone_number", Value: PHONE }],
+    });
+    const { svc } = buildService({ cognito });
+    const out = await svc.listCreditsForCustomer(SUB);
+    assert.deepEqual(out, { items: [], totalRemaining: 0 });
+  });
+
+  it("returns empty when the customer has no phone in Cognito", async () => {
+    const cognito = makeFakeCognito({ userAttributes: [] });
+    const credits = [];
+    const { svc } = buildService({
+      cognito,
+      listRescheduleCreditsByPhone: async () => credits,
+    });
+    const out = await svc.listCreditsForCustomer(SUB);
+    assert.deepEqual(out, { items: [], totalRemaining: 0 });
+  });
+
+  it("returns empty when Cognito user is not found (idempotent for deleted accounts)", async () => {
+    const notFound = new Error("nope");
+    notFound.name = "UserNotFoundException";
+    const cognito = makeFakeCognito({
+      throwOnCommand: { AdminGetUserCommand: notFound },
+    });
+    const { svc } = buildService({
+      cognito,
+      listRescheduleCreditsByPhone: async () => [],
+    });
+    const out = await svc.listCreditsForCustomer(SUB);
+    assert.deepEqual(out, { items: [], totalRemaining: 0 });
+  });
+
+  it("sums only ISSUED credits, exposes a privacy-curated shape", async () => {
+    const cognito = makeFakeCognito({
+      userAttributes: [{ Name: "phone_number", Value: PHONE }],
+    });
+    const rawCredits = [
+      {
+        creditId: "c1",
+        status: "ISSUED",
+        amountTotal: 100,
+        amountRemaining: 60,
+        issuedAt: 100,
+        expiresAt: 200,
+        sourceReservationId: "r1",
+        sourceEventDate: "2026-05-09",
+        // intentionally extra fields that should NOT be exposed
+        internalLedgerKey: "secret-do-not-leak",
+      },
+      {
+        creditId: "c2",
+        status: "REDEEMED",
+        amountTotal: 50,
+        amountRemaining: 0,
+      },
+      {
+        creditId: "c3",
+        status: "ISSUED",
+        amountTotal: 25,
+        amountRemaining: 25,
+      },
+    ];
+    const { svc } = buildService({
+      cognito,
+      listRescheduleCreditsByPhone: async () => rawCredits,
+    });
+    const out = await svc.listCreditsForCustomer(SUB);
+    assert.equal(out.totalRemaining, 85); // 60 + 25; REDEEMED ignored
+    assert.equal(out.items.length, 3);
+    assert.ok(
+      !Object.prototype.hasOwnProperty.call(out.items[0], "internalLedgerKey"),
+      "internal fields must not leak"
+    );
+    assert.equal(out.items[0].creditId, "c1");
+  });
+
+  it("ignores credits with non-finite or negative amountRemaining", async () => {
+    const cognito = makeFakeCognito({
+      userAttributes: [{ Name: "phone_number", Value: PHONE }],
+    });
+    const { svc } = buildService({
+      cognito,
+      listRescheduleCreditsByPhone: async () => [
+        { creditId: "c1", status: "ISSUED", amountRemaining: NaN },
+        { creditId: "c2", status: "ISSUED", amountRemaining: -10 },
+        { creditId: "c3", status: "ISSUED", amountRemaining: 30 },
+      ],
+    });
+    const out = await svc.listCreditsForCustomer(SUB);
+    assert.equal(out.totalRemaining, 30);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registerPushToken / unregisterPushToken
+// ---------------------------------------------------------------------------
+
+describe("registerPushToken", () => {
+  it("400s when token is missing or empty", async () => {
+    const { svc } = buildService();
+    await assert.rejects(
+      () => svc.registerPushToken(SUB, "", "ios"),
+      (err) => err?.statusCode === 400
+    );
+    await assert.rejects(
+      () => svc.registerPushToken(SUB, "   ", "ios"),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("400s when platform is not ios or android", async () => {
+    const { svc } = buildService();
+    await assert.rejects(
+      () => svc.registerPushToken(SUB, "ExponentPushToken[xyz]", "windows"),
+      (err) => err?.statusCode === 400
+    );
+    await assert.rejects(
+      () => svc.registerPushToken(SUB, "ExponentPushToken[xyz]", ""),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("400s when token exceeds maximum length (defensive bound)", async () => {
+    const { svc } = buildService();
+    await assert.rejects(
+      () => svc.registerPushToken(SUB, "x".repeat(257), "ios"),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("PUTs a row keyed by PUSHTOKEN#{sub} / TOKEN#{hash} with TTL", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildService({ ddb });
+    const out = await svc.registerPushToken(
+      SUB,
+      "ExponentPushToken[abc-123]",
+      "ios"
+    );
+    assert.equal(out.registered, true);
+    assert.equal(out.platform, "ios");
+    assert.match(out.tokenHash, /^[a-f0-9]{64}$/);
+
+    const put = ddb.calls[ddb.calls.length - 1];
+    assert.equal(put.name, "PutCommand");
+    assert.equal(put.input.TableName, "ff-clients");
+    assert.equal(put.input.Item.PK, `PUSHTOKEN#${SUB}`);
+    assert.equal(put.input.Item.SK, `TOKEN#${out.tokenHash}`);
+    assert.equal(put.input.Item.entityType, "PUSH_TOKEN");
+    assert.equal(put.input.Item.sub, SUB);
+    assert.equal(put.input.Item.token, "ExponentPushToken[abc-123]");
+    assert.equal(put.input.Item.platform, "ios");
+    assert.equal(put.input.Item.registeredAt, FIXED_NOW_EPOCH);
+    assert.equal(put.input.Item.lastSeenAt, FIXED_NOW_EPOCH);
+    assert.equal(put.input.Item.ttl, FIXED_NOW_EPOCH + 90 * 24 * 60 * 60);
+  });
+
+  it("no-ops when CLIENTS_TABLE is not configured", async () => {
+    const ddb = { send: async () => assert.fail("should not write") };
+    const { svc } = buildService({ ddb, CLIENTS_TABLE: null });
+    const out = await svc.registerPushToken(SUB, "ExponentPushToken[x]", "ios");
+    assert.equal(out.registered, false);
+  });
+});
+
+describe("unregisterPushToken", () => {
+  it("400s when token is missing", async () => {
+    const { svc } = buildService();
+    await assert.rejects(
+      () => svc.unregisterPushToken(SUB, ""),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("DELETEs the row under PUSHTOKEN#{sub} / TOKEN#{hash}", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildService({ ddb });
+    const out = await svc.unregisterPushToken(SUB, "ExponentPushToken[abc-123]");
+    assert.equal(out.unregistered, true);
+    assert.match(out.tokenHash, /^[a-f0-9]{64}$/);
+
+    const del = ddb.calls[ddb.calls.length - 1];
+    assert.equal(del.name, "DeleteCommand");
+    assert.equal(del.input.TableName, "ff-clients");
+    assert.equal(del.input.Key.PK, `PUSHTOKEN#${SUB}`);
+    assert.equal(del.input.Key.SK, `TOKEN#${out.tokenHash}`);
+  });
+
+  it("no-ops when CLIENTS_TABLE is not configured", async () => {
+    const ddb = { send: async () => assert.fail("should not delete") };
+    const { svc } = buildService({ ddb, CLIENTS_TABLE: null });
+    const out = await svc.unregisterPushToken(SUB, "ExponentPushToken[x]");
+    assert.equal(out.unregistered, false);
+  });
+
+  it("hashes the token consistently with registerPushToken (round-trip)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildService({ ddb });
+    const reg = await svc.registerPushToken(
+      SUB,
+      "ExponentPushToken[round-trip]",
+      "android"
+    );
+    const unreg = await svc.unregisterPushToken(
+      SUB,
+      "ExponentPushToken[round-trip]"
+    );
+    assert.equal(reg.tokenHash, unreg.tokenHash);
   });
 });

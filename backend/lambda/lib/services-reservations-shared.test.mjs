@@ -109,9 +109,11 @@ describe("pure helpers", () => {
     );
   });
 
-  it("historySourceFromActor classifies system: vs human actors", () => {
+  it("historySourceFromActor classifies system: / customer: / human actors", () => {
     assert.equal(s.historySourceFromActor("system:auto-release"), "system");
     assert.equal(s.historySourceFromActor("system:square-webhook"), "system");
+    assert.equal(s.historySourceFromActor("customer:abc123-sub"), "customer");
+    assert.equal(s.historySourceFromActor("customer:"), "customer");
     assert.equal(s.historySourceFromActor("staff@example.com"), "staff");
     assert.equal(s.historySourceFromActor(""), "staff");
     assert.equal(s.historySourceFromActor(null), "staff");

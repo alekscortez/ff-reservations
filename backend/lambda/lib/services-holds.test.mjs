@@ -228,4 +228,58 @@ describe("createHold happy path", () => {
     assert.equal(item.phone, null);
     assert.equal(item.phoneCountry, null);
   });
+
+  it("attaches customerCognitoSub when the payload supplies it (customer self-service)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildHolds({ ddb });
+    const item = await svc.createHold(
+      {
+        eventDate: "2026-05-09",
+        tableId: "T1",
+        customerCognitoSub: "cognito-sub-abc",
+      },
+      "customer:cognito-sub-abc"
+    );
+    assert.equal(item.customerCognitoSub, "cognito-sub-abc");
+    const put = ddb.calls[ddb.calls.length - 1];
+    assert.equal(put.input.Item.customerCognitoSub, "cognito-sub-abc");
+  });
+
+  it("omits customerCognitoSub when not supplied (staff-created holds stay sparse)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildHolds({ ddb });
+    const item = await svc.createHold(
+      { eventDate: "2026-05-09", tableId: "T1" },
+      "staff@example.com"
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(item, "customerCognitoSub"),
+      false
+    );
+    const put = ddb.calls[ddb.calls.length - 1];
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        put.input.Item,
+        "customerCognitoSub"
+      ),
+      false
+    );
+  });
+
+  it("treats empty / blank customerCognitoSub as absent", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildHolds({ ddb });
+    const item = await svc.createHold(
+      {
+        eventDate: "2026-05-09",
+        tableId: "T1",
+        customerCognitoSub: "   ",
+      },
+      "u"
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(item, "customerCognitoSub"),
+      false
+    );
+  });
 });

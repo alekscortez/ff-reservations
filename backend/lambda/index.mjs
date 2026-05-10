@@ -373,6 +373,9 @@ const meService = createMeService({
   userPoolId: USER_POOL_ID,
   CLIENTS_TABLE,
   RES_TABLE,
+  httpError,
+  nowEpoch,
+  listRescheduleCreditsByPhone: clientsService.listRescheduleCreditsByPhone,
 });
 
 const eventsService = createEventsService({
@@ -514,10 +517,33 @@ export const handler = async (event) => {
       event,
       cors,
       json,
+      noContent,
+      httpError,
+      getBody,
       requireCustomerOwnership,
+      // identity
       getProfile: meService.getProfile,
       deleteAccount: meService.deleteAccount,
       listReservations: meService.listReservations,
+      // reservations + holds
+      getReservationById: reservationsHoldsService.getReservationById,
+      createHold: reservationsHoldsService.createHold,
+      createReservation: reservationsHoldsService.createReservation,
+      cancelReservation: reservationsHoldsService.cancelReservation,
+      // pass
+      getActivePassForReservation: checkInPassesService.getActivePassForReservation,
+      // payments
+      createSquarePayment: squarePaymentsService.createPayment,
+      addReservationPayment: reservationsHoldsService.addReservationPayment,
+      refundSquarePayment: squarePaymentsService.refundPayment,
+      appendReservationHistory: reservationsHoldsService.appendReservationHistory,
+      // credits + push tokens
+      listCreditsForCustomer: meService.listCreditsForCustomer,
+      registerPushToken: meService.registerPushToken,
+      unregisterPushToken: meService.unregisterPushToken,
+      // rate limit
+      checkAndIncrementCustomerHoldRateLimit:
+        rateLimitService.checkAndIncrementCustomerHoldRateLimit,
     });
     if (meRouteResponse) return meRouteResponse;
 

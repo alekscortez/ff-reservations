@@ -204,13 +204,111 @@ describe("createRateLimitService.checkAndIncrementSmsRateLimit", () => {
     await svc.checkAndIncrementSmsRateLimit(undefined);
   });
 
-  it("config exposes documented constants", () => {
+  it("config exposes documented constants for both buckets", () => {
     const svc = createRateLimitService({
       ddb: {},
       tableNames: { HOLDS_TABLE: "ff-table-holds" },
       nowEpoch: fixedNowEpoch,
       httpError,
     });
-    assert.deepEqual(svc.config, { windowSeconds: 600, maxAttempts: 5 });
+    assert.deepEqual(svc.config, {
+      sms: { windowSeconds: 600, maxAttempts: 5 },
+      customerHold: { windowSeconds: 300, maxAttempts: 5 },
+    });
+  });
+});
+
+describe("createRateLimitService.checkAndIncrementCustomerHoldRateLimit", () => {
+  const SUB = "cognito-sub-abc123";
+
+  it("PUT new window with CUSTHOLD#{sub} key when no item exists", async () => {
+    const ddb = makeFakeDdb({ getResponses: [{ Item: null }] });
+    const svc = createRateLimitService({
+      ddb,
+      tableNames: { HOLDS_TABLE: "ff-table-holds" },
+      nowEpoch: fixedNowEpoch,
+      httpError,
+    });
+    await svc.checkAndIncrementCustomerHoldRateLimit(SUB);
+    const sequence = ddb.calls.map((c) => c.name);
+    assert.deepEqual(sequence, ["GetCommand", "PutCommand"]);
+    const putItem = ddb.calls[1].input?.Item;
+    assert.equal(putItem.PK, "RATE");
+    assert.equal(putItem.SK, `CUSTHOLD#${SUB}`);
+    assert.equal(putItem.count, 1);
+    assert.equal(putItem.windowStartedAt, FIXED_NOW);
+    // Customer-hold window is 5 min, not 10 min like SMS.
+    assert.equal(putItem.ttl, FIXED_NOW + 300);
+  });
+
+  it("UpdateItem increments count when within an active window under cap", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [
+        { Item: { count: 2, windowStartedAt: FIXED_NOW - 60 } },
+      ],
+    });
+    const svc = createRateLimitService({
+      ddb,
+      tableNames: { HOLDS_TABLE: "ff-table-holds" },
+      nowEpoch: fixedNowEpoch,
+      httpError,
+    });
+    await svc.checkAndIncrementCustomerHoldRateLimit(SUB);
+    const sequence = ddb.calls.map((c) => c.name);
+    assert.deepEqual(sequence, ["GetCommand", "UpdateCommand"]);
+    const updateInput = ddb.calls[1].input;
+    assert.equal(updateInput.Key.SK, `CUSTHOLD#${SUB}`);
+    assert.equal(updateInput.ExpressionAttributeValues[":max"], 5);
+  });
+
+  it("throws 429 when count is already at the cap", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [
+        { Item: { count: 5, windowStartedAt: FIXED_NOW - 60 } },
+      ],
+    });
+    const svc = createRateLimitService({
+      ddb,
+      tableNames: { HOLDS_TABLE: "ff-table-holds" },
+      nowEpoch: fixedNowEpoch,
+      httpError,
+    });
+    await assert.rejects(
+      () => svc.checkAndIncrementCustomerHoldRateLimit(SUB),
+      (err) =>
+        err?.statusCode === 429 &&
+        /tables held/i.test(String(err?.message ?? ""))
+    );
+  });
+
+  it("treats expired window as fresh (PUT, not Update)", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [
+        // Window started 400s ago — older than the 300s customer-hold window.
+        { Item: { count: 99, windowStartedAt: FIXED_NOW - 400 } },
+      ],
+    });
+    const svc = createRateLimitService({
+      ddb,
+      tableNames: { HOLDS_TABLE: "ff-table-holds" },
+      nowEpoch: fixedNowEpoch,
+      httpError,
+    });
+    await svc.checkAndIncrementCustomerHoldRateLimit(SUB);
+    const sequence = ddb.calls.map((c) => c.name);
+    assert.deepEqual(sequence, ["GetCommand", "PutCommand"]);
+  });
+
+  it("no-ops silently for empty / nullish sub", async () => {
+    const ddb = { send: async () => assert.fail("should not be called") };
+    const svc = createRateLimitService({
+      ddb,
+      tableNames: { HOLDS_TABLE: "ff-table-holds" },
+      nowEpoch: fixedNowEpoch,
+      httpError,
+    });
+    await svc.checkAndIncrementCustomerHoldRateLimit("");
+    await svc.checkAndIncrementCustomerHoldRateLimit(null);
+    await svc.checkAndIncrementCustomerHoldRateLimit(undefined);
   });
 });

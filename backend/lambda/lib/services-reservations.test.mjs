@@ -71,8 +71,12 @@ function defaultShared(overrides = {}) {
   const base = {
     roundMoney: (n) => Math.round(Number(n ?? 0) * 100) / 100,
     toRescheduleCreditSk: (phone, id) => `CREDIT#PHONE#${phone}#${id}`,
-    historySourceFromActor: (user) =>
-      String(user ?? "").startsWith("system:") ? "system" : "staff",
+    historySourceFromActor: (user) => {
+      const v = String(user ?? "");
+      if (v.startsWith("system:")) return "system";
+      if (v.startsWith("customer:")) return "customer";
+      return "staff";
+    },
     toTwelveHourLabel: (h, m) =>
       `${(h % 12) || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`,
     normalizeDeadlineLocalIso: (s) => {
@@ -1127,6 +1131,65 @@ describe("createReservation TransactWrite happy path", () => {
     assert.equal(resPut.Item.paymentMethod, null);
     assert.equal(resPut.Item.paymentDeadlineAt, null);
     assert.equal(resPut.Item.paymentDeadlineTz, null);
+  });
+
+  it("attaches customerCognitoSub to the row + uses 'customer' history source for self-service", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildReservations({ ddb });
+    await svc.createReservation(
+      {
+        eventDate: TODAY_LOCAL_DATE,
+        tableId: "T1",
+        holdId: "h1",
+        customerName: "Alice",
+        phone: "+12025550100",
+        depositAmount: 0,
+        customerCognitoSub: "sub-xyz",
+        paymentDeadlineAt: "2026-05-10T18:00:00",
+      },
+      "customer:sub-xyz",
+      false
+    );
+    const txn = ddb.calls.find((c) => c.name === "TransactWriteCommand");
+    const resPut = txn.input.TransactItems[1].Put;
+    assert.equal(resPut.Item.customerCognitoSub, "sub-xyz");
+    const created = historyCalls.find(
+      (h) => h.eventType === "RESERVATION_CREATED"
+    );
+    assert.equal(created.source, "customer");
+    assert.equal(created.actor, "customer:sub-xyz");
+  });
+
+  it("staff-created reservation omits customerCognitoSub (sparse GSI invariant)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildReservations({ ddb });
+    await svc.createReservation(
+      {
+        eventDate: TODAY_LOCAL_DATE,
+        tableId: "T1",
+        holdId: "h1",
+        customerName: "Alice",
+        phone: "+12025550100",
+        depositAmount: 0,
+        paymentDeadlineAt: "2026-05-10T18:00:00",
+      },
+      "staff@example.com",
+      false
+    );
+    const txn = ddb.calls.find((c) => c.name === "TransactWriteCommand");
+    const resPut = txn.input.TransactItems[1].Put;
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(
+        resPut.Item,
+        "customerCognitoSub"
+      ),
+      false,
+      "staff reservation must not set customerCognitoSub"
+    );
+    const created = historyCalls.find(
+      (h) => h.eventType === "RESERVATION_CREATED"
+    );
+    assert.equal(created.source, "staff");
   });
 });
 

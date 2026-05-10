@@ -249,7 +249,10 @@ export function createReservationsShared({
   }
 
   function historySourceFromActor(actor) {
-    return String(actor ?? "").startsWith("system:") ? "system" : "staff";
+    const value = String(actor ?? "");
+    if (value.startsWith("system:")) return "system";
+    if (value.startsWith("customer:")) return "customer";
+    return "staff";
   }
 
   async function trySendCheckInPassSms(reservation, passResult, actor) {
