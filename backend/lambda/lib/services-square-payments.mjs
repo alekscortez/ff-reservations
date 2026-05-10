@@ -225,6 +225,11 @@ export function createSquarePaymentsService({
     amount,
     note,
     idempotencyKey,
+    // Optional override for Square's accepted_payment_methods. Falls back
+    // to the env-driven defaults (apple_pay/google_pay/cash_app_pay all
+    // true) when omitted. Used by /me/cashapp-link to restrict the hosted
+    // checkout to Cash App only.
+    acceptedPaymentMethods: acceptedPaymentMethodsOverride,
   }) {
     const squareEnv = resolveSquareEnv();
     const apiBaseUrl = resolveSquareApiBaseUrl(squareEnv);
@@ -232,11 +237,17 @@ export function createSquarePaymentsService({
     const locationId = String(requiredEnv("SQUARE_LOCATION_ID", env.SQUARE_LOCATION_ID) ?? "").trim();
     const currency = String(env.SQUARE_CURRENCY ?? "USD").trim().toUpperCase();
     const redirectUrl = String(env.SQUARE_CHECKOUT_REDIRECT_URL ?? "").trim();
-    const acceptedPaymentMethods = {
-      apple_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_APPLE_PAY, true),
-      google_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_GOOGLE_PAY, true),
-      cash_app_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_CASH_APP_PAY, true),
-    };
+    const acceptedPaymentMethods = acceptedPaymentMethodsOverride && typeof acceptedPaymentMethodsOverride === "object"
+      ? {
+          apple_pay: Boolean(acceptedPaymentMethodsOverride.apple_pay ?? false),
+          google_pay: Boolean(acceptedPaymentMethodsOverride.google_pay ?? false),
+          cash_app_pay: Boolean(acceptedPaymentMethodsOverride.cash_app_pay ?? false),
+        }
+      : {
+          apple_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_APPLE_PAY, true),
+          google_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_GOOGLE_PAY, true),
+          cash_app_pay: parseBooleanEnv(env.SQUARE_LINK_ENABLE_CASH_APP_PAY, true),
+        };
 
     const idempotency = String(idempotencyKey ?? "").trim() || randomUUID();
     const amountMinor = toAmountMoney(amount);
