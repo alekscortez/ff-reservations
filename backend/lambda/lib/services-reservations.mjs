@@ -73,6 +73,7 @@ export function createReservationsService(
     toTwelveHourLabel,
     normalizeDeadlineLocalIso,
     nowInTimeZoneLocalIso,
+    addMinutesToLocalIso,
     isOverdueReservation,
     isFrequentAutoReservation,
     getRuntimeSettings,
@@ -87,6 +88,12 @@ export function createReservationsService(
     queryReservationsForEventDate,
     getReservationById,
   } = shared;
+  // When the "event_date + 1 day at default hour" default falls in the
+  // past (event already happened operationally + we crossed the default
+  // deadline), extend by this many minutes from now in the same tz so
+  // booking doesn't break. Explicit past deadlines from clients still
+  // throw — this only rescues the auto-default path.
+  const PAST_DEFAULT_DEADLINE_EXTENSION_MINUTES = 4 * 60;
   const { revokeReservationCashAppLinkSession, markReservationPaymentLinkInactive } =
     paymentRecording;
 
@@ -916,13 +923,20 @@ export function createReservationsService(
     let effectiveDeadlineAt = paymentDeadlineAt;
     let effectiveDeadlineTz = null;
     if (paymentStatus === "PENDING" || paymentStatus === "PARTIAL") {
+      // Track whether the deadline was supplied by the caller or
+      // computed from defaults. We auto-clamp past *defaults* (a
+      // system bug for after-cutoff bookings on the active business
+      // day's event) but still throw on explicit past deadlines (a
+      // user error that the staff form should surface).
+      let usingDefault = false;
       if (!effectiveDeadlineAt) {
+        usingDefault = true;
         const deadlineDate = addDaysToIsoDate(eventDate, 1);
         const hh = String(defaultPaymentDeadlineHour).padStart(2, "0");
         const mm = String(defaultPaymentDeadlineMinute).padStart(2, "0");
         effectiveDeadlineAt = `${deadlineDate}T${hh}:${mm}:00`;
       }
-      const normalizedDeadline = normalizeDeadlineLocalIso(effectiveDeadlineAt);
+      let normalizedDeadline = normalizeDeadlineLocalIso(effectiveDeadlineAt);
       if (!normalizedDeadline) {
         throw httpError(400, "paymentDeadlineAt must be YYYY-MM-DDTHH:mm[:ss]");
       }
@@ -931,7 +945,25 @@ export function createReservationsService(
         throw httpError(400, "paymentDeadlineTz is invalid");
       }
       if (normalizedDeadline <= nowIso) {
-        throw httpError(400, "paymentDeadlineAt must be in the future");
+        if (usingDefault && typeof addMinutesToLocalIso === "function") {
+          // event_date + 1d default fell past — typical at 2-5 AM on
+          // the active business day for events whose date is today/
+          // yesterday. Push the deadline N hours into the future in
+          // the same tz so booking succeeds. Cron sweep auto-releases
+          // unpaid reservations later anyway.
+          const extended = addMinutesToLocalIso(
+            nowIso,
+            PAST_DEFAULT_DEADLINE_EXTENSION_MINUTES
+          );
+          const reNormalized = normalizeDeadlineLocalIso(extended);
+          if (reNormalized && reNormalized > nowIso) {
+            normalizedDeadline = reNormalized;
+          } else {
+            throw httpError(400, "paymentDeadlineAt must be in the future");
+          }
+        } else {
+          throw httpError(400, "paymentDeadlineAt must be in the future");
+        }
       }
       effectiveDeadlineAt = normalizedDeadline;
       effectiveDeadlineTz = paymentDeadlineTz;

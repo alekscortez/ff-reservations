@@ -89,6 +89,22 @@ function defaultShared(overrides = {}) {
       return null;
     },
     nowInTimeZoneLocalIso: () => NOW_LOCAL_ISO,
+    addMinutesToLocalIso: (iso, mins) => {
+      // Mirror the real impl just enough for tests: parse YYYY-MM-DDTHH:mm:ss,
+      // add minutes via Date.UTC math, format back. Exact behavior of the
+      // real fn (in services-reservations-shared.mjs:355).
+      const m = String(iso ?? "").match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
+      );
+      if (!m) return null;
+      const [, y, mo, d, h, mi, se] = m;
+      const dt = new Date(
+        Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(se))
+      );
+      dt.setUTCMinutes(dt.getUTCMinutes() + Number(mins || 0));
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}T${pad(dt.getUTCHours())}:${pad(dt.getUTCMinutes())}:${pad(dt.getUTCSeconds())}`;
+    },
     isOverdueReservation: (r) => Boolean(r?._overdue),
     isFrequentAutoReservation: () => false,
     getRuntimeSettings: async () => ({}),
@@ -1190,6 +1206,76 @@ describe("createReservation TransactWrite happy path", () => {
       (h) => h.eventType === "RESERVATION_CREATED"
     );
     assert.equal(created.source, "staff");
+  });
+
+  it("auto-clamps past *default* deadline (event happened, +1d-default is past)", async () => {
+    // Force "now" to be after the auto-defaulted "event_date + 1 day at
+    // 18:00" deadline by setting the event to yesterday-ish + a now that
+    // beats it.
+    const ddb = makeFakeDdb();
+    const yesterday = "2026-05-08";
+    const nowAfterDefault = "2026-05-10T05:00:00";
+    const { svc, historyCalls } = buildReservations({
+      ddb,
+      shared: {
+        nowInTimeZoneLocalIso: () => nowAfterDefault,
+      },
+      getEventByDate: async () => ({
+        eventId: "ev1",
+        eventDate: yesterday,
+        minDeposit: 0,
+        tablePrices: { T1: 100 },
+      }),
+    });
+    const out = await svc.createReservation(
+      {
+        eventDate: yesterday,
+        tableId: "T1",
+        holdId: "h1",
+        customerName: "Alice",
+        phone: "+12025550100",
+        depositAmount: 0,
+        // No paymentDeadlineAt → backend defaults to 2026-05-09T18:00:00
+        // (yesterday + 1d at default 18:00). That's < nowAfterDefault, so
+        // the new clamp kicks in: deadline becomes nowAfterDefault + 4h.
+      },
+      "staff@x",
+      false
+    );
+    assert.ok(out.reservationId, "reservation created despite past default");
+    const txn = ddb.calls.find((c) => c.name === "TransactWriteCommand");
+    const resPut = txn.input.TransactItems[1].Put;
+    // Clamped deadline: 2026-05-10T05:00:00 + 240 min = 2026-05-10T09:00:00
+    assert.equal(resPut.Item.paymentDeadlineAt, "2026-05-10T09:00:00");
+    assert.ok(historyCalls.find((h) => h.eventType === "RESERVATION_CREATED"));
+  });
+
+  it("explicit past deadline still throws 400 (user error, not system bug)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildReservations({
+      ddb,
+      shared: { nowInTimeZoneLocalIso: () => "2026-05-10T05:00:00" },
+    });
+    await assert.rejects(
+      () =>
+        svc.createReservation(
+          {
+            eventDate: TODAY_LOCAL_DATE,
+            tableId: "T1",
+            holdId: "h1",
+            customerName: "Alice",
+            phone: "+12025550100",
+            depositAmount: 0,
+            // Caller explicitly sent a past deadline — staff form bug.
+            paymentDeadlineAt: "2026-05-10T03:00:00",
+          },
+          "staff@x",
+          false
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /paymentDeadlineAt must be in the future/.test(err.message)
+    );
   });
 });
 
