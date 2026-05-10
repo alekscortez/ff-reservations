@@ -542,7 +542,12 @@ describe("POST /me/reservations/{id}/payment/square", () => {
     assert.equal(res.body.square.paymentId, "sq-pay-1");
     assert.equal(calls.createSquarePayment[0].sourceId, "cnon-xyz");
     assert.equal(calls.addReservationPayment[0].body.method, "square");
-    assert.equal(calls.addReservationPayment[0].body.source, "customer");
+    // The customer route does NOT set an explicit source — the actor
+    // ("customer:{sub}") tracks who initiated; payment.source is a fixed
+    // enum constrained to manual|square-direct|square-webhook|reschedule-credit.
+    // addReservationPayment auto-defaults to "square-direct" for non-webhook
+    // square payments, so the route must not pass an invalid value.
+    assert.equal(calls.addReservationPayment[0].body.source, undefined);
   });
 
   it("auto-refunds on addReservationPayment failure (audit C2)", async () => {
