@@ -88,6 +88,12 @@ export function createHoldsService(
     const holdPhoneCountryFinal = holdPhone
       ? detectPhoneCountryFromE164(holdPhone) ?? holdPhoneCountry
       : null;
+    // Customer self-service holds tag the hold row with the Cognito sub of
+    // the caller. The hold->reservation upgrade route reads this back to
+    // verify ownership before promoting. Staff-created holds leave it
+    // unset; ownership for staff is "any staff member."
+    const customerCognitoSub =
+      String(payload?.customerCognitoSub ?? "").trim() || null;
     const item = {
       PK: `EVENTDATE#${eventDate}`,
       SK: `TABLE#${tableId}`,
@@ -99,6 +105,7 @@ export function createHoldsService(
       customerName: payload?.customerName ?? null,
       phone: holdPhone || null,
       phoneCountry: holdPhoneCountryFinal,
+      ...(customerCognitoSub ? { customerCognitoSub } : {}),
     };
 
     try {

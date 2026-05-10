@@ -1,0 +1,119 @@
+### Customer self-service booking routes (/me/holds, /me/reservations*,
+### /me/credits, /me/push-tokens, /me/reservations/{id}/wallet-pass)
+###
+### These power the customer-facing mobile app. All require a CUSTOMER
+### access token (issued by /auth/customer/verify). API Gateway uses the
+### customer-only authorizer; the Lambda re-checks ownership via
+### requireCustomerOwnership + per-route resource ownership.
+###
+### Pre-existing /me routes (profile, list reservations, delete account)
+### are documented separately in me.http.
+###
+### Requires: {{baseUrl}}, {{customerAccessToken}}, {{eventDate}},
+###           {{tableId}}, {{holdId}}, {{reservationId}}, {{squareSourceId}}
+###           in http-client env.
+
+### POST /me/holds — create a customer-owned hold (rate-limited:
+### 5 holds per 5 minutes per Cognito sub).
+### Body: { eventDate, tableId }
+### → 201 { item: { ..., customerCognitoSub }, ttlSeconds: 600 }
+### → 429 if the customer-hold rate-limit window is full
+POST {{baseUrl}}/me/holds
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "tableId": "{{tableId}}"
+}
+
+### POST /me/reservations — upgrade your own hold to a reservation.
+### customerName must come in the body; phone is read from Cognito.
+### Body: { eventDate, tableId, holdId, customerName }
+### → 201 { item: { reservationId, ..., customerCognitoSub } }
+POST {{baseUrl}}/me/reservations
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "tableId": "{{tableId}}",
+  "holdId": "{{holdId}}",
+  "customerName": "Alice Test"
+}
+
+### POST /me/reservations/{id}/payment/square — pay your own deposit
+### via Square In-App Payments SDK (sourceId is the device-tokenized
+### card or wallet nonce).
+### Body: { eventDate, sourceId, amount, idempotencyKey? }
+### → 200 { ok, reservation, square: { paymentId, status, receiptUrl } }
+### → 502 with auto-refund result if Square charged but record failed
+###   (audit C2 safety net)
+POST {{baseUrl}}/me/reservations/{{reservationId}}/payment/square
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "sourceId": "{{squareSourceId}}",
+  "amount": 100,
+  "idempotencyKey": "smoke-test-1"
+}
+
+### PUT /me/reservations/{id}/cancel — self-cancel ≥24h before event
+### end-of-day UTC (per locked policy 2026-05-10). Always issues a
+### RESCHEDULE_CREDIT (refunds are staff-only).
+### Body: { eventDate, reason? }
+### → 200 { item: cancelled reservation }
+### → 409 with { policyHours: 24 } when within the 24h window
+PUT {{baseUrl}}/me/reservations/{{reservationId}}/cancel
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}",
+  "reason": "Plans changed"
+}
+
+### GET /me/reservations/{id}/check-in-pass — re-fetch your own pass
+### without needing the SMS'd token. Reservation must be CONFIRMED+PAID
+### for an active pass to exist; otherwise 404 PASS_NOT_READY.
+### → 200 { pass: { passId, token, qr, expiresAt, ... } }
+GET {{baseUrl}}/me/reservations/{{reservationId}}/check-in-pass?eventDate={{eventDate}}
+Authorization: Bearer {{customerAccessToken}}
+
+### POST /me/reservations/{id}/wallet-pass — Apple Wallet .pkpass.
+### SCAFFOLD: returns 501 WALLET_PASS_NOT_CONFIGURED until Apple Pass
+### Type ID cert is provisioned + signing endpoint is implemented.
+### Mobile app should hide the "Add to Wallet" CTA when this returns 501.
+POST {{baseUrl}}/me/reservations/{{reservationId}}/wallet-pass
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "{{eventDate}}"
+}
+
+### GET /me/credits — reschedule credit balance for the caller's phone.
+### → 200 { items: [...curated credits], totalRemaining }
+GET {{baseUrl}}/me/credits
+Authorization: Bearer {{customerAccessToken}}
+
+### POST /me/push-tokens — register an Expo push token for this device.
+### Body: { token: "ExponentPushToken[...]", platform: "ios" | "android" }
+### → 201 { registered: true, tokenHash, platform }
+POST {{baseUrl}}/me/push-tokens
+Authorization: Bearer {{customerAccessToken}}
+Content-Type: application/json
+
+{
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "ios"
+}
+
+### DELETE /me/push-tokens/{token} — unregister on logout / device
+### change. The token is URL-encoded in the path. Hash is computed
+### server-side; the same token always maps to the same row.
+### → 200 { unregistered: true, tokenHash }
+DELETE {{baseUrl}}/me/push-tokens/ExponentPushToken%5Bxxxxxxxxxxxxxxxxxxxxxx%5D
+Authorization: Bearer {{customerAccessToken}}
