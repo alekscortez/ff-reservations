@@ -7,7 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:backend": "node --test 'backend/lambda/lib/*.test.mjs'",
+    "test:backend": "node --test 'backend/lambda/lib/*.test.mjs' 'backend/cognito-pre-token-gen/*.test.mjs' 'backend/cognito-customer-auth/*.test.mjs'",
     "test:all": "npm test -- --watch=false && npm run test:backend"
   },
   "prettier": {

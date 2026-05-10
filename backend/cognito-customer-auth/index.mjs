@@ -47,7 +47,7 @@ export const handler = async (event) => {
   }
 };
 
-function preSignUp(event) {
+export function preSignUp(event) {
   // Gate auto-confirm to the customer App Client only. Staff Hosted UI
   // signups (if anyone ever uses them) must keep their normal email-
   // verification path — we don't want a random self-signup on the staff
@@ -65,7 +65,7 @@ function preSignUp(event) {
   return event;
 }
 
-function defineAuthChallenge(event) {
+export function defineAuthChallenge(event) {
   const session = event.request.session ?? [];
 
   if (session.length === 0) {
@@ -122,7 +122,7 @@ async function createAuthChallenge(event) {
   return event;
 }
 
-function verifyAuthChallengeResponse(event) {
+export function verifyAuthChallengeResponse(event) {
   const expected = String(event.request.privateChallengeParameters?.answer ?? "");
   const actual = String(event.request.challengeAnswer ?? "");
   // Constant-time compare. Cognito network round-trip dwarfs any timing
@@ -140,7 +140,7 @@ function verifyAuthChallengeResponse(event) {
   return event;
 }
 
-function readPriorOtpFromSession(session) {
+export function readPriorOtpFromSession(session) {
   if (!Array.isArray(session) || session.length === 0) return null;
   const last = session[session.length - 1];
   if (typeof last?.challengeMetadata !== "string") return null;
@@ -148,7 +148,7 @@ function readPriorOtpFromSession(session) {
   return match ? match[1] : null;
 }
 
-function generateOtp() {
+export function generateOtp() {
   // CSPRNG: Math.random() is predictable from a leaked output stream.
   return String(randomInt(100_000, 1_000_000));
 }
