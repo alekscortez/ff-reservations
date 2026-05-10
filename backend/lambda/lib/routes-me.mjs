@@ -274,7 +274,11 @@ export async function handleMeRoute(ctx) {
           eventDate,
           amount,
           method: "square",
-          source: "customer",
+          // omit explicit source: addReservationPayment's auto-default
+          // ("square-direct" for non-webhook square payments) is the
+          // correct value here. The actor "customer:{sub}" identifies
+          // who initiated the payment; payment.source records the
+          // technical channel and is constrained to a fixed enum.
           provider: {
             providerPaymentId: squarePaymentId,
             providerStatus: String(square?.payment?.status ?? "").trim(),
