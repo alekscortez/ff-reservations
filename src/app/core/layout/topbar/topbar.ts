@@ -138,6 +138,13 @@ export class Topbar implements OnInit, OnDestroy {
       return;
     }
     this.quickAvailabilityError = null;
+    // Dismiss the Quick Actions overlay BEFORE handing off to the native
+    // share sheet. On iOS Chrome, leaving the Angular modal up under the
+    // native sheet stacks two competing event surfaces and can lock the
+    // page on heavier views (e.g. /staff/reservations/new with its
+    // hold-countdown ticker + SVG map). Closing first lets WebKit own the
+    // foreground entirely.
+    this.isQuickActionsOpen = false;
     if (typeof navigator !== 'undefined' && navigator.share) {
       navigator
         .share({

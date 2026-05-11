@@ -5,6 +5,7 @@ import {
   DoCheck,
   ElementRef,
   HostListener,
+  NgZone,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -103,6 +104,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private reservationsApi = inject(ReservationsService);
   private clientsApi = inject(ClientsService);
   private destroyRef = inject(DestroyRef);
+  private ngZone = inject(NgZone);
   @ViewChild('desktopSplitPanel') desktopSplitPanel?: ElementRef<HTMLElement>;
   @ViewChild('compactMapShell') compactMapShell?: ElementRef<HTMLElement>;
   @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
@@ -341,7 +343,13 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.tablesApi.getForEvent(date).subscribe({
       next: (res) => {
         this.event = res.event;
-        this.tables = res.tables;
+        // Most polls return identical tables. Reassigning this.tables forces
+        // TableMap's ngOnChanges to fire — which re-parses + serializes the
+        // 193KB SVG. Keep the same array reference when nothing changed so
+        // the map skips the re-render entirely.
+        if (!this.isSameTablesShape(this.tables, res.tables)) {
+          this.tables = res.tables;
+        }
         this.sections = Array.from(new Set(res.tables.map((t) => t.section))).sort();
         if (this.filterSection.value !== 'ALL' && !this.sections.includes(this.filterSection.value)) {
           this.filterSection.setValue('ALL');
@@ -363,6 +371,21 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         }
       },
     });
+  }
+
+  private isSameTablesShape(a: TableForEvent[], b: TableForEvent[]): boolean {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      const x = a[i];
+      const y = b[i];
+      if (x.id !== y.id) return false;
+      if (x.status !== y.status) return false;
+      if (x.disabled !== y.disabled) return false;
+      if (x.price !== y.price) return false;
+      if (x.section !== y.section) return false;
+    }
+    return true;
   }
 
   private startPolling(): void {
@@ -795,16 +818,28 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private startHoldTimer(): void {
     this.clearHoldTimer();
     if (!this.holdExpiresAt) return;
-    const update = () => {
-      const now = Math.floor(Date.now() / 1000);
-      this.holdCountdown = Math.max(0, this.holdExpiresAt! - now);
-      if (this.holdCountdown <= 0) {
-        this.clearHoldTimer();
-        this.clearActiveHoldSession();
-      }
-    };
-    update();
-    this.holdTimer = setInterval(update, 1000);
+    // First tick goes through Angular so the initial countdown renders.
+    const now = Math.floor(Date.now() / 1000);
+    this.holdCountdown = Math.max(0, this.holdExpiresAt - now);
+    // Subsequent ticks run OUTSIDE Angular's NgZone so the 1Hz tick doesn't
+    // trigger a global change-detection cycle every second — that CD storm
+    // (combined with ngDoCheck's layout reads) blocked the main thread enough
+    // to freeze iOS Chrome when the native share sheet opened on top.
+    // Re-enter the zone only when the displayed second actually changes.
+    this.ngZone.runOutsideAngular(() => {
+      this.holdTimer = setInterval(() => {
+        const next = Math.floor(Date.now() / 1000);
+        const newCountdown = Math.max(0, this.holdExpiresAt! - next);
+        if (newCountdown === this.holdCountdown) return;
+        this.ngZone.run(() => {
+          this.holdCountdown = newCountdown;
+          if (this.holdCountdown <= 0) {
+            this.clearHoldTimer();
+            this.clearActiveHoldSession();
+          }
+        });
+      }, 1000);
+    });
   }
 
   private clearHoldTimer(): void {
