@@ -12,8 +12,22 @@ ZIP_PATH="function.zip"
 
 rm -f "$ZIP_PATH"
 
-# Package entrypoint, static assets, and all local modules used by index.mjs.
-zip -r "$ZIP_PATH" index.mjs table-template.json lib >/dev/null
+# Install runtime-only dependencies (passkit-generator + its tree) into a
+# local node_modules. The AWS Lambda Node 22 runtime ships @aws-sdk/* so we
+# never list those here — see backend/lambda/package.json. The install is
+# idempotent; npm skips work if the lockfile is already in sync.
+npm install --omit=dev --no-audit --no-fund --prefer-offline >/dev/null
+
+# Package entrypoint, static assets, local modules, runtime node_modules,
+# and the wallet-pass icon/logo bundle. Wallet assets are optional — the
+# directory may not exist in environments that haven't provisioned the
+# Apple Pass Type ID yet; zip's -r handles missing dirs gracefully when
+# tested ahead of time.
+PACKAGE_PATHS=(index.mjs package.json table-template.json lib node_modules)
+if [ -d assets ]; then
+  PACKAGE_PATHS+=(assets)
+fi
+zip -r "$ZIP_PATH" "${PACKAGE_PATHS[@]}" >/dev/null
 
 aws lambda update-function-code \
   --function-name "$FUNCTION_NAME" \

@@ -54,6 +54,7 @@ import { createPackagesService } from "./lib/services-packages.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
 import { createPushNotificationsService } from "./lib/services-push-notifications.mjs";
+import { createWalletPassService } from "./lib/services-wallet-pass.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
@@ -92,6 +93,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
 const TABLE_TEMPLATE = JSON.parse(fs.readFileSync(TABLE_TEMPLATE_PATH, "utf8"));
+
+// Apple Wallet pass icons loaded at cold start. Missing files mean the
+// wallet feature stays disabled (createWalletPassService.isEnabled()
+// returns false) and /me/reservations/{id}/wallet-pass returns 501.
+const WALLET_PASS_ASSETS_DIR = path.join(__dirname, "assets", "wallet-pass");
+function loadWalletPassAsset(filename) {
+  const p = path.join(WALLET_PASS_ASSETS_DIR, filename);
+  try {
+    return fs.readFileSync(p);
+  } catch {
+    return null;
+  }
+}
+const WALLET_PASS_ASSETS = {
+  iconPng: loadWalletPassAsset("icon.png"),
+  icon2xPng: loadWalletPassAsset("icon@2x.png"),
+  icon3xPng: loadWalletPassAsset("icon@3x.png"),
+  logoPng: loadWalletPassAsset("logo.png"),
+  logo2xPng: loadWalletPassAsset("logo@2x.png"),
+  logo3xPng: loadWalletPassAsset("logo@3x.png"),
+};
 
 // maxAttempts: 2 keeps p95 down on TransactWrite contention (hold->reserve,
 // payment recording). SDK default is 3 with exponential backoff, which can
@@ -446,6 +468,22 @@ const pushNotificationsService = createPushNotificationsService({
   expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? null,
 });
 
+const walletPassService = createWalletPassService({
+  secretClient: secretsManager,
+  env: {
+    WALLET_PASS_TYPE_IDENTIFIER: process.env.WALLET_PASS_TYPE_IDENTIFIER,
+    WALLET_TEAM_IDENTIFIER: process.env.WALLET_TEAM_IDENTIFIER,
+    WALLET_PASS_SECRET_ARN: process.env.WALLET_PASS_SECRET_ARN,
+    WALLET_ORGANIZATION_NAME: process.env.WALLET_ORGANIZATION_NAME,
+    WALLET_LOGO_TEXT: process.env.WALLET_LOGO_TEXT,
+    WALLET_BACKGROUND_COLOR: process.env.WALLET_BACKGROUND_COLOR,
+    WALLET_FOREGROUND_COLOR: process.env.WALLET_FOREGROUND_COLOR,
+    WALLET_LABEL_COLOR: process.env.WALLET_LABEL_COLOR,
+  },
+  httpError,
+  assets: WALLET_PASS_ASSETS,
+});
+
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
@@ -542,6 +580,9 @@ export const handler = async (event) => {
         reservationsHoldsService.rescheduleReservationForCustomer,
       // pass
       getActivePassForReservation: checkInPassesService.getActivePassForReservation,
+      issuePassForReservation: checkInPassesService.issuePassForReservation,
+      generateWalletPass: walletPassService.generatePkpassForReservation,
+      walletPassEnabled: walletPassService.isEnabled,
       // payments
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,

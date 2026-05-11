@@ -1,0 +1,10 @@
+{
+  "name": "ff-reservations-lambda",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runtime-only dependencies bundled with the Lambda function code. AWS SDK is provided by the Node 22 runtime and is NOT listed here.",
+  "type": "module",
+  "dependencies": {
+    "passkit-generator": "^3.5.7"
+  }
+}
