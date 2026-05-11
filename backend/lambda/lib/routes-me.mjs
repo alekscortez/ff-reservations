@@ -14,7 +14,7 @@
 //   POST   /me/reservations/{id}/reschedule           — atomic cancel-with-credit + rebook
 //   PUT    /me/reservations/{id}/cancel               — self-cancel (≥24h, credit only)
 //   GET    /me/reservations/{id}/check-in-pass        — re-fetch own pass
-//   POST   /me/reservations/{id}/wallet-pass          — Apple Wallet (501 until cert)
+//   POST   /me/reservations/{id}/wallet-pass          — Apple Wallet pkpass (base64)
 //   GET    /me/credits                                — reschedule credit balance
 //   POST   /me/push-tokens                            — register Expo push token
 //   DELETE /me/push-tokens/{token}                    — unregister push token
@@ -69,6 +69,9 @@ export async function handleMeRoute(ctx) {
     rescheduleReservationForCustomer,
     // pass
     getActivePassForReservation,
+    issuePassForReservation,
+    generateWalletPass,
+    walletPassEnabled,
     // payments
     createSquarePayment,
     createSquarePaymentLink,
@@ -719,10 +722,11 @@ export async function handleMeRoute(ctx) {
     /^\/me\/reservations\/([^/]+)\/wallet-pass$/
   );
   if (meReservationWalletPassMatch && method === "POST") {
-    // Ownership check first so unauthorized callers don't learn the
-    // route exists. Then return 501 — the Apple Pass Type ID cert
-    // and signing endpoint are not yet provisioned. Mobile app should
-    // hide the "Add to Wallet" CTA when this returns 501.
+    // Ownership before any other state lookup so unauthorized callers
+    // don't learn the route exists. After ownership: status / payment
+    // gating, then either reuse the existing check-in pass token or
+    // issue a fresh one, then hand the reservation + token to the
+    // pkpass generator and return base64 to the client.
     const sub = requireCustomerOwnership(event);
     const reservationId = meReservationWalletPassMatch[1];
     const body = (await getBody(event)) ?? {};
@@ -735,11 +739,73 @@ export async function handleMeRoute(ctx) {
     if (String(reservation?.customerCognitoSub ?? "") !== sub) {
       return json(403, { message: "Reservation is not yours" }, cors);
     }
+    if (typeof walletPassEnabled === "function" && !walletPassEnabled()) {
+      return json(
+        501,
+        {
+          message: "Apple Wallet pass generation is not yet enabled. Coming soon.",
+          code: "WALLET_PASS_NOT_CONFIGURED",
+        },
+        cors
+      );
+    }
+    if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
+      return json(
+        400,
+        { message: "Only confirmed reservations can produce a Wallet pass" },
+        cors
+      );
+    }
+    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") {
+      return json(
+        400,
+        {
+          message: "Reservation must be paid in full before adding to Apple Wallet",
+          code: "RESERVATION_NOT_PAID",
+        },
+        cors
+      );
+    }
+
+    let activePass = await getActivePassForReservation(reservationId, {
+      includeToken: true,
+    });
+    if (!activePass && typeof issuePassForReservation === "function") {
+      // Auto-issue on first wallet request — covers the rare race
+      // window where a customer's mobile app reaches /wallet-pass
+      // before the check-in pass dispatch from the payment hook
+      // completes. issuePassForReservation is idempotent on its own
+      // checks (CONFIRMED + PAID), so a second caller still gets the
+      // same active pass.
+      const issued = await issuePassForReservation({
+        reservation,
+        issuedBy: actorLabelFromSub(sub),
+        reissue: false,
+      });
+      activePass = issued?.pass ?? null;
+    }
+    if (!activePass?.token) {
+      return json(
+        404,
+        {
+          message: "No check-in pass available yet for this reservation.",
+          code: "PASS_NOT_READY",
+        },
+        cors
+      );
+    }
+
+    const result = await generateWalletPass({
+      reservation,
+      checkInPass: activePass,
+    });
     return json(
-      501,
+      200,
       {
-        message: "Apple Wallet pass generation is not yet enabled. Coming soon.",
-        code: "WALLET_PASS_NOT_CONFIGURED",
+        filename: result.filename,
+        contentType: result.contentType,
+        pkpassBase64: result.pkpassBase64,
+        byteLength: result.byteLength,
       },
       cors
     );

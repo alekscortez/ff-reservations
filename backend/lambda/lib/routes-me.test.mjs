@@ -161,6 +161,9 @@ function makeFullCtx(overrides = {}) {
     cancelReservation: [],
     rescheduleReservationForCustomer: [],
     getActivePassForReservation: [],
+    issuePassForReservation: [],
+    generateWalletPass: [],
+    walletPassEnabled: [],
     createSquarePayment: [],
     createSquarePaymentLink: [],
     setReservationPaymentLinkWindow: [],
@@ -268,6 +271,37 @@ function makeFullCtx(overrides = {}) {
       getActivePassForReservation: async (reservationId, opts) => {
         calls.getActivePassForReservation.push({ reservationId, opts });
         return overrides.activePass === undefined ? null : overrides.activePass;
+      },
+      issuePassForReservation: async (args) => {
+        calls.issuePassForReservation.push(args);
+        if (overrides.issuePassThrows) throw overrides.issuePassThrows;
+        return overrides.issuePassResult ?? {
+          issued: true,
+          reused: false,
+          pass: {
+            passId: "pass-1",
+            token: "issued-tok",
+            reservationId: args?.reservation?.reservationId,
+            eventDate: args?.reservation?.eventDate,
+            tableId: args?.reservation?.tableId,
+          },
+        };
+      },
+      generateWalletPass: async (args) => {
+        calls.generateWalletPass.push(args);
+        if (overrides.generateWalletPassThrows) throw overrides.generateWalletPassThrows;
+        return overrides.generateWalletPassResult ?? {
+          filename: `ff-${args?.reservation?.reservationId}.pkpass`,
+          contentType: "application/vnd.apple.pkpass",
+          pkpassBase64: "ZmFrZS1wa3Bhc3M=",
+          byteLength: 11,
+        };
+      },
+      walletPassEnabled: () => {
+        calls.walletPassEnabled.push(true);
+        return overrides.walletPassEnabled === undefined
+          ? true
+          : Boolean(overrides.walletPassEnabled);
       },
       createSquarePayment: async (args) => {
         calls.createSquarePayment.push(args);
@@ -905,37 +939,142 @@ describe("GET /me/reservations/{id}/check-in-pass", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /me/reservations/{id}/wallet-pass — scaffold
+// POST /me/reservations/{id}/wallet-pass
 // ---------------------------------------------------------------------------
 
-describe("POST /me/reservations/{id}/wallet-pass (scaffold)", () => {
-  const reservation = {
+describe("POST /me/reservations/{id}/wallet-pass", () => {
+  const paidReservation = {
     reservationId: "r1",
     customerCognitoSub: SUB,
+    customerName: "Aleks",
+    eventDate: "2026-06-01",
+    tableId: "T7",
     status: "CONFIRMED",
+    paymentStatus: "PAID",
   };
+
+  it("400 on bad eventDate", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "nope" } },
+      reservation: paidReservation,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("404 when reservation does not exist", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 404);
+  });
 
   it("403 when reservation is not the caller's", async () => {
     const { ctx } = makeFullCtx({
       method: "POST",
       path: "/me/reservations/r1/wallet-pass",
-      event: { body: { eventDate: "2026-05-09" } },
-      reservation: { ...reservation, customerCognitoSub: "other" },
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, customerCognitoSub: "other-sub" },
     });
     const res = await handleMeRoute(ctx);
     assert.equal(res.statusCode, 403);
   });
 
-  it("501 WALLET_PASS_NOT_CONFIGURED for owned reservation (cert not yet provisioned)", async () => {
-    const { ctx } = makeFullCtx({
+  it("501 WALLET_PASS_NOT_CONFIGURED when wallet service disabled", async () => {
+    const { ctx, calls } = makeFullCtx({
       method: "POST",
       path: "/me/reservations/r1/wallet-pass",
-      event: { body: { eventDate: "2026-05-09" } },
-      reservation,
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      walletPassEnabled: false,
     });
     const res = await handleMeRoute(ctx);
     assert.equal(res.statusCode, 501);
     assert.equal(res.body.code, "WALLET_PASS_NOT_CONFIGURED");
+    // Service shouldn't have been invoked when disabled
+    assert.equal(calls.generateWalletPass.length, 0);
+  });
+
+  it("400 when reservation is not CONFIRMED", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, status: "CANCELLED" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("400 RESERVATION_NOT_PAID when payment status is not PAID", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, paymentStatus: "PENDING" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.code, "RESERVATION_NOT_PAID");
+  });
+
+  it("auto-issues check-in pass when none exists, then generates wallet pass", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      activePass: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.issuePassForReservation.length, 1);
+    assert.equal(calls.generateWalletPass.length, 1);
+    assert.equal(calls.generateWalletPass[0].checkInPass.token, "issued-tok");
+    assert.equal(res.body.filename, "ff-r1.pkpass");
+    assert.equal(res.body.contentType, "application/vnd.apple.pkpass");
+    assert.equal(typeof res.body.pkpassBase64, "string");
+  });
+
+  it("reuses existing active check-in pass when present", async () => {
+    const existingPass = {
+      passId: "p-existing",
+      token: "existing-tok",
+      reservationId: "r1",
+    };
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      activePass: existingPass,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    // Issue shouldn't fire when we already have an active pass
+    assert.equal(calls.issuePassForReservation.length, 0);
+    assert.equal(calls.generateWalletPass[0].checkInPass.token, "existing-tok");
+  });
+
+  it("404 PASS_NOT_READY when no pass is active and auto-issue produces none", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      activePass: null,
+      issuePassResult: { issued: false, reused: false, pass: null },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.code, "PASS_NOT_READY");
+    assert.equal(calls.generateWalletPass.length, 0);
   });
 });
 
