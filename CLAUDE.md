@@ -4,9 +4,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 > **Branch state (2026-05-09):** `main` runs the Angular 21 SPA in production. A React + Expo monorepo port of this app exists on the `react` branch (snapshot tag `react-port-snapshot-2026-05-09`) — paused mid-Phase 5 with known parity gaps documented in `.line-by-line-audit-2026-05-10.md` on that branch. Resume that work on the `react` branch; do not introduce React, pnpm, Vite, or `apps/`/`packages/` changes on `main`.
 
-> **Companion mobile app (2026-05-10):** Customer-facing iOS/Android mobile app lives in a SEPARATE repo at `github.com/alekscortez/ff-customer-mobile` (Expo SDK 54 monorepo, EAS project `@famoso-fuego/ff-customer-mobile`). Backend `/auth/customer/*` and `/me/*` routes power it. Full booking + reschedule + payment + push notification loops verified end-to-end on real device (sandbox). Native Square In-App Payments SDK works (card sheet + Apple Pay UI render natively; Apple Pay sandbox tokens are rejected by Square sandbox, that's a Square limitation). Dev builds run via `npx expo run:ios --device` from `apps/mobile/` — no EAS Build needed for daily dev. See `~/.claude/projects/-Users-alekscortez-WebstormProjects-ff-reservations/memory/ff_customer_mobile_status.md` for the current state of that initiative.
-
-> **Lambda Square env (2026-05-10):** `ff-reservations-api` is currently pointed at **sandbox** Square credentials (`SQUARE_ENV=sandbox`, secret `ff/square/sandbox-iUhiXH`, location `LX8EYYBKF50N9`) because the staff Angular app isn't in active production use yet and the mobile dev loop needs sandbox. Production secret + location (`ff/square/production-QaNJNJ` / `L86CASVC3TQC5`) are intact in Secrets Manager — swap back via `aws lambda update-function-configuration` when staff app launches. See `~/.claude/projects/-Users-alekscortez-WebstormProjects-ff-reservations/memory/lambda_square_env_sandbox_ok.md`. Sandbox webhook subscription `wbhk_2497e91b...` is wired to `/webhooks/square` and receives `payment.created` / `payment.updated` events.
+> **Companion mobile app + Lambda Square env (sandbox, 2026-05-11):** Customer-facing iOS/Android mobile app lives in a SEPARATE repo at `github.com/alekscortez/ff-customer-mobile` (Expo SDK 54). Full booking + reschedule + payment + push + Apple Wallet verified end-to-end on real device. Because the staff Angular app isn't in production yet and the mobile dev loop needs sandbox, `ff-reservations-api` runs against **sandbox Square** (`SQUARE_ENV=sandbox`, secret `ff/square/sandbox-iUhiXH`, location `LX8EYYBKF50N9`); production secret + location (`ff/square/production-QaNJNJ` / `L86CASVC3TQC5`) are intact in Secrets Manager — swap via `aws lambda update-function-configuration` when staff app launches. Sandbox webhook `wbhk_2497e91b...` is wired. See memory: `ff_customer_mobile_status.md` (mobile state) + `lambda_square_env_sandbox_ok.md` (env policy).
 
 ## Stack
 
@@ -67,14 +65,7 @@ npm run test:all                         # both, in sequence
 bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profile)
 ```
 
-> Backend tests use Node 22's built-in `node:test` runner (no extra runner
-> dep). Several `@aws-sdk/*` clients are devDeps at the repo root
-> (`lib-dynamodb`, `client-cognito-identity-provider`,
-> `client-secrets-manager`, `client-sns`) so test files can resolve
-> modules that import them; the production Lambda doesn't bundle them
-> because the AWS Lambda nodejs22.x runtime ships @aws-sdk/* v3 modules.
-> The `test:backend` glob covers `backend/lambda/lib/`,
-> `backend/cognito-pre-token-gen/`, and `backend/cognito-customer-auth/`.
+> Backend tests use Node 22's built-in `node:test` runner. `@aws-sdk/*` clients are devDeps at the repo root (so tests can resolve them); the Lambda nodejs22.x runtime ships those SDK modules so they're not bundled. `test:backend` covers `backend/lambda/lib/`, `backend/cognito-pre-token-gen/`, and `backend/cognito-customer-auth/`. Runtime-only deps (e.g. `passkit-generator`) live in `backend/lambda/package.json` and get bundled by `deploy.sh`.
 
 ## Auth model — read this before touching auth
 
@@ -124,12 +115,7 @@ Settings stored in `ff-settings` override env at runtime; some keys (Square IDs,
 
 ## Frontend config
 
-`src/app/core/config/app-config.ts` hardcodes:
-
-- `apiBaseUrl: https://api.famosofuego.com`
-- Cognito authority, hostedUiDomain, clientId, scope `openid email profile`
-
-There is no per-environment config file yet.
+`src/app/core/config/app-config.ts` hardcodes `apiBaseUrl: https://api.famosofuego.com` and the Cognito authority / hostedUiDomain / clientId / scope. No per-environment config file yet.
 
 ## Conventions
 
