@@ -433,6 +433,7 @@ const checkInPassesService = createCheckInPassesService({
   nowEpoch,
   randomUUID,
   addDaysToIsoDate,
+  getAppSettings: settingsService.getAppSettings,
 });
 
 const squarePaymentsService = createSquarePaymentsService({
@@ -460,6 +461,7 @@ const smsNotificationsService = createSmsNotificationsService({
   },
   httpError,
   nowEpoch,
+  getAppSettings: settingsService.getAppSettings,
 });
 
 const pushNotificationsService = createPushNotificationsService({

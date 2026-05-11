@@ -16,8 +16,22 @@ export function createSmsNotificationsService({
   env,
   httpError,
   nowEpoch,
+  getAppSettings,
 }) {
-  function resolveSmsEnabled() {
+  // Settings table is the source of truth. Env is the cold-start default
+  // and the disaster fallback if the settings load throws. Admin UI toggle
+  // (smsEnabled) flips this without a Lambda redeploy.
+  async function resolveSmsEnabled() {
+    if (typeof getAppSettings === "function") {
+      try {
+        const settings = await getAppSettings();
+        if (typeof settings?.smsEnabled === "boolean") {
+          return settings.smsEnabled;
+        }
+      } catch {
+        // fall through to env-based default
+      }
+    }
     const raw = String(env?.SMS_ENABLED ?? "true").trim().toLowerCase();
     return raw !== "0" && raw !== "false" && raw !== "off" && raw !== "disabled";
   }
@@ -59,7 +73,7 @@ export function createSmsNotificationsService({
     paymentLinkUrl,
     ttlMinutes,
   }) {
-    if (!resolveSmsEnabled()) {
+    if (!(await resolveSmsEnabled())) {
       throw httpError(503, "SMS notifications are disabled");
     }
 
@@ -120,7 +134,7 @@ export function createSmsNotificationsService({
     customerName,
     tableId,
   }) {
-    if (!resolveSmsEnabled()) {
+    if (!(await resolveSmsEnabled())) {
       throw httpError(503, "SMS notifications are disabled");
     }
 
@@ -173,7 +187,7 @@ export function createSmsNotificationsService({
     tableId,
     passUrl,
   }) {
-    if (!resolveSmsEnabled()) {
+    if (!(await resolveSmsEnabled())) {
       throw httpError(503, "SMS notifications are disabled");
     }
 

@@ -27,6 +27,7 @@ export function createCheckInPassesService({
   nowEpoch,
   randomUUID,
   addDaysToIsoDate,
+  getAppSettings,
 }) {
   const { CHECKIN_PASSES_TABLE, RES_TABLE } = tableNames;
 
@@ -42,24 +43,45 @@ export function createCheckInPassesService({
     return `${randomUUID().replace(/-/g, "")}${randomUUID().replace(/-/g, "")}`;
   }
 
-  function resolvePassTtlDays() {
+  // Settings table is the source of truth. Env is the cold-start default
+  // and the disaster fallback if the settings load throws. Admin UI changes
+  // (checkInPassTtlDays / checkInPassBaseUrl) take effect without redeploy.
+  async function readSettings() {
+    if (typeof getAppSettings !== "function") return null;
+    try {
+      return await getAppSettings();
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolvePassTtlDays() {
+    const settings = await readSettings();
+    const fromSettings = Number(settings?.checkInPassTtlDays);
+    if (Number.isFinite(fromSettings) && fromSettings > 0) {
+      return Math.max(1, Math.min(30, Math.round(fromSettings)));
+    }
     const raw = Number(env.CHECKIN_PASS_TTL_DAYS);
     if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_PASS_TTL_DAYS;
     return Math.max(1, Math.min(30, Math.round(raw)));
   }
 
-  function resolvePassExpiryEpoch(eventDate) {
-    const fallback = nowEpoch() + resolvePassTtlDays() * 86400;
+  async function resolvePassExpiryEpoch(eventDate) {
+    const ttlDays = await resolvePassTtlDays();
+    const fallback = nowEpoch() + ttlDays * 86400;
     const baseDate = String(eventDate ?? "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(baseDate)) return fallback;
 
-    const expiryDate = addDaysToIsoDate(baseDate, resolvePassTtlDays());
+    const expiryDate = addDaysToIsoDate(baseDate, ttlDays);
     const ms = Date.parse(`${expiryDate}T12:00:00Z`);
     if (!Number.isFinite(ms)) return fallback;
     return Math.floor(ms / 1000);
   }
 
-  function resolvePassBaseUrl() {
+  async function resolvePassBaseUrl() {
+    const settings = await readSettings();
+    const fromSettings = String(settings?.checkInPassBaseUrl ?? "").trim();
+    if (fromSettings) return fromSettings;
     return String(env.CHECKIN_PASS_BASE_URL ?? "").trim();
   }
 
@@ -113,11 +135,11 @@ export function createCheckInPassesService({
     }
   }
 
-  function buildPassUrl(token) {
-    return buildPassUrlFromBaseUrl(resolvePassBaseUrl(), token);
+  async function buildPassUrl(token) {
+    return buildPassUrlFromBaseUrl(await resolvePassBaseUrl(), token);
   }
 
-  function toPassResponse(item, includeToken = false) {
+  async function toPassResponse(item, includeToken = false) {
     if (!item) return null;
     const token = includeToken ? String(item.token ?? "").trim() : "";
     return {
@@ -136,7 +158,7 @@ export function createCheckInPassesService({
       revokedAt: Number(item.revokedAt ?? 0) || null,
       revokedBy: String(item.revokedBy ?? "").trim() || null,
       token: token || null,
-      url: token ? buildPassUrl(token) : null,
+      url: token ? await buildPassUrl(token) : null,
       qrPayload: token ? `ffr-checkin:${token}` : null,
     };
   }
@@ -300,7 +322,7 @@ export function createCheckInPassesService({
       return {
         issued: false,
         reused: true,
-        pass: toPassResponse(active, true),
+        pass: await toPassResponse(active, true),
       };
     }
 
@@ -311,7 +333,7 @@ export function createCheckInPassesService({
 
     const tableName = requiredTableName();
     const passId = randomUUID();
-    const expiresAt = resolvePassExpiryEpoch(eventDate);
+    const expiresAt = await resolvePassExpiryEpoch(eventDate);
     let created = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const token = generateToken();
@@ -409,7 +431,7 @@ export function createCheckInPassesService({
     return {
       issued: true,
       reused: false,
-      pass: toPassResponse(created, true),
+      pass: await toPassResponse(created, true),
     };
   }
 
@@ -417,7 +439,7 @@ export function createCheckInPassesService({
     const now = nowEpoch();
     const passes = await listReservationPasses(reservationId);
     const active = passes.find((item) => isPassActive(item, now));
-    return active ? toPassResponse(active, includeToken) : null;
+    return active ? await toPassResponse(active, includeToken) : null;
   }
 
   async function getLatestPassForReservation(reservationId, { includeToken = false } = {}) {
@@ -427,7 +449,7 @@ export function createCheckInPassesService({
     if (!latest) return null;
     const latestStatus = String(latest.status ?? "").toUpperCase();
     const allowToken = includeToken && latestStatus === "ISSUED";
-    return toPassResponse(latest, allowToken);
+    return await toPassResponse(latest, allowToken);
   }
 
   async function getPassPreviewByToken(token) {
@@ -466,7 +488,7 @@ export function createCheckInPassesService({
       throw httpError(404, "Pass not found");
     }
 
-    const pass = toPassResponse(passItem, false);
+    const pass = await toPassResponse(passItem, false);
     return {
       passId: String(pass?.passId ?? "").trim() || null,
       reservationId: String(pass?.reservationId ?? "").trim() || null,
@@ -478,8 +500,8 @@ export function createCheckInPassesService({
     };
   }
 
-  function resultForState(code, message, passItem = null) {
-    const pass = toPassResponse(passItem, false);
+  async function resultForState(code, message, passItem = null) {
+    const pass = await toPassResponse(passItem, false);
     return {
       ok: code === "CHECKED_IN",
       code,
@@ -499,7 +521,7 @@ export function createCheckInPassesService({
   async function verifyAndConsumePass({ token, scannerUser, scannerDevice }) {
     const parsedToken = normalizeTokenInput(token);
     if (!parsedToken) {
-      return resultForState("INVALID_TOKEN", "Token is required");
+      return await resultForState("INVALID_TOKEN", "Token is required");
     }
 
     const tableName = requiredTableName();
@@ -512,13 +534,13 @@ export function createCheckInPassesService({
     );
     const lookup = lookupOut.Item;
     if (!lookup) {
-      return resultForState("INVALID_TOKEN", "Pass not found");
+      return await resultForState("INVALID_TOKEN", "Pass not found");
     }
 
     const reservationPk = String(lookup.reservationPk ?? "").trim();
     const reservationSk = String(lookup.reservationSk ?? "").trim();
     if (!reservationPk || !reservationSk) {
-      return resultForState("INVALID_TOKEN", "Pass lookup is invalid");
+      return await resultForState("INVALID_TOKEN", "Pass lookup is invalid");
     }
 
     const passOut = await ddb.send(
@@ -529,7 +551,7 @@ export function createCheckInPassesService({
     );
     const passItem = passOut.Item;
     if (!passItem) {
-      return resultForState("INVALID_TOKEN", "Pass record not found");
+      return await resultForState("INVALID_TOKEN", "Pass record not found");
     }
 
     const now = nowEpoch();
@@ -543,16 +565,16 @@ export function createCheckInPassesService({
           // Ignore transition race; scanner still receives expired state.
         }
       }
-      return resultForState("EXPIRED", "Pass is expired", passItem);
+      return await resultForState("EXPIRED", "Pass is expired", passItem);
     }
     if (passStatus === "USED") {
-      return resultForState("ALREADY_USED", "Pass already used", passItem);
+      return await resultForState("ALREADY_USED", "Pass already used", passItem);
     }
     if (passStatus === "REVOKED") {
-      return resultForState("REVOKED", "Pass was revoked", passItem);
+      return await resultForState("REVOKED", "Pass was revoked", passItem);
     }
     if (passStatus !== "ISSUED") {
-      return resultForState("INVALID_TOKEN", "Pass is not valid", passItem);
+      return await resultForState("INVALID_TOKEN", "Pass is not valid", passItem);
     }
 
     const by = String(scannerUser ?? "").trim() || "system:checkin";
@@ -616,12 +638,12 @@ export function createCheckInPassesService({
       const latest = refreshed.Item ?? passItem;
       const latestStatus = String(latest.status ?? "").toUpperCase();
       if (latestStatus === "USED") {
-        return resultForState("ALREADY_USED", "Pass already used", latest);
+        return await resultForState("ALREADY_USED", "Pass already used", latest);
       }
       if (latestStatus === "REVOKED") {
-        return resultForState("REVOKED", "Pass was revoked", latest);
+        return await resultForState("REVOKED", "Pass was revoked", latest);
       }
-      return resultForState("INVALID_TOKEN", "Pass is not valid", latest);
+      return await resultForState("INVALID_TOKEN", "Pass is not valid", latest);
     }
 
     const consumed = {
@@ -683,7 +705,7 @@ export function createCheckInPassesService({
       },
     });
 
-    return resultForState("CHECKED_IN", "Check-in successful", consumed);
+    return await resultForState("CHECKED_IN", "Check-in successful", consumed);
   }
 
   return {
