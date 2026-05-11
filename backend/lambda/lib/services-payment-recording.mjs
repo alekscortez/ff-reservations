@@ -1009,9 +1009,23 @@ export function createPaymentRecordingService(
             paymentStatus: nextStatus,
           },
         })
+        .then((result) => {
+          console.info("payment_push_dispatched", {
+            reservationId,
+            sub: customerSub.slice(0, 8),
+            paymentStatus: nextStatus,
+            result,
+          });
+        })
         .catch(() => {
           // Push service already logs internally; nothing else to do.
         });
+    } else {
+      console.info("payment_push_skipped", {
+        reservationId,
+        hasCustomerSub: Boolean(customerSub),
+        hasPushService: Boolean(pushNotifications),
+      });
     }
 
     if (!updated) return updated;
