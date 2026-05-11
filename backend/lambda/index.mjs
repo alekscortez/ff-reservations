@@ -53,6 +53,7 @@ import { handlePackagesRoute } from "./lib/routes-packages.mjs";
 import { createPackagesService } from "./lib/services-packages.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
+import { createPushNotificationsService } from "./lib/services-push-notifications.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
@@ -439,6 +440,12 @@ const smsNotificationsService = createSmsNotificationsService({
   nowEpoch,
 });
 
+const pushNotificationsService = createPushNotificationsService({
+  ddb,
+  CLIENTS_TABLE,
+  expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? null,
+});
+
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
@@ -469,6 +476,7 @@ const reservationsHoldsService = createReservationsHoldsService({
   frequentPaymentLinkTtlMinutes: FREQUENT_PAYMENT_LINK_TTL_MINUTES,
   isFrequentReservationByPhoneAndTable: clientsService.isFrequentReservationByPhoneAndTable,
   getAppSettings: settingsService.getAppSettings,
+  pushNotifications: pushNotificationsService,
 });
 
 // ---------- router ----------

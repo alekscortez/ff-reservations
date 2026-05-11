@@ -36,6 +36,10 @@ export function createPaymentRecordingService(
     randomUUID,
     addDaysToIsoDate,
     normalizePhone,
+    // Optional push service. When wired, addReservationPayment fires a
+    // "Payment received" notification to the customer's devices after a
+    // successful recording. No-ops when omitted (tests don't pass it).
+    pushNotifications,
   },
   shared
 ) {
@@ -975,6 +979,41 @@ export function createPaymentRecordingService(
     }
     const checkInPass = await tryEnsureCheckInPass(updated, user);
     await trySendCheckInPassSms(updated, checkInPass, user);
+
+    // Fire-and-forget push to the customer's registered devices. Only
+    // sends when the reservation has a customerCognitoSub (i.e. the
+    // booking came from the mobile app); staff-created reservations
+    // typically don't have one. Errors are swallowed inside the push
+    // service — never block the payment response on push delivery.
+    const customerSub = String(updated?.customerCognitoSub ?? "").trim();
+    if (
+      customerSub &&
+      pushNotifications &&
+      typeof pushNotifications.sendPushToCustomer === "function"
+    ) {
+      const title =
+        nextStatus === "PAID" ? "You're in" : "Payment received";
+      const remaining = Math.max(0, Number(amountDue) - Number(nextPaid));
+      const body =
+        nextStatus === "PAID"
+          ? `Your reservation for ${eventDate} is confirmed.`
+          : `$${amount.toFixed(2)} received. $${remaining.toFixed(2)} left to pay.`;
+      pushNotifications
+        .sendPushToCustomer(customerSub, {
+          title,
+          body,
+          data: {
+            type: "payment_recorded",
+            reservationId,
+            eventDate,
+            paymentStatus: nextStatus,
+          },
+        })
+        .catch(() => {
+          // Push service already logs internally; nothing else to do.
+        });
+    }
+
     if (!updated) return updated;
     return {
       ...updated,
