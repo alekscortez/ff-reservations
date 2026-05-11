@@ -13,17 +13,27 @@ body {
   overflow-x: hidden;
 }
 
-html.reservations-new-workspace-lock,
-body.reservations-new-workspace-lock {
+// The workspace-lock is what reservations-new sets to keep the table-map
+// pinned and prevent the body from scrolling under it. On iOS Chrome,
+// `html, body { overflow: hidden; height: 100% }` combined with a
+// fixed-position modal causes touch events on the modal to be silently
+// swallowed (a known WebKit/Chrome-on-iOS quirk). The `quick-actions-open`
+// body class is set by the topbar component whenever its overlay is
+// visible; matching `:not(...)` here releases the lock so the modal's
+// taps register. Page-internal modals (showReservationModal, etc.)
+// already release the lock via syncWorkspaceScrollLock — this is the
+// equivalent for the topbar's globally-rendered overlay.
+html.reservations-new-workspace-lock:not(.quick-actions-open),
+body.reservations-new-workspace-lock:not(.quick-actions-open) {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-body.reservations-new-workspace-lock .app-main,
-body.reservations-new-workspace-lock .shell,
-body.reservations-new-workspace-lock .shell-body,
-body.reservations-new-workspace-lock .shell-content {
+body.reservations-new-workspace-lock:not(.quick-actions-open) .app-main,
+body.reservations-new-workspace-lock:not(.quick-actions-open) .shell,
+body.reservations-new-workspace-lock:not(.quick-actions-open) .shell-body,
+body.reservations-new-workspace-lock:not(.quick-actions-open) .shell-content {
   height: 100%;
   overflow: hidden;
 }

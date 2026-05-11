@@ -69,6 +69,10 @@ export class Topbar implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.contextSub?.unsubscribe();
     this.stopPolling();
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('quick-actions-open');
+      document.documentElement.classList.remove('quick-actions-open');
+    }
   }
 
   login(): void {
@@ -84,6 +88,7 @@ export class Topbar implements OnInit, OnDestroy {
 
   toggleQuickActions(): void {
     this.isQuickActionsOpen = !this.isQuickActionsOpen;
+    this.syncQuickActionsBodyClass();
     if (this.isQuickActionsOpen) {
       this.resetQuickAvailabilityFeedback();
     }
@@ -91,7 +96,19 @@ export class Topbar implements OnInit, OnDestroy {
 
   closeQuickActions(): void {
     this.isQuickActionsOpen = false;
+    this.syncQuickActionsBodyClass();
     this.resetQuickAvailabilityFeedback();
+  }
+
+  // Toggle a body+html marker so the reservations-new workspace-lock CSS
+  // (overflow:hidden on html/body) is released while our overlay is open.
+  // Without this, iOS Chrome silently swallows taps on the modal's fixed
+  // children — bug only manifested on /staff/reservations/new because
+  // that's the only page that sets the workspace-lock class.
+  private syncQuickActionsBodyClass(): void {
+    if (typeof document === 'undefined') return;
+    document.body.classList.toggle('quick-actions-open', this.isQuickActionsOpen);
+    document.documentElement.classList.toggle('quick-actions-open', this.isQuickActionsOpen);
   }
 
   isOnNewReservationRoute(): boolean {
