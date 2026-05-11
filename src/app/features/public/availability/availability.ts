@@ -139,7 +139,14 @@ export class PublicAvailability implements OnInit, OnDestroy {
     }
     this.api.getAvailability(eventDate).subscribe({
       next: (res) => {
-        this.data = res;
+        // Most polls return the same data. Re-rendering the 193KB SVG on
+        // every tick stalls the main thread on iOS Chrome — enough to
+        // stutter the native share/copy menu. Skip the assignment (and
+        // therefore the SVG re-parse) when availability is unchanged.
+        const changed = !this.isSameAvailability(this.data, res);
+        if (changed) {
+          this.data = res;
+        }
         this.loading = false;
         this.error = null;
         this.syncUrlDate(res.event?.eventDate);
@@ -153,12 +160,38 @@ export class PublicAvailability implements OnInit, OnDestroy {
     });
   }
 
+  private isSameAvailability(
+    prev: PublicAvailabilityResponse | null,
+    next: PublicAvailabilityResponse | null
+  ): boolean {
+    if (!prev || !next) return prev === next;
+    if (prev.event?.eventDate !== next.event?.eventDate) return false;
+    const a = prev.tables ?? [];
+    const b = next.tables ?? [];
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      const x = a[i];
+      const y = b[i];
+      if (x.id !== y.id) return false;
+      if (x.available !== y.available) return false;
+      if (x.price !== y.price) return false;
+      if (x.section !== y.section) return false;
+    }
+    return true;
+  }
+
   private ensurePolling(secondsRaw: number): void {
     const seconds = this.normalizeRefreshSeconds(secondsRaw);
     if (this.pollingSeconds === seconds && this.pollSub) return;
     this.pollingSeconds = seconds;
     this.pollSub?.unsubscribe();
     this.pollSub = interval(seconds * 1000).subscribe(() => {
+      // Skip ticks while the tab is hidden — saves polling cycles, and
+      // prevents a heavy re-render from landing during the iOS share
+      // sheet animation, which can appear as a frozen page.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
       this.loadAvailability(this.queryEventDate || undefined, true);
     });
   }
