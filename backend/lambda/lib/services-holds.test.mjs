@@ -88,7 +88,27 @@ describe("listHolds", () => {
 });
 
 describe("releaseHold", () => {
-  it("issues a Delete with HOLD lockType ConditionExpression", async () => {
+  function makeReleaseDdb({ onDelete, onGet } = {}) {
+    const calls = [];
+    return {
+      calls,
+      send: async (cmd) => {
+        const name = cmd?.constructor?.name ?? "Unknown";
+        calls.push({ name, input: cmd?.input });
+        if (name === "DeleteCommand") {
+          if (typeof onDelete === "function") return onDelete(cmd);
+          return {};
+        }
+        if (name === "GetCommand") {
+          if (typeof onGet === "function") return onGet(cmd);
+          return { Item: null };
+        }
+        return {};
+      },
+    };
+  }
+
+  it("issues a Delete with HOLD lockType ConditionExpression on the happy path", async () => {
     const ddb = makeFakeDdb();
     const { svc } = buildHolds({ ddb });
     await svc.releaseHold("2026-05-09", "T1");
@@ -98,6 +118,57 @@ describe("releaseHold", () => {
     assert.equal(d.input.Key.PK, "EVENTDATE#2026-05-09");
     assert.equal(d.input.Key.SK, "TABLE#T1");
     assert.equal(d.input.ConditionExpression, "lockType = :hold");
+  });
+
+  it("resolves silently when the lock is already gone (idempotent)", async () => {
+    const ddb = makeReleaseDdb({
+      onDelete: () => {
+        const err = new Error("conditional check failed");
+        err.name = "ConditionalCheckFailedException";
+        throw err;
+      },
+      onGet: () => ({ Item: null }),
+    });
+    const { svc } = buildHolds({ ddb });
+    // Should NOT throw — there's nothing to release.
+    await svc.releaseHold("2026-05-09", "T1");
+    assert.equal(ddb.calls.length, 2);
+    assert.equal(ddb.calls[0].name, "DeleteCommand");
+    assert.equal(ddb.calls[1].name, "GetCommand");
+  });
+
+  it("throws 409 with a clear message when the lock is RESERVED", async () => {
+    const ddb = makeReleaseDdb({
+      onDelete: () => {
+        const err = new Error("conditional check failed");
+        err.name = "ConditionalCheckFailedException";
+        throw err;
+      },
+      onGet: () => ({
+        Item: { PK: "EVENTDATE#2026-05-09", SK: "TABLE#T1", lockType: "RESERVED" },
+      }),
+    });
+    const { svc } = buildHolds({ ddb });
+    await assert.rejects(
+      () => svc.releaseHold("2026-05-09", "T1"),
+      (err) =>
+        err?.statusCode === 409 &&
+        /already reserved|cancel the reservation/i.test(err.message)
+    );
+  });
+
+  it("re-throws non-ConditionalCheckFailed errors", async () => {
+    const sentinel = new Error("DDB on fire");
+    sentinel.name = "InternalServerError";
+    const ddb = makeReleaseDdb({
+      onDelete: () => {
+        throw sentinel;
+      },
+    });
+    const { svc } = buildHolds({ ddb });
+    await assert.rejects(() => svc.releaseHold("2026-05-09", "T1"), (err) =>
+      err === sentinel
+    );
   });
 });
 

@@ -18,6 +18,7 @@
 
 import {
   DeleteCommand,
+  GetCommand,
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
@@ -133,14 +134,41 @@ export function createHoldsService(
 
   async function releaseHold(eventDate, tableId) {
     requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
-    await ddb.send(
-      new DeleteCommand({
-        TableName: HOLDS_TABLE,
-        Key: { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` },
-        ConditionExpression: "lockType = :hold",
-        ExpressionAttributeValues: { ":hold": "HOLD" },
-      })
-    );
+    try {
+      await ddb.send(
+        new DeleteCommand({
+          TableName: HOLDS_TABLE,
+          Key: { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` },
+          ConditionExpression: "lockType = :hold",
+          ExpressionAttributeValues: { ":hold": "HOLD" },
+        })
+      );
+    } catch (err) {
+      if (err?.name !== "ConditionalCheckFailedException") throw err;
+      // Condition failed: either the row doesn't exist (already released
+      // or never created) or the lock has been promoted to RESERVED. Read
+      // the row to surface the right message to staff.
+      const out = await ddb.send(
+        new GetCommand({
+          TableName: HOLDS_TABLE,
+          Key: { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` },
+        })
+      );
+      if (!out?.Item) {
+        // Idempotent: nothing to release. Don't throw — staff already got
+        // what they wanted.
+        return;
+      }
+      const lockType = String(out.Item.lockType ?? "").toUpperCase();
+      if (lockType === "RESERVED") {
+        throw httpError(
+          409,
+          "This table is already reserved. Cancel the reservation instead of releasing the hold."
+        );
+      }
+      // Unknown lockType — surface a 409 rather than mask it.
+      throw httpError(409, "Hold could not be released (lock state changed).");
+    }
   }
 
   async function listHolds(eventDate) {
