@@ -58,7 +58,7 @@
       <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
       <button
         type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+        hlmBtn variant="outline" size="icon-sm" class="rounded-full"
         (click)="showPastModal = false"
         aria-label="Close past events"
       >
@@ -619,7 +619,7 @@
             </span>
             <button
               type="button"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+              hlmBtn variant="outline" size="icon-sm" class="rounded-full"
               (click)="closeReservationModal()"
               aria-label="Close reservation details"
             >
@@ -1022,18 +1022,10 @@
     You created this hold. Do you want to release it when closing?
   </p>
   <div class="mt-4 grid gap-2">
-    <button
-      type="button"
-      class="h-11 rounded-full bg-brand-900 text-sm font-semibold text-white"
-      (click)="releaseHold()"
-    >
+    <button hlmBtn type="button" class="h-11 rounded-full" (click)="releaseHold()">
       Release Hold
     </button>
-    <button
-      type="button"
-      class="h-11 rounded-full border border-brand-200 text-sm font-semibold text-brand-700"
-      (click)="cancelReleasePrompt(); showReservationModal = true"
-    >
+    <button hlmBtn variant="outline" type="button" class="h-11 rounded-full" (click)="cancelReleasePrompt(); showReservationModal = true">
       Continue Reservation
     </button>
   </div>

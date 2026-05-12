@@ -21,6 +21,7 @@ import {
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmButton } from '../../../shared/ui/button';
 
 interface GeneratedPaymentLink {
   method: 'square' | 'cashapp';
@@ -75,6 +76,7 @@ interface PaymentLinkSmsState {
     SystemActorLabelPipe,
     TableLabelPipe,
     HlmDialog,
+    HlmButton,
   ],
   templateUrl: './reservations.html',
   styleUrl: './reservations.scss',

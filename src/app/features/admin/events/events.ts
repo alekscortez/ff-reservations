@@ -8,10 +8,11 @@ import { CreateEventPayload, EventItem } from '../../../shared/models/event.mode
 import { TableInfo } from '../../../shared/models/table.model';
 import { FrequentClient } from '../../../shared/models/frequent-client.model';
 import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-events',
-  imports: [CommonModule, ReactiveFormsModule, HlmDialog],
+  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
