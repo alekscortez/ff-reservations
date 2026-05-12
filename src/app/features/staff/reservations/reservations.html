@@ -90,7 +90,7 @@
         <tbody>
           <tr
             *ngFor="let r of items"
-            class="cursor-pointer border-b border-brand-100 transition-colors hover:bg-brand-50 last:border-0 focus-within:bg-brand-50"
+            class="cursor-pointer border-b border-brand-100 transition-colors hover:bg-brand-50 active:bg-brand-50 last:border-0 focus-within:bg-brand-50"
             tabindex="0"
             role="button"
             (click)="onReservationRowClick(r)"
@@ -102,7 +102,7 @@
             </td>
             <td class="py-3 pr-3">
               <span
-                class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold"
                 [ngClass]="paymentStatusBadgeClass(r)"
               >
                 {{ paymentStatusLabel(r) }}
@@ -133,7 +133,7 @@
 
     <div class="mt-4 grid gap-3 lg:hidden" *ngIf="items.length > 0">
       <article
-        class="cursor-pointer rounded-xl border border-brand-100 bg-white p-4 shadow-sm transition-colors hover:bg-brand-50"
+        class="cursor-pointer rounded-xl border border-brand-100 bg-white p-4 shadow-sm transition-colors hover:bg-brand-50 active:bg-brand-50"
         *ngFor="let r of items"
         tabindex="0"
         role="button"
@@ -143,7 +143,7 @@
         <div class="flex items-center justify-between gap-3">
           <p class="text-base font-semibold text-brand-900">{{ r | tableLabel }} · {{ r.customerName }}</p>
           <span
-            class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+            class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold"
             [ngClass]="paymentStatusBadgeClass(r)"
           >
             {{ paymentStatusLabel(r) }}
@@ -265,7 +265,7 @@
 
         <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="getPaymentLinkSmsState(detailItem) as smsState">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" [ngClass]="paymentLinkSmsBadgeClass(smsState.status)">
+            <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold" [ngClass]="paymentLinkSmsBadgeClass(smsState.status)">
               {{ smsState.status === 'SENT' ? 'SMS SENT' : 'SMS FAILED' }}
             </span>
             <span class="text-xs text-brand-600">{{ smsState.atMs | date:'short' }}</span>
@@ -351,7 +351,7 @@
 
         <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="getCheckInPassState(detailItem) as state">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" [ngClass]="checkInStateBadgeClass(state.status)">
+            <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold" [ngClass]="checkInStateBadgeClass(state.status)">
               {{ checkInStateLabel(state.status) }}
             </span>
             <span class="text-xs text-brand-600" *ngIf="epochSecondsToMs(state.usedAt) as usedAtMs">
@@ -426,7 +426,7 @@
                 <p class="mt-0.5 text-[11px] text-brand-500">By {{ h.actor | systemActorLabel }}</p>
               </div>
               <div class="text-right">
-                <span class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" [ngClass]="historyEventBadgeClass(h.eventType)">
+                <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold" [ngClass]="historyEventBadgeClass(h.eventType)">
                   {{ historyEventLabel(h.eventType) }}
                 </span>
                 <p class="mt-1 text-[11px] text-brand-500">{{ h.atMs | date:'short' }}</p>
