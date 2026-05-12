@@ -21,90 +21,6 @@
     <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">No matches.</div>
     <p class="text-sm text-danger-700" *ngIf="error && !showCreateModal">{{ error }}</p>
 
-    <section class="mt-4 rounded-2xl border border-brand-100 bg-brand-50/40 p-4 md:p-5" *ngIf="editingId">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h3 class="text-base font-semibold text-brand-900">Edit Event</h3>
-        <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">Close</button>
-      </div>
-
-      <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="mt-4 grid gap-4">
-        <details class="rounded-xl border border-brand-100 bg-white p-3" open>
-          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Basics</summary>
-          <div class="mt-3 grid gap-3 md:grid-cols-3">
-            <label class="grid gap-1 text-xs text-brand-600">
-              Event Name
-              <input type="text" formControlName="eventName" hlmInput />
-            </label>
-            <label class="grid gap-1 text-xs text-brand-600">
-              Event Date
-              <input type="date" formControlName="eventDate" hlmInput />
-            </label>
-            <label class="grid gap-1 text-xs text-brand-600">
-              Status
-              <select formControlName="status" hlmInput>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="INACTIVE">INACTIVE</option>
-              </select>
-            </label>
-          </div>
-        </details>
-
-        <details class="rounded-xl border border-brand-100 bg-white p-3">
-          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Section Pricing</summary>
-          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
-            <label class="grid min-w-0 gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
-              Section {{ s }}
-              <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" hlmInput class="min-w-0" />
-            </label>
-          </div>
-        </details>
-
-        <details class="rounded-xl border border-brand-100 bg-white p-3">
-          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Disable Tables</summary>
-          <p class="mt-2 text-xs text-brand-500">Selected = table disabled for this event.</p>
-          <div class="mt-3 grid gap-3" *ngFor="let s of templateSections">
-            <div class="text-xs text-brand-500">Section {{ s }}</div>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                hlmToggle variant="outline"
-                *ngFor="let t of templateTablesBySection[s]"
-                [active]="isEditDisabled(t.id)"
-                (click)="toggleEditDisabled(t.id)"
-              >
-                {{ t.id }}
-              </button>
-            </div>
-          </div>
-        </details>
-
-        <details class="rounded-xl border border-brand-100 bg-white p-3">
-          <summary class="cursor-pointer text-sm font-semibold text-brand-900">Frequent Clients Not Coming</summary>
-          <p class="mt-2 text-xs text-brand-500">Selected = client NOT coming. Their table becomes available.</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              hlmToggle variant="warning"
-              *ngFor="let c of frequentClients"
-              [active]="isEditDisabledClient(c.clientId)"
-              (click)="toggleEditDisabledClient(c.clientId)"
-            >
-              {{ c.name }} · {{ formatClientTables(c) }}
-            </button>
-          </div>
-        </details>
-
-        <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
-
-        <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-5 md:px-5">
-          <div class="flex flex-wrap gap-2">
-            <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50" [disabled]="editForm.invalid || loading">Save</button>
-            <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
-          </div>
-        </div>
-      </form>
-    </section>
-
     <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
       <div hlmTableContainer>
         <table hlmTable>
@@ -282,6 +198,104 @@
         </div>
       </div>
     </form>
+</hlm-dialog>
+
+<hlm-dialog
+  *ngIf="editingId"
+  (close)="cancelEdit()"
+  panelClass="h-[92dvh] w-[94vw] max-w-3xl md:h-auto md:max-h-[92dvh]"
+>
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="text-lg font-semibold text-brand-900">Edit Event</h3>
+    <button
+      type="button"
+      hlmBtn variant="outline" size="icon-sm"
+      class="rounded-full"
+      (click)="cancelEdit()"
+      [disabled]="loading"
+      aria-label="Close edit event modal"
+    >
+      <ng-icon name="lucideX" size="14" />
+    </button>
+  </div>
+
+  <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="mt-4 grid gap-4">
+    <details class="rounded-xl border border-brand-100 bg-white p-3" open>
+      <summary class="cursor-pointer text-sm font-semibold text-brand-900">Basics</summary>
+      <div class="mt-3 grid gap-3 md:grid-cols-3">
+        <label class="grid gap-1 text-xs text-brand-600">
+          Event Name
+          <input type="text" formControlName="eventName" hlmInput />
+        </label>
+        <label class="grid gap-1 text-xs text-brand-600">
+          Event Date
+          <input type="date" formControlName="eventDate" hlmInput />
+        </label>
+        <label class="grid gap-1 text-xs text-brand-600">
+          Status
+          <select formControlName="status" hlmInput>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="INACTIVE">INACTIVE</option>
+          </select>
+        </label>
+      </div>
+    </details>
+
+    <details class="rounded-xl border border-brand-100 bg-white p-3">
+      <summary class="cursor-pointer text-sm font-semibold text-brand-900">Section Pricing</summary>
+      <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
+        <label class="grid min-w-0 gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
+          Section {{ s }}
+          <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" hlmInput class="min-w-0" />
+        </label>
+      </div>
+    </details>
+
+    <details class="rounded-xl border border-brand-100 bg-white p-3">
+      <summary class="cursor-pointer text-sm font-semibold text-brand-900">Disable Tables</summary>
+      <p class="mt-2 text-xs text-brand-500">Selected = table disabled for this event.</p>
+      <div class="mt-3 grid gap-3" *ngFor="let s of templateSections">
+        <div class="text-xs text-brand-500">Section {{ s }}</div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            hlmToggle variant="outline"
+            *ngFor="let t of templateTablesBySection[s]"
+            [active]="isEditDisabled(t.id)"
+            (click)="toggleEditDisabled(t.id)"
+          >
+            {{ t.id }}
+          </button>
+        </div>
+      </div>
+    </details>
+
+    <details class="rounded-xl border border-brand-100 bg-white p-3">
+      <summary class="cursor-pointer text-sm font-semibold text-brand-900">Frequent Clients Not Coming</summary>
+      <p class="mt-2 text-xs text-brand-500">Selected = client NOT coming. Their table becomes available.</p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          hlmToggle variant="warning"
+          *ngFor="let c of frequentClients"
+          [active]="isEditDisabledClient(c.clientId)"
+          (click)="toggleEditDisabledClient(c.clientId)"
+        >
+          {{ c.name }} · {{ formatClientTables(c) }}
+        </button>
+      </div>
+    </details>
+
+    <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+    <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
+
+    <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+      <div class="flex flex-wrap gap-2">
+        <button hlmBtn type="submit" [disabled]="editForm.invalid || loading">Save</button>
+        <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading">Cancel</button>
+      </div>
+    </div>
+  </form>
 </hlm-dialog>
 
 <hlm-confirm-dialog

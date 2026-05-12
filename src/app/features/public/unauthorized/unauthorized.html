@@ -1,1 +1,12 @@
-<p>unauthorized works!</p>
+<section class="mx-auto flex min-h-[calc(100dvh-24px)] w-full max-w-md flex-col items-center justify-center gap-4 px-4 py-10 text-center">
+  <img src="/assets/ff-logo.svg" alt="FF" class="h-10" />
+  <h1 class="text-2xl font-semibold text-brand-900">No access</h1>
+  <p class="text-sm text-brand-600">
+    Your account is signed in, but it isn't part of the Staff or Admin
+    group for this app. Ask an administrator to add you, then sign in
+    again.
+  </p>
+  <button hlmBtn variant="outline" type="button" (click)="signOut()">
+    Sign out
+  </button>
+</section>

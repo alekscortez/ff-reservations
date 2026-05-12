@@ -321,6 +321,8 @@ export class Events implements OnInit, OnDestroy {
 
   startEdit(item: EventItem): void {
     this.editingId = item.eventId;
+    this.error = null;
+    this.conflictDate = null;
     this.editForm.setValue({
       eventName: item.eventName ?? '',
       eventDate: item.eventDate ?? '',
@@ -335,10 +337,13 @@ export class Events implements OnInit, OnDestroy {
       const val = sp[s] ?? current;
       this.editSectionPricing.controls[s].setValue(val);
     }
+    this.syncSidebarModalLock();
   }
 
   cancelEdit(): void {
+    if (this.loading) return;
     this.editingId = null;
+    this.syncSidebarModalLock();
   }
 
   openCreateModal(): void {
@@ -380,6 +385,7 @@ export class Events implements OnInit, OnDestroy {
         );
         this.editingId = null;
         this.loading = false;
+        this.syncSidebarModalLock();
       },
       error: (err) => {
         this.error = err?.error?.message || err?.message || 'Failed to update event';
@@ -477,7 +483,7 @@ export class Events implements OnInit, OnDestroy {
 
   private syncSidebarModalLock(forceClear = false): void {
     if (typeof document === 'undefined') return;
-    const isLocked = forceClear ? false : this.showCreateModal;
+    const isLocked = forceClear ? false : this.showCreateModal || !!this.editingId;
     document.body.classList.toggle('events-modal-open', isLocked);
   }
 

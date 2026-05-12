@@ -482,74 +482,84 @@ export class Reservations implements OnInit, OnDestroy {
     });
   }
 
-  cancel(item: ReservationItem): void {
-    const reason = window.prompt('Reason for cancellation (required):');
-    if (!reason || !reason.trim()) return;
+  cancelTarget: ReservationItem | null = null;
+  cancelForm = new FormGroup({
+    reason: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    resolution: new FormControl<'CANCEL_NO_REFUND' | 'RESCHEDULE_CREDIT' | 'REFUND'>(
+      'CANCEL_NO_REFUND',
+      { nonNullable: true },
+    ),
+  });
+  cancelLoading = false;
+  cancelError: string | null = null;
 
-    let resolutionType: 'CANCEL_NO_REFUND' | 'RESCHEDULE_CREDIT' | 'REFUND';
-    const refundable = this.refundableAmount(item);
-    if (refundable > 0) {
-      const refundConfirmed = window.confirm(
-        `Refund $${refundable.toFixed(2)} to the original Square / Cash App payment method? ` +
-          `OK = refund and cancel. Cancel = continue without refund.`
-      );
-      if (refundConfirmed) {
-        const finalConfirmed = window.confirm(
-          `Confirm: $${refundable.toFixed(2)} will be returned via Square and cannot be undone here. Proceed?`
-        );
-        if (!finalConfirmed) return;
-        resolutionType = 'REFUND';
-      } else {
-        const isRescheduleRequest = window.confirm(
-          'Is this a reservation credit request (no refund)?'
-        );
-        resolutionType = isRescheduleRequest ? 'RESCHEDULE_CREDIT' : 'CANCEL_NO_REFUND';
-      }
-    } else {
-      const isRescheduleRequest = window.confirm(
-        'Is this a reservation credit request (no refund)?'
-      );
-      resolutionType = isRescheduleRequest ? 'RESCHEDULE_CREDIT' : 'CANCEL_NO_REFUND';
+  cancel(item: ReservationItem): void {
+    this.cancelTarget = item;
+    this.cancelForm.reset({
+      reason: '',
+      resolution: this.refundableAmount(item) > 0 ? 'REFUND' : 'CANCEL_NO_REFUND',
+    });
+    this.cancelError = null;
+  }
+
+  cancelTargetRefundable(): number {
+    return this.cancelTarget ? this.refundableAmount(this.cancelTarget) : 0;
+  }
+
+  closeCancelDialog(): void {
+    if (this.cancelLoading) return;
+    this.cancelTarget = null;
+    this.cancelError = null;
+  }
+
+  confirmCancel(): void {
+    const item = this.cancelTarget;
+    if (!item) return;
+    const reason = this.cancelForm.controls.reason.value.trim();
+    if (!reason) {
+      this.cancelForm.controls.reason.markAsTouched();
+      return;
+    }
+    const resolutionType = this.cancelForm.controls.resolution.value;
+    if (resolutionType === 'REFUND' && this.refundableAmount(item) <= 0) {
+      this.cancelError = 'No refundable payments on this reservation.';
+      return;
     }
 
-    this.loading = true;
-    this.error = null;
+    this.cancelLoading = true;
+    this.cancelError = null;
     this.reservationsApi
-      .cancel(
-        item.reservationId,
-        item.eventDate,
-        item.tableId,
-        reason.trim(),
-        resolutionType
-      )
+      .cancel(item.reservationId, item.eventDate, item.tableId, reason, resolutionType)
       .subscribe({
-      next: () => {
-        this.items.update((list) =>
-          list.map((x) =>
-            x.reservationId === item.reservationId
-              ? {
-                  ...x,
-                  status: 'CANCELLED',
-                  cancelReason: reason.trim(),
-                  ...(resolutionType === 'REFUND'
-                    ? { paymentStatus: 'REFUNDED' as const }
-                    : {}),
-                }
-              : x,
-          ),
-        );
-        const updated =
-          this.items().find((x) => x.reservationId === item.reservationId) ?? null;
-        if (updated && this.detailItem?.reservationId === item.reservationId) {
-          this.detailItem = updated;
-        }
-        this.loading = false;
-      },
-      error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to cancel reservation';
-        this.loading = false;
-      },
-    });
+        next: () => {
+          this.items.update((list) =>
+            list.map((x) =>
+              x.reservationId === item.reservationId
+                ? {
+                    ...x,
+                    status: 'CANCELLED',
+                    cancelReason: reason,
+                    ...(resolutionType === 'REFUND'
+                      ? { paymentStatus: 'REFUNDED' as const }
+                      : {}),
+                  }
+                : x,
+            ),
+          );
+          const updated =
+            this.items().find((x) => x.reservationId === item.reservationId) ?? null;
+          if (updated && this.detailItem?.reservationId === item.reservationId) {
+            this.detailItem = updated;
+          }
+          this.cancelLoading = false;
+          this.cancelTarget = null;
+        },
+        error: (err) => {
+          this.cancelError =
+            err?.error?.message || err?.message || 'Failed to cancel reservation';
+          this.cancelLoading = false;
+        },
+      });
   }
 
   private refundableAmount(item: ReservationItem): number {

@@ -722,3 +722,66 @@
       </button>
     </form>
 </hlm-dialog>
+
+<hlm-dialog
+  *ngIf="cancelTarget"
+  (close)="closeCancelDialog()"
+  panelClass="max-w-md"
+>
+  <h3 class="text-lg font-semibold text-brand-900">Cancel reservation?</h3>
+  <p class="mt-2 text-sm text-brand-600">{{ cancelTarget | tableLabel }} · {{ cancelTarget.customerName }}</p>
+  <form [formGroup]="cancelForm" (ngSubmit)="confirmCancel()" class="mt-4 grid gap-4">
+    <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
+      Reason
+      <input
+        type="text"
+        hlmInput
+        formControlName="reason"
+        placeholder="Required"
+        autofocus
+      />
+      <span
+        *ngIf="cancelForm.controls.reason.touched && cancelForm.controls.reason.invalid"
+        class="text-xs text-danger-700 normal-case tracking-normal"
+      >
+        Reason is required.
+      </span>
+    </label>
+
+    <fieldset class="grid gap-2">
+      <legend class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">Resolution</legend>
+      <label class="flex cursor-pointer items-start gap-2 rounded-lg border border-brand-200 p-3" *ngIf="cancelTargetRefundable() > 0">
+        <input type="radio" formControlName="resolution" value="REFUND" class="mt-1" />
+        <span class="grid gap-0.5">
+          <span class="text-sm font-medium text-brand-900">Refund ${{ cancelTargetRefundable() | number:'1.2-2' }}</span>
+          <span class="text-xs text-brand-500">Returns the payment via Square / Cash App. Cannot be undone here.</span>
+        </span>
+      </label>
+      <label class="flex cursor-pointer items-start gap-2 rounded-lg border border-brand-200 p-3">
+        <input type="radio" formControlName="resolution" value="RESCHEDULE_CREDIT" class="mt-1" />
+        <span class="grid gap-0.5">
+          <span class="text-sm font-medium text-brand-900">Reservation credit</span>
+          <span class="text-xs text-brand-500">No refund. Issues credit to apply on a future event.</span>
+        </span>
+      </label>
+      <label class="flex cursor-pointer items-start gap-2 rounded-lg border border-brand-200 p-3">
+        <input type="radio" formControlName="resolution" value="CANCEL_NO_REFUND" class="mt-1" />
+        <span class="grid gap-0.5">
+          <span class="text-sm font-medium text-brand-900">Cancel without refund</span>
+          <span class="text-xs text-brand-500">Releases the table. No money returned, no credit issued.</span>
+        </span>
+      </label>
+    </fieldset>
+
+    <p class="text-sm text-danger-700" *ngIf="cancelError">{{ cancelError }}</p>
+
+    <div class="flex flex-wrap justify-end gap-2">
+      <button hlmBtn variant="outline" type="button" (click)="closeCancelDialog()" [disabled]="cancelLoading">
+        Keep reservation
+      </button>
+      <button hlmBtn variant="destructive" type="submit" [disabled]="cancelLoading">
+        {{ cancelLoading ? 'Cancelling…' : 'Cancel reservation' }}
+      </button>
+    </div>
+  </form>
+</hlm-dialog>
