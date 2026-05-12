@@ -110,7 +110,7 @@
 
     <div class="mt-3 grid gap-2">
       <a
-        *ngFor="let action of quickActions()"
+        *ngFor="let action of quickActions(); trackBy: trackQuickAction"
         [routerLink]="[action.route]"
         [queryParams]="action.queryParams ?? null"
         class="inline-flex h-11 items-center justify-between rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-900"
