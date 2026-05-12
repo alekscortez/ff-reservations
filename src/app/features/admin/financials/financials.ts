@@ -275,7 +275,7 @@ export class Financials implements OnInit, OnDestroy {
 
   receivableBadgeClass(row: FinancialRow): string {
     if (row.isOverdue) return 'bg-danger-100 text-danger-700';
-    if (row.isDueSoon) return 'bg-accent-100 text-accent-700';
+    if (row.isDueSoon) return 'bg-warm-100 text-warm-700';
     return 'bg-brand-100 text-brand-700';
   }
 
@@ -283,8 +283,8 @@ export class Financials implements OnInit, OnDestroy {
     const normalized = String(source ?? '').trim().toLowerCase();
     if (normalized === 'square-webhook') return 'bg-success-100 text-success-700';
     if (normalized === 'square-direct') return 'bg-brand-100 text-brand-700';
-    if (normalized === 'reschedule-credit') return 'bg-accent-100 text-accent-800';
-    if (normalized === 'manual') return 'bg-accent-100 text-accent-800';
+    if (normalized === 'reschedule-credit') return 'bg-warm-100 text-warm-800';
+    if (normalized === 'manual') return 'bg-warm-100 text-warm-800';
     return 'bg-brand-50 text-brand-600';
   }
 

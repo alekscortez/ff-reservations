@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /*
+   * Spartan / shadcn semantic theme variables.
+   *
+   * These map to the FF brand palette: neutral grayscale base, brand-900 for
+   * primary action color, danger-700 for destructive. The HSL values are
+   * derived from the hex shades in tailwind.config.js so the two vocabularies
+   * stay in sync. Anywhere helm components reference bg-primary, text-muted,
+   * border-border, ring-ring, etc., they resolve through here.
+   *
+   * Dark mode left out for v1 — add a :root.dark { ... } block when ready.
+   */
+  :root {
+    --background: 0 0% 100%; /* #fff */
+    --foreground: 0 0% 4%; /* brand-900 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+
+    --primary: 0 0% 4%; /* brand-900 */
+    --primary-foreground: 0 0% 97%; /* brand-50 */
+
+    --secondary: 0 0% 93%; /* brand-100 */
+    --secondary-foreground: 0 0% 4%;
+
+    --muted: 0 0% 93%; /* brand-100 */
+    --muted-foreground: 0 0% 33%; /* brand-600 */
+
+    --accent: 0 0% 93%; /* brand-100 — Spartan semantic, not our warm palette */
+    --accent-foreground: 0 0% 4%;
+
+    --destructive: 0 74% 42%; /* danger-700 */
+    --destructive-foreground: 0 0% 97%;
+
+    --border: 0 0% 85%; /* brand-200 */
+    --input: 0 0% 85%;
+    --ring: 0 0% 4%;
+
+    --radius: 0.5rem;
+  }
+}
+
 html,
 body {
   height: 100%;

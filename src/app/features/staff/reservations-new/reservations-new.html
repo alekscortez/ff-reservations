@@ -109,7 +109,7 @@
     </div>
 
     <div
-      class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-300 bg-accent-50 px-3 py-2 text-sm text-brand-900"
+      class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warm-300 bg-warm-50 px-3 py-2 text-sm text-brand-900"
       *ngIf="addAnotherTablePending"
     >
       <span>
@@ -316,7 +316,7 @@
         class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
         [ngClass]="{
           'border-brand-900': selectedTable?.id === t.id,
-          'border-accent-400 bg-accent-50': t.status === 'HOLD',
+          'border-warm-400 bg-warm-50': t.status === 'HOLD',
           'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
           'border-danger-400 bg-danger-50': t.status === 'RESERVED',
           'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
@@ -341,7 +341,7 @@
           class="mt-2 text-[11px] uppercase tracking-[0.2em]"
           [ngClass]="{
             'text-brand-500': t.status === 'AVAILABLE',
-            'text-accent-700': t.status === 'HOLD',
+            'text-warm-700': t.status === 'HOLD',
             'text-warning-700': t.status === 'PENDING_PAYMENT',
             'text-danger-700': t.status === 'RESERVED',
             'text-brand-400': t.status === 'DISABLED'
@@ -524,7 +524,7 @@
               class="w-full rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
               [ngClass]="{
                 'border-brand-900': selectedTable?.id === t.id,
-                'border-accent-400 bg-accent-50': t.status === 'HOLD',
+                'border-warm-400 bg-warm-50': t.status === 'HOLD',
                 'border-warning-300 bg-warning-50': t.status === 'PENDING_PAYMENT',
                 'border-danger-400 bg-danger-50': t.status === 'RESERVED',
                 'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
@@ -549,7 +549,7 @@
                 class="mt-2 text-[11px] uppercase tracking-[0.2em]"
                 [ngClass]="{
                   'text-brand-500': t.status === 'AVAILABLE',
-                  'text-accent-700': t.status === 'HOLD',
+                  'text-warm-700': t.status === 'HOLD',
                   'text-warning-700': t.status === 'PENDING_PAYMENT',
                   'text-danger-700': t.status === 'RESERVED',
                   'text-brand-400': t.status === 'DISABLED'
@@ -588,7 +588,7 @@
                 class="h-11 rounded-lg px-3 text-sm font-semibold text-white disabled:opacity-60"
                 (click)="startHoldFlow()"
                 [disabled]="loading || !selectedTable"
-                [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900'"
+                [ngClass]="selectedTable ? 'bg-warm-500 text-brand-900' : 'bg-brand-900'"
               >
                 Hold &amp; Reserve
               </button>
@@ -721,14 +721,14 @@
             </div>
 
             <div
-              class="md:col-span-2 rounded-xl border border-accent-200 bg-accent-50/70 p-3"
+              class="md:col-span-2 rounded-xl border border-warm-200 bg-warm-50/70 p-3"
               *ngIf="clientCreditsLoading || clientCredits.length > 0 || clientCreditsError"
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-accent-800">
+                <p class="text-xs font-semibold uppercase tracking-[0.12em] text-warm-800">
                   Reservation Credits
                 </p>
-                <p class="text-xs font-semibold text-accent-800" *ngIf="!clientCreditsLoading && clientCredits.length">
+                <p class="text-xs font-semibold text-warm-800" *ngIf="!clientCreditsLoading && clientCredits.length">
                   Total ${{ clientCreditsTotalRemaining().toFixed(2) }}
                 </p>
               </div>
@@ -758,7 +758,7 @@
                       </option>
                     </select>
                   </label>
-                  <div class="rounded-lg border border-accent-200 bg-white p-2 text-xs text-brand-700">
+                  <div class="rounded-lg border border-warm-200 bg-white p-2 text-xs text-brand-700">
                     <p>Credit applied now: ${{ clientCreditAppliedAmount().toFixed(2) }}</p>
                     <p *ngIf="clientCreditRemainingAmount() > 0">
                       Remaining after credit: ${{ clientCreditRemainingAmount().toFixed(2) }}
@@ -999,7 +999,7 @@
         class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
         (click)="selectedTable ? startHoldFlow() : clearEventSelection()"
         [disabled]="loading || (!selectedTable && !eventDate)"
-        [ngClass]="selectedTable ? 'bg-accent-500 text-brand-900' : 'bg-brand-900 text-white'"
+        [ngClass]="selectedTable ? 'bg-warm-500 text-brand-900' : 'bg-brand-900 text-white'"
       >
         {{ selectedTable ? ('Hold & Reserve · Table ' + selectedTable.id) : 'Change Event' }}
       </button>
