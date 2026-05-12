@@ -16,7 +16,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## UI primitives — read before adding new UI
 
-Eight Spartan-style primitive families live under `src/app/shared/ui/`. Use them
+Nine Spartan-style primitive families live under `src/app/shared/ui/`. Use them
 instead of hand-rolling new Tailwind class strings. Each is a
 standalone Angular directive/component with `cva` variants +
 `tailwind-merge` for consumer-class overrides.
@@ -31,6 +31,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
 | `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile slide-over via own fixed `<aside>` + backdrop (NOT HlmDialog); cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
 | `HlmPagination` (compound family — see "Pagination" below) | `<hlm-numbered-pagination>` high-level wrapper, or compose from `nav[hlmPagination]` + `ul[hlmPaginationContent]` + `li[hlmPaginationItem]` + `button[hlmPaginationLink]` + `<hlm-pagination-previous>` / `<hlm-pagination-next>` / `<hlm-pagination-ellipsis>` | Two-way `[(currentPage)]` + `[(itemsPerPage)]` model signals + `[totalItems]` input. Sliding window with ellipses (default `maxSize=7`). Event-only — no RouterLink integration | Any long client-side list that doesn't fit on one screen. Currently used by the admin Clients page (1,400+ rows, 50 per page). |
+| `HlmTable` (compound family — see "Data tables" below) | `<div hlmTableContainer>` + `<table hlmTable>` + `<thead hlmTHead>` + `<tbody hlmTBody>` + `<tfoot hlmTFoot>` + `<tr hlmTr>` + `<th hlmTh>` + `<td hlmTd>` + `<caption hlmCaption>`, plus `<hlm-table-sort-header [column] label>` for sortable headers | Pure CSS class application matching the existing hand-rolled table markup; sort-header composes with TanStack `Column<T>` | Long lists that need sort / filter / pagination. Pair with `@tanstack/angular-table`'s `createAngularTable` for state. Currently used by the admin Clients page. |
 
 **Convention for TS helpers**: when a template's state-driven styling
 depends on a function, that function returns a `BadgeVariants['variant']`
@@ -191,6 +192,115 @@ Low-level pieces are exported too if a caller needs a custom layout
 `HlmPaginationLink`, `HlmPaginationPrevious`, `HlmPaginationNext`,
 `HlmPaginationEllipsis`) — see the high-level wrapper's template for
 how they compose.
+
+### Data tables — `HlmTable` family + TanStack
+
+Sort / filter / paginate is delegated to `@tanstack/angular-table`
+(runtime dep, ~60 kB raw / ~14 kB gzipped per consumer chunk). The
+`HlmTable` directives are **visual only** — pure CSS class application
+on plain `<table>` markup to match the project's typography + spacing.
+Compose them with TanStack's `createAngularTable` for state.
+
+```typescript
+// component
+columns: ColumnDef<Row>[] = [
+  { id: 'name',  accessorKey: 'name',  sortingFn: 'alphanumeric' },
+  { id: 'spend', accessorFn: r => r.spend, sortingFn: 'basic' },
+  // ...
+  { id: 'actions', enableSorting: false },
+];
+table = createAngularTable<Row>(() => ({
+  data: this.items(),
+  columns: this.columns,
+  state: {
+    sorting: this.sorting(),
+    globalFilter: this.query(),
+    pagination: this.pagination(),
+  },
+  onSortingChange: u => this.sorting.set(typeof u === 'function' ? u(this.sorting()) : u),
+  onPaginationChange: u => this.pagination.set(typeof u === 'function' ? u(this.pagination()) : u),
+  globalFilterFn: (row, _id, q: string) => /* custom name OR phone match */,
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+}));
+currentRows = computed(() => this.table.getRowModel().rows.map(r => r.original));
+totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+```
+
+```html
+<div hlmTableContainer>
+  <table hlmTable>
+    <thead hlmTHead>
+      <tr hlmTr>
+        <th hlmTh>
+          <hlm-table-sort-header [column]="column('name')!" label="Name" />
+        </th>
+        <!-- ... -->
+        <th hlmTh>Actions</th>
+      </tr>
+    </thead>
+    <tbody hlmTBody>
+      @for (c of currentRows(); track trackByPhone($index, c)) {
+        <tr hlmTr>
+          <td hlmTd>{{ c.name }}</td>
+          <!-- declarative cells; no flexRender needed for simple cases -->
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+<hlm-numbered-pagination
+  [currentPage]="currentPage()"
+  (currentPageChange)="onPageChange($event)"
+  [itemsPerPage]="pageSize()"
+  (itemsPerPageChange)="onPageSizeChange($event)"
+  [totalItems]="totalFiltered()" />
+```
+
+**Patterns that matter:**
+
+1. **TanStack's table proxy is itself a Signal** — `createAngularTable`
+   returns `Table<T> & Signal<Table<T>>`. The options fn re-runs when
+   any signal it reads changes; row models stay in sync.
+
+2. **We don't use `FlexRenderDirective` for cells** — declarative
+   `<td>{{ ... }}</td>` cells stay readable and play nicely with the
+   inline edit-row pattern below. `flexRender` becomes useful when you
+   need dynamic column visibility, header components with their own
+   inputs, or runtime-defined cell renderers (none of which we
+   currently have).
+
+3. **`HlmTableSortHeader` uses default change detection (not OnPush)**.
+   `column.getIsSorted()` is a TanStack proxy method that doesn't
+   propagate signal reads across an Angular OnPush boundary. Default CD
+   re-evaluates the template's `iconName()` / `ariaLabel()` /
+   `sortedAttr()` methods on each event tick, which is fine for a
+   single button. The alternative would be Spartan-style
+   `injectFlexRenderContext` (only valid inside a flexRender body) or
+   passing the sorting signal as an explicit input — both messier.
+
+4. **Inline edit rows** — when a row is "being edited", render a
+   `<tr><td colspan="N">...edit form...</td></tr>` instead of the
+   normal data row. `*ngFor` over `currentRows()` lets you branch on
+   `editingPhone() === c.phone` and emit either shape. This wouldn't
+   compose cleanly with `flexRender`, which is another reason we keep
+   cells declarative.
+
+5. **Pagination integration** — bind our `<hlm-numbered-pagination>`
+   to TanStack's `pagination.pageIndex` (0-based) via a 1-based mirror
+   computed: `currentPage = computed(() => pagination().pageIndex + 1)`.
+   `(currentPageChange)` handler writes back to the pagination signal.
+
+6. **Reset to page 0 on search change** — `effect(() => { query();
+   pagination.update(s => ({...s, pageIndex: 0})); })`.
+
+The admin Clients page is the reference (`features/admin/clients/`).
+When the same pattern is rolled out to Reservations list / Financials,
+the per-page chunk grows by ~14 kB gzipped (TanStack vendored once,
+shared across lazy chunks at runtime).
 
 ## Repo layout
 
