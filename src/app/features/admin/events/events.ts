@@ -10,10 +10,11 @@ import { FrequentClient } from '../../../shared/models/frequent-client.model';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-events',
-  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton, HlmInput],
+  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton, HlmInput, HlmToggle],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
