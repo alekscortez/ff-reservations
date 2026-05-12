@@ -1,5 +1,7 @@
 <app-sidebar></app-sidebar>
-<main hlmSidebarInset class="shell-content p-3 md:py-4 md:pr-4">
-  <app-auth-health-banner></app-auth-health-banner>
-  <router-outlet></router-outlet>
+<main hlmSidebarInset class="shell-content">
+  <div class="flex flex-1 flex-col gap-4 p-3 md:p-4">
+    <app-auth-health-banner></app-auth-health-banner>
+    <router-outlet></router-outlet>
+  </div>
 </main>
