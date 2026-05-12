@@ -194,6 +194,8 @@ export class Financials implements OnInit, OnDestroy {
     initialValue: '',
   });
 
+  readonly activeTab = signal<'summary' | 'receivables' | 'ledger'>('summary');
+
   readonly summariesSorting = signal<SortingState>([{ id: 'eventDate', desc: true }]);
   readonly summariesPagination = signal<PaginationState>({
     pageIndex: 0,
