@@ -34,13 +34,13 @@ import { HlmButton } from '../button';
       variant="ghost"
       size="sm"
       type="button"
-      class="-ml-2 h-8 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-500 data-[sorted]:text-brand-700"
+      class="-ml-3 inline-flex h-8 items-center gap-1.5 px-3 font-medium text-brand-500 hover:text-brand-700 data-[sorted]:text-brand-700"
       [attr.aria-label]="ariaLabel()"
       [attr.data-sorted]="sortedAttr()"
       (click)="toggle()"
     >
       <span>{{ label() }}</span>
-      <ng-icon [name]="iconName()" size="14" class="ml-1.5" />
+      <ng-icon [name]="iconName()" size="14" class="opacity-70" />
     </button>
   `,
 })

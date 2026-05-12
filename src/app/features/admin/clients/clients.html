@@ -6,183 +6,205 @@
     </p>
   </header>
 
-  <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
-    <div class="flex items-end gap-2">
-      <label class="flex min-w-0 flex-1 flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
-        Search
-        <input
-          type="text"
-          [formControl]="filterQuery"
-          placeholder="Name or phone"
-          hlmInput
-        />
-      </label>
-      <button
-        hlmBtn variant="outline" size="icon"
-        type="button"
-        class="shrink-0 rounded-full"
-        (click)="load()"
-        [disabled]="loading()"
-        aria-label="Refresh clients"
-        title="Refresh clients"
-      >
-        ↻
-      </button>
-    </div>
+  <div class="flex items-end gap-2">
+    <label class="flex min-w-0 flex-1 flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500 sm:max-w-sm">
+      Search
+      <input
+        type="text"
+        [formControl]="filterQuery"
+        placeholder="Name or phone"
+        hlmInput
+      />
+    </label>
+    <button
+      hlmBtn variant="outline" size="icon"
+      type="button"
+      class="shrink-0 rounded-full"
+      (click)="load()"
+      [disabled]="loading()"
+      aria-label="Refresh clients"
+      title="Refresh clients"
+    >
+      ↻
+    </button>
+  </div>
 
-    <div *ngIf="loading()" class="mt-4 text-sm text-brand-500">Loading…</div>
-    <div *ngIf="!loading() && totalFiltered() === 0" class="mt-4 text-sm text-brand-500">
-      No clients.
-    </div>
-    <p class="mt-4 text-sm text-danger-700" *ngIf="error()">{{ error() }}</p>
+  <div *ngIf="loading()" class="text-sm text-brand-500">Loading…</div>
+  <div *ngIf="!loading() && totalFiltered() === 0" class="text-sm text-brand-500">
+    No clients.
+  </div>
+  <p class="text-sm text-danger-700" *ngIf="error()">{{ error() }}</p>
 
-    <div hlmTableContainer class="mt-4 hidden lg:block" *ngIf="totalFiltered() > 0">
-      <table hlmTable>
-        <thead hlmTHead>
-          <tr hlmTr class="hover:bg-transparent">
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('name')!" label="Name" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('phone')!" label="Phone" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('totalSpend')!" label="Total Spend" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('totalReservations')!" label="Reservations" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('lastEventDate')!" label="Last Event" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('lastTableId')!" label="Last Table" />
-            </th>
-            <th hlmTh>
-              <hlm-table-sort-header [column]="column('updatedBy')!" label="Updated By" />
-            </th>
-            <th hlmTh>Actions</th>
+  <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
+    <div hlmTableContainer>
+    <table hlmTable>
+      <thead hlmTHead>
+        <tr hlmTr class="hover:bg-transparent">
+          <th hlmTh>
+            <hlm-table-sort-header [column]="column('name')!" label="Name" />
+          </th>
+          <th hlmTh>
+            <hlm-table-sort-header [column]="column('phone')!" label="Phone" />
+          </th>
+          <th hlmTh class="text-right">
+            <hlm-table-sort-header [column]="column('totalSpend')!" label="Total Spend" class="-mr-3 ml-auto flex" />
+          </th>
+          <th hlmTh class="text-right">
+            <hlm-table-sort-header [column]="column('totalReservations')!" label="Reservations" class="-mr-3 ml-auto flex" />
+          </th>
+          <th hlmTh>
+            <hlm-table-sort-header [column]="column('lastEventDate')!" label="Last Event" />
+          </th>
+          <th hlmTh>
+            <hlm-table-sort-header [column]="column('lastTableId')!" label="Last Table" />
+          </th>
+          <th hlmTh>
+            <hlm-table-sort-header [column]="column('updatedBy')!" label="Updated By" />
+          </th>
+          <th hlmTh class="w-12 pl-0 pr-2"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody hlmTBody>
+        <ng-container *ngFor="let c of currentRows(); trackBy: trackByPhone">
+          <tr hlmTr *ngIf="editingPhone() !== c.phone">
+            <td hlmTd class="font-medium text-brand-900">{{ c.name }}</td>
+            <td hlmTd class="text-brand-600">{{ c.phone | phoneDisplay }}</td>
+            <td hlmTd class="text-right tabular-nums">${{ formatMoney(c.totalSpend) }}</td>
+            <td hlmTd class="text-right tabular-nums">{{ c.totalReservations || 0 }}</td>
+            <td hlmTd class="text-brand-600">{{ c.lastEventDate || '—' }}</td>
+            <td hlmTd class="text-brand-600">{{ c.lastTableId || '—' }}</td>
+            <td hlmTd class="text-brand-600">{{ c.updatedBy || '—' }}</td>
+            <td hlmTd class="pl-0 pr-2 text-right">
+              <button
+                hlmBtn variant="ghost" size="icon-sm"
+                type="button"
+                [hlmMenuTriggerFor]="rowMenu"
+                [attr.aria-label]="'Actions for ' + (c.name || c.phone)"
+                title="Actions"
+              >
+                <ng-icon name="lucideEllipsis" size="16" />
+              </button>
+              <ng-template #rowMenu>
+                <div hlmMenu>
+                  <button hlmMenuItem type="button" (click)="startEdit(c)">Edit</button>
+                  <button hlmMenuItem type="button" (click)="addToFrequent(c)">Add to frequent</button>
+                  <hlm-menu-separator />
+                  <button hlmMenuItem variant="destructive" type="button" (click)="deleteClient(c)">Delete</button>
+                </div>
+              </ng-template>
+            </td>
           </tr>
-        </thead>
-        <tbody hlmTBody>
-          <ng-container *ngFor="let c of currentRows(); trackBy: trackByPhone">
-            <tr hlmTr *ngIf="editingPhone() !== c.phone">
-              <td hlmTd class="font-semibold">{{ c.name }}</td>
-              <td hlmTd>{{ c.phone | phoneDisplay }}</td>
-              <td hlmTd>${{ formatMoney(c.totalSpend) }}</td>
-              <td hlmTd>{{ c.totalReservations || 0 }}</td>
-              <td hlmTd>{{ c.lastEventDate || '—' }}</td>
-              <td hlmTd>{{ c.lastTableId || '—' }}</td>
-              <td hlmTd>{{ c.updatedBy || '—' }}</td>
-              <td hlmTd>
+
+          <tr *ngIf="editingPhone() === c.phone" class="border-b border-brand-100 last:border-0 bg-brand-50/40">
+            <td colspan="8" class="p-4">
+              <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
+                  Name
+                  <input type="text" formControlName="name" hlmInput />
+                </label>
+                <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
+                  Phone
+                  <div class="grid grid-cols-[1fr_96px] gap-2">
+                    <input
+                      type="tel"
+                      formControlName="phone"
+                      hlmInput
+                      inputmode="tel"
+                      placeholder="+1..."
+                    />
+                    <select
+                      hlmInput class="px-2"
+                      [value]="editPhoneCountry"
+                      (change)="editPhoneCountry = $any($event.target).value"
+                    >
+                      <option value="US">US</option>
+                      <option value="MX">MX</option>
+                    </select>
+                  </div>
+                </label>
                 <div class="flex flex-wrap gap-2">
-                  <button hlmBtn variant="outline" type="button" (click)="startEdit(c)">
-                    Edit
+                  <button hlmBtn type="submit" [disabled]="loading()">
+                    Save
                   </button>
-                  <button hlmBtn variant="destructive" type="button" (click)="deleteClient(c)">
-                    Delete
+                  <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading()">
+                    Cancel
                   </button>
                 </div>
-              </td>
-            </tr>
-
-            <tr *ngIf="editingPhone() === c.phone" class="border-b border-brand-100 last:border-0">
-              <td colspan="8" class="py-4">
-                <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                  <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
-                    Name
-                    <input type="text" formControlName="name" hlmInput />
-                  </label>
-                  <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
-                    Phone
-                    <div class="grid grid-cols-[1fr_96px] gap-2">
-                      <input
-                        type="tel"
-                        formControlName="phone"
-                        hlmInput
-                        inputmode="tel"
-                        placeholder="+1..."
-                      />
-                      <select
-                        hlmInput class="px-2"
-                        [value]="editPhoneCountry"
-                        (change)="editPhoneCountry = $any($event.target).value"
-                      >
-                        <option value="US">US</option>
-                        <option value="MX">MX</option>
-                      </select>
-                    </div>
-                  </label>
-                  <div class="flex flex-wrap gap-2">
-                    <button hlmBtn type="submit" [disabled]="loading()">
-                      Save
-                    </button>
-                    <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading()">
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              </td>
-            </tr>
-          </ng-container>
-        </tbody>
-      </table>
+              </form>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
     </div>
+  </div>
 
-    <div class="mt-4 grid w-full gap-3 lg:hidden" *ngIf="totalFiltered() > 0">
-      <div class="w-full rounded-2xl border border-brand-100 bg-white p-4 shadow-sm" *ngFor="let c of currentRows(); trackBy: trackByPhone">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <div class="text-lg font-semibold text-brand-900">{{ c.name }}</div>
-            <div class="text-sm text-brand-500">{{ c.phone | phoneDisplay }}</div>
-          </div>
-          <div class="text-right text-xs text-brand-500">
-            <div>Total ${{ formatMoney(c.totalSpend) }}</div>
-            <div>{{ c.totalReservations || 0 }} reservations</div>
-          </div>
+  <div class="grid w-full gap-3 lg:hidden" *ngIf="totalFiltered() > 0">
+    <div class="w-full rounded-2xl border border-brand-200 bg-white p-4 shadow-sm" *ngFor="let c of currentRows(); trackBy: trackByPhone">
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-lg font-semibold text-brand-900">{{ c.name }}</div>
+          <div class="text-sm text-brand-500">{{ c.phone | phoneDisplay }}</div>
         </div>
-        <div class="mt-3 grid gap-1 text-sm text-brand-700">
-          <div class="flex items-center justify-between">
-            <span class="text-brand-500">Last Event</span>
-            <span>{{ c.lastEventDate || '—' }}</span>
+        <button
+          hlmBtn variant="ghost" size="icon-sm"
+          type="button"
+          [hlmMenuTriggerFor]="mobileMenu"
+          [attr.aria-label]="'Actions for ' + (c.name || c.phone)"
+          title="Actions"
+        >
+          <ng-icon name="lucideEllipsis" size="16" />
+        </button>
+        <ng-template #mobileMenu>
+          <div hlmMenu>
+            <button hlmMenuItem type="button" (click)="startEdit(c)">Edit</button>
+            <button hlmMenuItem type="button" (click)="addToFrequent(c)">Add to frequent</button>
+            <hlm-menu-separator />
+            <button hlmMenuItem variant="destructive" type="button" (click)="deleteClient(c)">Delete</button>
           </div>
-          <div class="flex items-center justify-between">
-            <span class="text-brand-500">Last Table</span>
-            <span>{{ c.lastTableId || '—' }}</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-brand-500">Updated By</span>
-            <span>{{ c.updatedBy || '—' }}</span>
-          </div>
+        </ng-template>
+      </div>
+      <div class="mt-3 grid gap-1 text-sm text-brand-700">
+        <div class="flex items-center justify-between">
+          <span class="text-brand-500">Total spend</span>
+          <span class="font-medium tabular-nums">${{ formatMoney(c.totalSpend) }}</span>
         </div>
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button hlmBtn variant="outline" type="button" (click)="startEdit(c)">
-            Edit
-          </button>
-          <button hlmBtn variant="destructive" type="button" (click)="deleteClient(c)">
-            Delete
-          </button>
+        <div class="flex items-center justify-between">
+          <span class="text-brand-500">Reservations</span>
+          <span class="tabular-nums">{{ c.totalReservations || 0 }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-brand-500">Last event</span>
+          <span>{{ c.lastEventDate || '—' }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-brand-500">Last table</span>
+          <span>{{ c.lastTableId || '—' }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-brand-500">Updated by</span>
+          <span>{{ c.updatedBy || '—' }}</span>
         </div>
       </div>
     </div>
+  </div>
 
-    <div
-      *ngIf="totalFiltered() > pageSize()"
-      class="mt-6 flex flex-col items-center gap-3 border-t border-brand-100 pt-4 sm:flex-row sm:justify-between"
-    >
-      <p class="text-xs text-brand-500">
-        Showing <span class="font-semibold text-brand-700">{{ pageStart() }}</span>–<span class="font-semibold text-brand-700">{{ pageEnd() }}</span>
-        of <span class="font-semibold text-brand-700">{{ totalFiltered() }}</span>
-      </p>
-      <hlm-numbered-pagination
-        [currentPage]="currentPage()"
-        (currentPageChange)="onPageChange($event)"
-        [itemsPerPage]="pageSize()"
-        (itemsPerPageChange)="onPageSizeChange($event)"
-        [totalItems]="totalFiltered()"
-        [iconOnlyEdges]="true"
-        ariaLabel="Clients pagination"
-      />
-    </div>
-  </section>
+  <div
+    *ngIf="totalFiltered() > pageSize()"
+    class="flex flex-col items-center gap-3 sm:flex-row sm:justify-between"
+  >
+    <p class="text-xs text-brand-500">
+      Showing <span class="font-semibold text-brand-700">{{ pageStart() }}</span>–<span class="font-semibold text-brand-700">{{ pageEnd() }}</span>
+      of <span class="font-semibold text-brand-700">{{ totalFiltered() }}</span>
+    </p>
+    <hlm-numbered-pagination
+      [currentPage]="currentPage()"
+      (currentPageChange)="onPageChange($event)"
+      [itemsPerPage]="pageSize()"
+      (itemsPerPageChange)="onPageSizeChange($event)"
+      [totalItems]="totalFiltered()"
+      [iconOnlyEdges]="true"
+      ariaLabel="Clients pagination"
+    />
+  </div>
 </section>

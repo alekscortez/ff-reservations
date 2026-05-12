@@ -49,9 +49,12 @@ describe('HlmTable directive family', () => {
 
     expect(root.querySelector('div[hlmTableContainer]')!.className).toContain('overflow-x-auto');
     expect(root.querySelector('table[hlmTable]')!.className).toContain('border-collapse');
-    expect(root.querySelector('thead[hlmTHead]')!.className).toContain('uppercase');
-    expect(root.querySelector('th[hlmTh]')!.className).toContain('font-semibold');
-    expect(root.querySelector('td[hlmTd]')!.className).toContain('py-3');
+    expect(root.querySelector('table[hlmTable]')!.className).toContain('caption-bottom');
+    // Spartan-stock: th is left-aligned, normal weight, muted color, h-12 — no uppercase tracking.
+    expect(root.querySelector('th[hlmTh]')!.className).toContain('h-12');
+    expect(root.querySelector('th[hlmTh]')!.className).toContain('font-medium');
+    expect(root.querySelector('th[hlmTh]')!.className).not.toContain('uppercase');
+    expect(root.querySelector('td[hlmTd]')!.className).toContain('p-4');
     expect(root.querySelector('tr[hlmTr]')!.className).toContain('hover:bg-brand-50/40');
   });
 
