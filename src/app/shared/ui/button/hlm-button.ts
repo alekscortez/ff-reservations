@@ -1,4 +1,4 @@
-import { Directive, input, computed } from '@angular/core';
+import { Directive, ElementRef, effect, inject, input } from '@angular/core';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { twMerge } from 'tailwind-merge';
 
@@ -10,13 +10,19 @@ import { twMerge } from 'tailwind-merge';
  *   <button hlmBtn>Save</button>
  *   <button hlmBtn variant="outline" size="sm">Cancel</button>
  *   <button hlmBtn variant="destructive">Delete</button>
+ *   <button hlmBtn class="w-full">Log out</button>  (consumer class preserved)
  *
  * Variants resolve against the shadcn semantic theme tokens in styles.scss
- * (--primary, --destructive, --muted, --foreground). To override on a
- * per-instance basis, pass extra classes via [class] — tailwind-merge
- * dedupes conflicts (last write wins).
+ * (--primary, --destructive, --muted, --foreground).
  *
- * No @spartan-ng/brain dependency: a native <button> already handles
+ * Consumer-provided classes (e.g. w-full, my-2) merge into the variant
+ * classes via tailwind-merge — if the consumer writes a class that
+ * conflicts with the variant (e.g. bg-red-500 vs bg-primary), the
+ * consumer's wins. The static `class` attribute is captured on first
+ * render; subsequent dynamic [class.foo] bindings from outside the
+ * directive are NOT merged.
+ *
+ * No @spartan-ng/brain dependency: a native <button> handles
  * disabled/focus/Enter+Space correctly. Brain becomes useful for
  * compound widgets (dialog, select, popover) where CDK overlay or
  * focus-trap behaviors are required.
@@ -44,6 +50,9 @@ export const buttonVariants = cva(
         sm: 'h-9 px-3 text-xs',
         lg: 'h-11 px-5 text-sm',
         icon: 'h-10 w-10',
+        'icon-xs': 'h-7 w-7',
+        'icon-sm': 'h-8 w-8',
+        'icon-lg': 'h-12 w-12',
       },
     },
     defaultVariants: {
@@ -59,15 +68,28 @@ export type ButtonVariants = VariantProps<typeof buttonVariants>;
   selector: 'button[hlmBtn], a[hlmBtn]',
   exportAs: 'hlmBtn',
   standalone: true,
-  host: {
-    '[class]': 'computedClasses()',
-  },
 })
 export class HlmButton {
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+
   public readonly variant = input<ButtonVariants['variant']>('default');
   public readonly size = input<ButtonVariants['size']>('default');
 
-  protected readonly computedClasses = computed(() =>
-    twMerge(buttonVariants({ variant: this.variant(), size: this.size() })),
-  );
+  private consumerClasses: string | null = null;
+
+  constructor() {
+    effect(() => {
+      if (this.consumerClasses === null) {
+        this.consumerClasses = this.el.nativeElement.getAttribute('class') ?? '';
+      }
+      const variantClasses = buttonVariants({
+        variant: this.variant(),
+        size: this.size(),
+      });
+      this.el.nativeElement.setAttribute(
+        'class',
+        twMerge(variantClasses, this.consumerClasses),
+      );
+    });
+  }
 }
