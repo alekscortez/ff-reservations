@@ -3,11 +3,12 @@ import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { take } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, HlmButton],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
