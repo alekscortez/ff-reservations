@@ -596,9 +596,12 @@
     </div>
   </section>
 
-  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReservationModal && selectedTable">
-    <div class="absolute inset-0 bg-black/50" (click)="closeReservationModal()"></div>
-    <div class="relative h-full w-full max-w-3xl overflow-y-auto overflow-x-hidden bg-white p-4 pb-28 md:h-auto md:max-h-[92dvh] md:rounded-2xl md:p-6">
+  <hlm-dialog
+    *ngIf="showReservationModal && selectedTable"
+    (close)="closeReservationModal()"
+    size="full-on-mobile"
+    panelClass="max-w-3xl pb-28"
+  >
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -969,8 +972,7 @@
           </button>
         </div>
       </div>
-    </div>
-  </div>
+</hlm-dialog>
 </section>
 
 <div

@@ -226,9 +226,12 @@
     </div>
   </section>
 
-  <div class="fixed inset-0 z-[220] flex items-center justify-center" *ngIf="showCreateForm">
-    <div class="absolute inset-0 bg-black/50" (click)="toggleCreateForm()"></div>
-    <div class="relative h-full w-full overflow-y-auto overflow-x-hidden bg-white p-4 pb-24 md:h-auto md:max-h-[92dvh] md:max-w-5xl md:rounded-2xl md:p-6">
+  <hlm-dialog
+    *ngIf="showCreateForm"
+    (close)="toggleCreateForm()"
+    size="full-on-mobile"
+    panelClass="max-w-5xl pb-24"
+  >
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -406,6 +409,5 @@
           </div>
         </form>
       </div>
-    </div>
-  </div>
+</hlm-dialog>
 </section>
