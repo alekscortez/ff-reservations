@@ -45,7 +45,7 @@
     <div class="mt-4 flex justify-end">
       <button
         type="button"
-        class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700"
+        hlmInput
         (click)="showPastModal = true"
       >
         Search past events
@@ -68,13 +68,13 @@
     <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
       <label class="grid gap-1 text-xs text-brand-600">
         Date
-        <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterDate" />
+        <input type="date" hlmInput [formControl]="pastFilterDate" />
       </label>
       <label class="grid gap-1 text-xs text-brand-600">
         Name
-        <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterName" placeholder="Saturday Night" />
+        <input type="text" hlmInput [formControl]="pastFilterName" placeholder="Saturday Night" />
       </label>
-      <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
+      <button type="button" hlmInput (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
         Clear
       </button>
     </div>
@@ -151,7 +151,7 @@
           Search table
           <input
             type="text"
-            class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+            hlmInput
             [formControl]="filterQuery"
             placeholder="A01, B38..."
             inputmode="numeric"
@@ -381,7 +381,7 @@
                 Search table
                 <input
                   type="text"
-                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm"
+                  hlmInput
                   [formControl]="filterQuery"
                   placeholder="A01, B38..."
                   inputmode="numeric"
@@ -677,7 +677,7 @@
                 Phone
                 <div class="grid grid-cols-[110px_1fr] gap-2">
                   <select
-                    class="rounded-lg border border-brand-200 px-2 py-2 text-sm"
+                    hlmInput class="px-2"
                     [value]="phoneCountry"
                     (change)="onPhoneCountryChanged($any($event.target).value)"
                   >
@@ -686,7 +686,7 @@
                   </select>
                   <input
                     type="tel"
-                    class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+                    hlmInput
                     formControlName="phone"
                     inputmode="tel"
                     placeholder="Phone number"
@@ -696,7 +696,7 @@
 
               <label class="grid gap-1 text-xs text-brand-600">
                 Customer Name
-                <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="customerName" />
+                <input type="text" hlmInput formControlName="customerName" />
               </label>
             </div>
 
@@ -749,7 +749,7 @@
                   <label class="grid gap-1 text-xs text-brand-600">
                     Select Credit
                     <select
-                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      hlmInput
                       formControlName="creditId"
                     >
                       <option value="" disabled>Select reservation credit</option>
@@ -770,7 +770,7 @@
                   <label class="grid gap-1 text-xs text-brand-600" *ngIf="shouldShowCreditRemainingMethod()">
                     Remaining Payment Method
                     <select
-                      class="rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm"
+                      hlmInput
                       formControlName="remainingMethod"
                     >
                       <option value="cash">Cash</option>
@@ -787,7 +787,7 @@
               <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
                 <button
                   type="button"
-                  class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold touch-manipulation"
+                  hlmInput class="font-semibold touch-manipulation"
                   *ngFor="let method of paymentMethodOptions; trackBy: trackByPaymentMethodOption"
                   [ngClass]="isPaymentMethod(method.value) ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-brand-800'"
                   (mousedown)="onPaymentMethodButtonClick($event, method.value)"
@@ -804,7 +804,7 @@
                 type="number"
                 min="0"
                 formControlName="amountDue"
-                class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+                hlmInput
               />
             </label>
 
@@ -821,7 +821,7 @@
             <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="!isUsingClientCredit() && isCashMethod()">
               <label class="grid gap-1 text-xs text-brand-600">
                 Payment Status
-                <select class="rounded-lg border border-brand-200 px-3 py-2 text-sm" formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+                <select hlmInput formControlName="paymentStatus" (change)="onPaymentStatusChange()">
                   <option value="PAID">PAID</option>
                   <option value="PARTIAL">PARTIAL</option>
                   <option value="PENDING">PENDING</option>
@@ -838,9 +838,9 @@
                     formControlName="depositAmount"
                     [readonly]="!allowCustomDeposit"
                     [class.readonly]="!allowCustomDeposit"
-                    class="rounded-lg border border-brand-200 px-3 py-2 text-sm"
+                    hlmInput
                   />
-                  <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" (click)="toggleCustomDeposit()">
+                  <button type="button" hlmInput (click)="toggleCustomDeposit()">
                     {{ allowCustomDeposit ? 'Lock' : 'Modify' }}
                   </button>
                 </div>
@@ -872,11 +872,11 @@
               <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
                 <label class="grid gap-1 text-xs text-brand-600">
                   Deadline Date
-                  <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineDate" />
+                  <input type="date" hlmInput [formControl]="paymentDeadlineDate" />
                 </label>
                 <label class="grid gap-1 text-xs text-brand-600">
                   Deadline Time (America/Chicago)
-                  <input type="time" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="paymentDeadlineTime" />
+                  <input type="time" hlmInput [formControl]="paymentDeadlineTime" />
                 </label>
                 <p class="text-xs text-brand-500 md:col-span-2">
                   Default for pending/partial is next day at 12:00 AM (America/Chicago).
@@ -924,7 +924,7 @@
                 <ng-container *ngIf="paymentLinkUrl">
                   <input
                     type="text"
-                    class="h-10 rounded-lg border border-brand-200 px-3 text-xs text-brand-900"
+                    hlmInput class="text-xs"
                     [value]="paymentLinkUrl"
                     readonly
                   />
