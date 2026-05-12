@@ -41,15 +41,40 @@ module.exports = {
         success: {
           50: '#ecfdf5',
           100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
           500: '#10b981',
           700: '#047857',
+          800: '#065f46',
         },
         danger: {
           50: '#fef2f2',
           100: '#fee2e2',
+          200: '#fecaca',
+          300: '#fca5a5',
+          400: '#f87171',
           500: '#ef4444',
           700: '#b91c1c',
+          800: '#991b1b',
         },
+        // Warning (amber). Referenced in templates since at least early
+        // 2026 (text-warning-700, border-warning-300, bg-warning-100,
+        // etc.) but the palette was never defined in tailwind.config.js
+        // — those classes silently produced no CSS. Restored in
+        // Phase 6d while building the HlmToggle warning variant.
+        warning: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          500: '#f59e0b',
+          700: '#b45309',
+          800: '#92400e',
+        },
+        // Success — extended with shades that templates reference
+        // (bg-success-200/300, border-success-300, text-success-800)
+        // but the original config only defined 50/100/500/700.
+        // Same silently-no-CSS bug as warning above.
 
         // Spartan / shadcn semantic colors — resolve via CSS variables in
         // styles.scss. helm components reference these via classes like

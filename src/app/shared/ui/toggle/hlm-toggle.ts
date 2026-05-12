@@ -22,7 +22,12 @@ import { twMerge } from 'tailwind-merge';
  * - default: no border, transparent inactive, bg-primary active. Used
  *   for high-contrast view-mode switchers (Map vs List).
  * - outline: border-input inactive, border-primary + bg-primary active.
- *   Used for multi-select chips where many can be selected.
+ *   Used for multi-select chips where many can be selected. Also used
+ *   for "disable table" toggles where the active state inverts the
+ *   element (light → dark slate).
+ * - warning: amber-themed (border-warning + bg-warning-100 inactive,
+ *   bg-warning-800 active). Used for cautionary multi-select chips
+ *   (e.g. "frequent client not coming" toggles in event editor).
  */
 export const toggleVariants = cva(
   'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
@@ -31,6 +36,7 @@ export const toggleVariants = cva(
       variant: {
         default: '',
         outline: 'border',
+        warning: 'border',
       },
       active: {
         true: '',
@@ -51,6 +57,17 @@ export const toggleVariants = cva(
         variant: 'outline',
         active: true,
         class: 'border-primary bg-primary text-primary-foreground',
+      },
+      // warning (amber)
+      {
+        variant: 'warning',
+        active: false,
+        class: 'border-warning-300 bg-warning-100 text-warning-800 hover:bg-warning-200',
+      },
+      {
+        variant: 'warning',
+        active: true,
+        class: 'border-warning-800 bg-warning-800 text-warning-50',
       },
     ],
     defaultVariants: {
