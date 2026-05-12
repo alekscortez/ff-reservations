@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { A11yModule } from '@angular/cdk/a11y';
+import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 
-import { HlmDialog } from '../dialog';
 import { HlmSidebarService } from './hlm-sidebar.service';
 
 /**
@@ -35,7 +36,7 @@ import { HlmSidebarService } from './hlm-sidebar.service';
 @Component({
   selector: 'hlm-sidebar',
   standalone: true,
-  imports: [CommonModule, HlmDialog],
+  imports: [CommonModule, A11yModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[attr.data-state]': 'service.state()',
@@ -49,15 +50,25 @@ import { HlmSidebarService } from './hlm-sidebar.service';
 
     @if (service.isMobile()) {
       @if (service.openMobile()) {
-        <hlm-dialog
-          size="sheet"
-          panelClass="left-0 right-auto top-0 bottom-0 h-svh w-64 max-w-none rounded-none rounded-r-2xl sm:w-64 bg-sidebar text-sidebar-foreground p-0"
-          (close)="service.setOpenMobile(false)"
+        <!-- Backdrop: dismisses on click -->
+        <div
+          class="fixed inset-0 z-[290] bg-black/50"
+          (click)="service.setOpenMobile(false)"
+          aria-hidden="true"
+        ></div>
+        <!-- Slide-over sheet from left. Plain fixed positioning so we
+             land at left:0 regardless of any parent's flex alignment. -->
+        <aside
+          data-slot="sidebar-mobile"
+          class="fixed inset-y-0 left-0 z-[300] flex h-svh w-64 flex-col bg-sidebar text-sidebar-foreground shadow-2xl"
+          cdkTrapFocus
+          cdkTrapFocusAutoCapture
+          role="dialog"
+          aria-modal="true"
+          (keydown.escape)="service.setOpenMobile(false)"
         >
-          <div class="flex h-full w-full flex-col">
-            <ng-container *ngTemplateOutlet="contents"></ng-container>
-          </div>
-        </hlm-dialog>
+          <ng-container *ngTemplateOutlet="contents"></ng-container>
+        </aside>
       }
     } @else {
       <!-- Gap: real layout-occupying div in the flex row. Animating its
@@ -85,4 +96,22 @@ import { HlmSidebarService } from './hlm-sidebar.service';
 })
 export class HlmSidebar {
   protected readonly service = inject(HlmSidebarService);
+  private readonly doc = inject(DOCUMENT);
+
+  constructor() {
+    // Lock body scroll while the mobile sheet is open; restore on close.
+    let previousOverflow: string | null = null;
+    effect(() => {
+      const lock = this.service.isMobile() && this.service.openMobile();
+      if (lock) {
+        if (previousOverflow === null) {
+          previousOverflow = this.doc.body.style.overflow;
+        }
+        this.doc.body.style.overflow = 'hidden';
+      } else if (previousOverflow !== null) {
+        this.doc.body.style.overflow = previousOverflow;
+        previousOverflow = null;
+      }
+    });
+  }
 }
