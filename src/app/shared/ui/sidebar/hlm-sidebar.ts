@@ -11,17 +11,29 @@ import { HlmSidebarService } from './hlm-sidebar.service';
  *
  *   1. A "gap" div with real layout width — this is what reserves
  *      space in the flex row. Animating its width from w-64 to w-0
- *      naturally causes the adjacent `<main hlmSidebarInset>` to
- *      flex-grow into the freed space. No padding-left hack on the
- *      inset, no display:contents Safari bug — just standard flex
- *      sizing.
+ *      causes the adjacent `<main hlmSidebarInset>` (which is
+ *      `flex-1`) to flex-grow into the freed space AUTOMATICALLY, on
+ *      every animation frame, because flex layout recomputes child
+ *      sizes when any sibling's width changes. No padding-left hack
+ *      on the inset, no display:contents Safari bug — just standard
+ *      flex sizing. The visual sidebar is a separate fixed-positioned
+ *      `<aside>` that slides off (left: 0 → -16rem) in lockstep over
+ *      the same 200ms.
  *
  *   2. A fixed-positioned "container" div that holds the visual
  *      sidebar UI. Anchored to top:--header-height so it sits below
  *      a sticky header; slides off (translate-x) when collapsed.
  *
- * On mobile the same content portals into HlmDialog (size="sheet") so
- * the slide-over doesn't take layout space.
+ * On mobile, the desktop branch is skipped and the same content
+ * renders inside a fixed-positioned `<aside class="fixed inset-y-0
+ * left-0 z-[300] ...">` plus a sibling backdrop, with body-scroll
+ * lock + cdkTrapFocus implemented inline. We do NOT route through
+ * HlmDialog for mobile: HlmDialog's `sheet` variant uses
+ * `flex items-end justify-center` which conflicts with `left:0`
+ * positioning. See memory `sidebar_shell_spartan_pattern.md` for
+ * the full rationale (including the mobile slide animation's
+ * inline-style transitions and Tailwind dev-server scanner
+ * sidestepping).
  *
  * Slots:
  *
@@ -32,6 +44,8 @@ import { HlmSidebarService } from './hlm-sidebar.service';
  *   </hlm-sidebar>
  *
  * Pair with `<main hlmSidebarInset>` as a flex sibling in the row.
+ * `<hlm-sidebar>` uses `display: block` (not `contents`) to avoid
+ * Safari reflow bugs — see memory `safari_display_contents_flex_bug.md`.
  */
 @Component({
   selector: 'hlm-sidebar',

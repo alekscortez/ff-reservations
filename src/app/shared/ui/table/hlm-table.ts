@@ -6,15 +6,29 @@ import { twMerge } from 'tailwind-merge';
  * the directives don't add structure, just visual styling matching
  * the existing hand-rolled `<table>` markup in this codebase.
  *
- * Pair with `@tanstack/angular-table`'s `FlexRenderDirective` for
- * sortable / filterable / paginated tables (see admin Clients page
- * for the reference example). For static tables, just use the
- * directives on plain `<table>` / `<thead>` / `<tbody>` markup.
+ * Pair with `@tanstack/angular-table`'s `createAngularTable` for
+ * sortable / filterable / paginated tables. **Declarative cells
+ * (`<td>{{ row.x }}</td>`) — NOT `FlexRenderDirective`.** The
+ * declarative form composes cleanly with the inline edit-row
+ * pattern and keeps templates readable; `flexRender` only earns its
+ * complexity when you need runtime-defined cell renderers, none of
+ * which we currently have. The admin Clients page
+ * (`features/admin/clients/`) is the reference example.
+ *
+ * For static tables (no sort / filter / pagination), just use the
+ * directives on plain `<table>` / `<thead>` / `<tbody>` markup
+ * without TanStack.
  *
  * Each directive captures the consumer's `class` attribute on first
  * render and merges variant defaults via tailwind-merge, same as
  * `HlmButton` / `HlmBadge`. Conflicting Tailwind utilities (e.g.
- * `text-sm` vs `text-base`) resolve with the consumer's class winning.
+ * `text-sm` vs `text-base`) resolve with the consumer's class
+ * winning.
+ *
+ * See memory `data_tables_spartan_pattern.md` for the 6 patterns
+ * that matter (TanStack proxy as Signal, OnPush gotcha with
+ * `column.getIsSorted()`, pagination integration, search-reset
+ * effect, Spartan-stock card layout, columns-visibility recipe).
  */
 
 function makeMergeEffect(host: HTMLElement, defaults: string) {
