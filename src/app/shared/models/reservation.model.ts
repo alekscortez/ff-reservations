@@ -42,11 +42,17 @@ export interface ReservationPayment {
 export interface ReservationItem {
   reservationId: string;
   eventDate: string;
+  // Primary (first) table — back-compat with single-table data. Always
+  // equals tableIds[0] when tableIds is present. Read sites that need
+  // to render a label across all booked tables should use tableIds
+  // (or the TableLabel pipe).
   tableId: string;
+  tableIds?: string[];
   customerName: string;
   phone: string;
   depositAmount: number;
   tablePrice?: number;
+  tablePrices?: number[];
   amountDue?: number;
   paymentStatus?: PaymentStatus;
   paymentDeadlineAt?: string | null;

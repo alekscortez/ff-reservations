@@ -17,6 +17,11 @@ import { PaymentMethod, ReservationItem } from '../../../shared/models/reservati
 import { TableForEvent } from '../../../shared/models/table.model';
 import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
 import { SystemActorLabelPipe } from '../../../shared/system-actor-label.pipe';
+import {
+  formatTableLabel,
+  formatTableLabelLower,
+  TableLabelPipe,
+} from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
@@ -39,7 +44,11 @@ interface ActivityItem {
   label: string;
   atEpoch: number;
   reservationId: string;
+  // Primary (first) table for back-compat with scalar readers.
   tableId: string;
+  // Full list when the reservation covers multiple tables; otherwise
+  // [tableId]. Render sites use the tableLabel pipe to format.
+  tableIds: string[];
   customerName: string;
 }
 
@@ -95,6 +104,7 @@ interface PaymentLinkSmsState {
     PhoneDisplayPipe,
     PaymentMethodLabelPipe,
     SystemActorLabelPipe,
+    TableLabelPipe,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -343,6 +353,10 @@ export class Dashboard implements OnInit, OnDestroy {
   private computeRecentActivity(items: ReservationItem[]): ActivityItem[] {
     return items
       .map((reservation) => {
+        const tableIds =
+          Array.isArray(reservation.tableIds) && reservation.tableIds.length > 0
+            ? reservation.tableIds
+            : [reservation.tableId];
         if (reservation.status === 'CANCELLED') {
           return {
             type: 'CANCELLED' as const,
@@ -350,6 +364,7 @@ export class Dashboard implements OnInit, OnDestroy {
             atEpoch: Number(reservation.cancelledAt ?? reservation.updatedAt ?? reservation.createdAt ?? 0),
             reservationId: reservation.reservationId,
             tableId: reservation.tableId,
+            tableIds,
             customerName: reservation.customerName,
           };
         }
@@ -364,6 +379,7 @@ export class Dashboard implements OnInit, OnDestroy {
             atEpoch: checkedInEpoch,
             reservationId: reservation.reservationId,
             tableId: reservation.tableId,
+            tableIds,
             customerName: reservation.customerName,
           };
         }
@@ -381,6 +397,7 @@ export class Dashboard implements OnInit, OnDestroy {
             atEpoch: lastPaymentEpoch,
             reservationId: reservation.reservationId,
             tableId: reservation.tableId,
+            tableIds,
             customerName: reservation.customerName,
           };
         }
@@ -391,6 +408,7 @@ export class Dashboard implements OnInit, OnDestroy {
           atEpoch: Number(reservation.createdAt ?? 0),
           reservationId: reservation.reservationId,
           tableId: reservation.tableId,
+          tableIds,
           customerName: reservation.customerName,
         };
       })
@@ -806,7 +824,7 @@ export class Dashboard implements OnInit, OnDestroy {
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
-        note: `Square link for table ${item.tableId}`,
+        note: `Square link for ${formatTableLabelLower(item)}`,
       })
       .subscribe({
         next: (res) => {
@@ -892,7 +910,7 @@ export class Dashboard implements OnInit, OnDestroy {
         reservationId: item.reservationId,
         eventDate: item.eventDate,
         amount: remaining,
-        note: `Square link for table ${item.tableId} via SMS`,
+        note: `Square link for ${formatTableLabelLower(item)} via SMS`,
       })
       .subscribe({
         next: (res) => {
@@ -1133,7 +1151,7 @@ export class Dashboard implements OnInit, OnDestroy {
                   reservationId: afterCredit.reservationId,
                   eventDate: afterCredit.eventDate,
                   amount: remaining,
-                  note: note || `Remaining payment for table ${afterCredit.tableId}`,
+                  note: note || `Remaining payment for ${formatTableLabelLower(afterCredit)}`,
                 })
                 .subscribe({
                   next: (res) => {
@@ -1384,7 +1402,7 @@ export class Dashboard implements OnInit, OnDestroy {
         locationId: this.squareLocationId,
         amount,
         container: host,
-        label: `Table ${item.tableId} payment`,
+        label: `${formatTableLabel(item)} payment`,
         referenceId: item.reservationId,
         squareEnvMode: this.squareEnvMode,
         onTokenized: (sourceId) => {
@@ -1427,7 +1445,7 @@ export class Dashboard implements OnInit, OnDestroy {
         eventDate: item.eventDate,
         amount,
         sourceId,
-        note: note || `Cash App Pay for table ${item.tableId}`,
+        note: note || `Cash App Pay for ${formatTableLabelLower(item)}`,
       })
       .subscribe({
         next: (res) => {
@@ -1711,11 +1729,19 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   private buildShareMessage(item: ReservationItem, url: string): string {
-    return `Hi ${item.customerName}, here is your table link for ${item.eventDate} table ${item.tableId}: ${url}`;
+    const tablesLabel = formatTableLabelLower(item);
+    const noun =
+      Array.isArray(item.tableIds) && item.tableIds.length > 1
+        ? 'tables link'
+        : 'table link';
+    const suffix = tablesLabel ? ` ${tablesLabel}` : '';
+    return `Hi ${item.customerName}, here is your ${noun} for ${item.eventDate}${suffix}: ${url}`;
   }
 
   private buildCheckInPassShareMessage(item: ReservationItem, url: string): string {
-    return `Hi ${item.customerName}, here is your FF check-in pass for ${item.eventDate} table ${item.tableId}: ${url}`;
+    const tablesLabel = formatTableLabelLower(item);
+    const suffix = tablesLabel ? ` ${tablesLabel}` : '';
+    return `Hi ${item.customerName}, here is your FF check-in pass for ${item.eventDate}${suffix}: ${url}`;
   }
 
   private mapCheckInPass(pass: CheckInPass | null | undefined): GeneratedCheckInPass | null {

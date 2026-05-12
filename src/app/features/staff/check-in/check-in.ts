@@ -3,10 +3,11 @@ import { Component, ElementRef, OnDestroy, ViewChild, inject } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
+import { TableLabelPipe } from '../../../shared/table-label.pipe';
 
 @Component({
   selector: 'app-check-in',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TableLabelPipe],
   templateUrl: './check-in.html',
   styleUrl: './check-in.scss',
 })

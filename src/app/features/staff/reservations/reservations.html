@@ -97,7 +97,7 @@
             (keydown)="onReservationRowKeydown($event, r)"
           >
             <td class="py-3 pr-3">
-              <p class="font-semibold text-brand-900">Table {{ r.tableId }} · {{ r.customerName }}</p>
+              <p class="font-semibold text-brand-900">{{ r | tableLabel }} · {{ r.customerName }}</p>
               <p class="text-xs text-brand-500">{{ reservationListMeta(r) }}</p>
             </td>
             <td class="py-3 pr-3">
@@ -141,7 +141,7 @@
         (keydown)="onReservationRowKeydown($event, r)"
       >
         <div class="flex items-center justify-between gap-3">
-          <p class="text-base font-semibold text-brand-900">Table {{ r.tableId }} · {{ r.customerName }}</p>
+          <p class="text-base font-semibold text-brand-900">{{ r | tableLabel }} · {{ r.customerName }}</p>
           <span
             class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
             [ngClass]="paymentStatusBadgeClass(r)"
@@ -181,7 +181,7 @@
     <div class="flex items-start justify-between gap-3">
       <div>
         <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Reservation</p>
-        <h3 class="text-xl font-semibold text-brand-900">Table {{ detailItem.tableId }}</h3>
+        <h3 class="text-xl font-semibold text-brand-900">{{ detailItem | tableLabel }}</h3>
         <p class="break-words text-sm text-brand-600">{{ detailItem.customerName }} · {{ detailItem.phone | phoneDisplay }}</p>
       </div>
       <button
@@ -484,7 +484,7 @@
         ✕
       </button>
     </div>
-    <p class="mt-2 text-sm text-brand-600">Table {{ paymentItem.tableId }} · {{ paymentItem.customerName }}</p>
+    <p class="mt-2 text-sm text-brand-600">{{ paymentItem | tableLabel }} · {{ paymentItem.customerName }}</p>
     <form class="mt-4 grid gap-3" [formGroup]="paymentForm" (ngSubmit)="submitPayment()">
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Amount

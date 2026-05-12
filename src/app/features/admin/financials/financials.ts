@@ -11,6 +11,7 @@ import {
   ReservationItem,
   ReservationPayment,
 } from '../../../shared/models/reservation.model';
+import { TableLabelPipe } from '../../../shared/table-label.pipe';
 
 interface FinancialRow {
   eventId: string;
@@ -20,6 +21,7 @@ interface FinancialRow {
   status: 'CONFIRMED' | 'CANCELLED';
   paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | null;
   tableId: string;
+  tableIds: string[];
   customerName: string;
   phone: string;
   amountDue: number;
@@ -77,6 +79,7 @@ interface PaymentLedgerRow {
   eventName: string;
   reservationId: string;
   tableId: string;
+  tableIds: string[];
   customerName: string;
   amount: number;
   method: PaymentMethod;
@@ -92,7 +95,7 @@ interface PaymentLedgerRow {
 
 @Component({
   selector: 'app-financials',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, TableLabelPipe],
   templateUrl: './financials.html',
   styleUrl: './financials.scss',
 })
@@ -438,6 +441,10 @@ export class Financials implements OnInit, OnDestroy {
             deadlineMs >= now &&
             deadlineMs - now <= dueSoonWindowMs;
 
+          const tableIds =
+            Array.isArray(reservation.tableIds) && reservation.tableIds.length > 0
+              ? reservation.tableIds
+              : [reservation.tableId];
           return {
             eventId: event.eventId,
             eventName: event.eventName,
@@ -446,6 +453,7 @@ export class Financials implements OnInit, OnDestroy {
             status: reservation.status,
             paymentStatus: reservation.paymentStatus ?? null,
             tableId: reservation.tableId,
+            tableIds,
             customerName: reservation.customerName,
             phone: reservation.phone,
             amountDue,
@@ -599,6 +607,12 @@ export class Financials implements OnInit, OnDestroy {
         const eventName = String(event.eventName ?? '').trim();
         const reservationId = String(reservation.reservationId ?? '').trim();
         const tableId = String(reservation.tableId ?? '').trim();
+        const tableIds =
+          Array.isArray(reservation.tableIds) && reservation.tableIds.length > 0
+            ? reservation.tableIds
+            : tableId
+            ? [tableId]
+            : [];
         const customerName = String(reservation.customerName ?? '').trim();
         const payments = Array.isArray(reservation.payments) ? reservation.payments : [];
 
@@ -609,6 +623,7 @@ export class Financials implements OnInit, OnDestroy {
               eventName,
               reservationId,
               tableId,
+              tableIds,
               customerName,
               reservation,
               payment,
@@ -636,6 +651,7 @@ export class Financials implements OnInit, OnDestroy {
             eventName,
             reservationId,
             tableId,
+            tableIds,
             customerName,
             amount: fallbackAmount,
             method: normalizedFallbackMethod,
@@ -669,11 +685,12 @@ export class Financials implements OnInit, OnDestroy {
     eventName: string;
     reservationId: string;
     tableId: string;
+    tableIds: string[];
     customerName: string;
     reservation: ReservationItem;
     payment: ReservationPayment;
   }): PaymentLedgerRow | null {
-    const { eventDate, eventName, reservationId, tableId, customerName, reservation, payment } = input;
+    const { eventDate, eventName, reservationId, tableId, tableIds, customerName, reservation, payment } = input;
     const rawMethod = String(payment?.method ?? '').trim().toLowerCase();
     if (rawMethod !== 'cash' && rawMethod !== 'cashapp' && rawMethod !== 'square') return null;
     const method: PaymentMethod = rawMethod === 'cash' ? 'cash' : 'square';
@@ -688,6 +705,7 @@ export class Financials implements OnInit, OnDestroy {
       eventName,
       reservationId,
       tableId,
+      tableIds,
       customerName,
       amount: Number(payment?.amount ?? 0),
       method,

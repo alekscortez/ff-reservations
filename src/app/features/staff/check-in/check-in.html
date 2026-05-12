@@ -73,7 +73,7 @@
       </div>
       <p class="mt-2 text-xs">
         Reservation {{ verifyResult.reservation?.reservationId }} ·
-        Table {{ verifyResult.reservation?.tableId }} ·
+        {{ verifyResult.reservation | tableLabel }} ·
         {{ verifyResult.reservation?.customerName }}
       </p>
       <p class="mt-1 text-xs" *ngIf="verifyResult.pass?.usedAt">

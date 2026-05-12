@@ -7,6 +7,7 @@ export interface CheckInPass {
   reservationId: string | null;
   eventDate: string | null;
   tableId: string | null;
+  tableIds?: string[];
   customerName: string | null;
   phone: string | null;
   status: 'ISSUED' | 'USED' | 'REVOKED' | 'EXPIRED' | string | null;
@@ -44,6 +45,7 @@ export interface CheckInVerifyResult {
     reservationId: string | null;
     eventDate: string | null;
     tableId: string | null;
+    tableIds?: string[];
     customerName: string | null;
   } | null;
 }
