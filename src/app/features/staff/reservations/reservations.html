@@ -1,7 +1,6 @@
 <section class="flex w-full flex-col gap-4">
   <header>
     <h1 class="text-2xl font-semibold text-brand-900">Reservations</h1>
-    <p class="text-sm text-brand-600">View and manage reservations by date.</p>
   </header>
 
   <section class="w-full rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
@@ -16,7 +15,7 @@
         aria-label="Refresh events"
         title="Refresh events"
       >
-        ↻
+        <ng-icon name="lucideRefreshCw" size="14" />
       </button>
     </div>
 
@@ -174,7 +173,6 @@
                   </button>
                   <ng-template #rowMenu>
                     <div hlmMenu>
-                      <button hlmMenuItem type="button" (click)="openDetails(r)">Open details</button>
                       <button
                         hlmMenuItem
                         type="button"
@@ -231,7 +229,6 @@
               </button>
               <ng-template #mobileMenu>
                 <div hlmMenu>
-                  <button hlmMenuItem type="button" (click)="openDetails(r)">Open details</button>
                   <button
                     hlmMenuItem
                     type="button"
@@ -308,7 +305,7 @@
         (click)="closeDetails()"
         aria-label="Close details"
       >
-        ✕
+        <ng-icon name="lucideX" size="14" />
       </button>
     </div>
 
@@ -600,7 +597,7 @@
         (click)="closePayment()"
         aria-label="Close payment modal"
       >
-        ✕
+        <ng-icon name="lucideX" size="14" />
       </button>
     </div>
     <p class="mt-2 text-sm text-brand-600">{{ paymentItem | tableLabel }} · {{ paymentItem.customerName }}</p>

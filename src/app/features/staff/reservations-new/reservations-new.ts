@@ -15,6 +15,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideX } from '@ng-icons/lucide';
 import { TablesService } from '../../../core/http/tables.service';
 import { HoldLockItem, HoldsService } from '../../../core/http/holds.service';
 import { ReservationsService } from '../../../core/http/reservations.service';
@@ -88,7 +90,8 @@ import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap, HlmDialog, HlmButton, HlmInput, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, HlmDialog, HlmButton, HlmInput, HlmToggle],
+  providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })

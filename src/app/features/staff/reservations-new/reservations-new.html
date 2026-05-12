@@ -62,7 +62,7 @@
         (click)="showPastModal = false"
         aria-label="Close past events"
       >
-        ✕
+        <ng-icon name="lucideX" size="14" />
       </button>
     </div>
     <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
@@ -626,7 +626,7 @@
               (click)="closeReservationModal()"
               aria-label="Close reservation details"
             >
-              ✕
+              <ng-icon name="lucideX" size="14" />
             </button>
           </div>
         </div>
@@ -651,7 +651,7 @@
                 [disabled]="loading"
                 aria-label="Remove this table from the booking"
               >
-                ✕
+                <ng-icon name="lucideX" size="12" />
               </button>
             </span>
           </div>

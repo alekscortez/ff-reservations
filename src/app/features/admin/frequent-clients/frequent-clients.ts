@@ -11,7 +11,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
+import { lucideChevronDown, lucideEllipsis, lucideX } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -89,7 +89,7 @@ const PAGE_SIZE = 25;
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideX })],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })

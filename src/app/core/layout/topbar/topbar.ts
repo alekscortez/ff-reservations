@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucidePanelLeft } from '@ng-icons/lucide';
+import { lucidePanelLeft, lucideX } from '@ng-icons/lucide';
 import { AuthService } from '../../auth/auth.service';
 import { Subscription, catchError, filter, map, of, switchMap } from 'rxjs';
 import { EventsService } from '../../http/events.service';
@@ -18,7 +18,7 @@ import { HlmSidebarTrigger } from '../../../shared/ui/sidebar';
 @Component({
   selector: 'app-topbar',
   imports: [CommonModule, RouterLink, NgIcon, HlmButton, HlmDialog, HlmSidebarTrigger],
-  providers: [provideIcons({ lucidePanelLeft })],
+  providers: [provideIcons({ lucidePanelLeft, lucideX })],
   templateUrl: './topbar.html',
   styleUrl: './topbar.scss',
 })

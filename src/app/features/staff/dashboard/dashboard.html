@@ -2,19 +2,8 @@
   <header class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">Staff Dashboard</p>
         <h1 class="text-2xl font-semibold text-brand-900">Live Table Overview</h1>
       </div>
-      <button
-        type="button"
-        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-200 text-brand-700"
-        (click)="refreshDashboard()"
-        [disabled]="loadingContext || loadingSnapshot"
-        title="Refresh dashboard"
-        aria-label="Refresh dashboard"
-      >
-        ↻
-      </button>
     </div>
 
     <div *ngIf="loadingContext" class="mt-3 text-sm text-brand-500">Loading event context…</div>
@@ -167,21 +156,21 @@
           hlmBtn variant="outline" size="lg" class="justify-between"
         >
           <span>New Reservation</span>
-          <span aria-hidden="true">→</span>
+          <ng-icon name="lucideArrowRight" size="16" class="opacity-60" aria-hidden="true" />
         </a>
         <a
           [routerLink]="['/staff/reservations']"
           hlmBtn variant="outline" size="lg" class="justify-between"
         >
           <span>Reservations</span>
-          <span aria-hidden="true">→</span>
+          <ng-icon name="lucideArrowRight" size="16" class="opacity-60" aria-hidden="true" />
         </a>
         <a
           [routerLink]="['/staff/check-in']"
           hlmBtn variant="outline" size="lg" class="justify-between"
         >
           <span>Check-In</span>
-          <span aria-hidden="true">→</span>
+          <ng-icon name="lucideArrowRight" size="16" class="opacity-60" aria-hidden="true" />
         </a>
       </div>
 
@@ -244,7 +233,7 @@
         (click)="closeDetails()"
         aria-label="Close details"
       >
-        ✕
+        <ng-icon name="lucideX" size="14" />
       </button>
     </div>
 
@@ -519,7 +508,7 @@
         (click)="closeUrgentPayment()"
         aria-label="Close payment modal"
       >
-        ✕
+        <ng-icon name="lucideX" size="14" />
       </button>
     </div>
 

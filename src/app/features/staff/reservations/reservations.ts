@@ -13,7 +13,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
+import { lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -143,7 +143,7 @@ interface PaymentLinkSmsState {
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX })],
   templateUrl: './reservations.html',
   styleUrl: './reservations.scss',
 })

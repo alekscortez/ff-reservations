@@ -13,7 +13,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription } from 'rxjs';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronDown } from '@ng-icons/lucide';
+import { lucideArrowRight, lucideChevronDown } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -158,7 +158,7 @@ interface PaymentLedgerRow {
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideChevronDown })],
+  providers: [provideIcons({ lucideArrowRight, lucideChevronDown })],
   templateUrl: './financials.html',
   styleUrl: './financials.scss',
 })

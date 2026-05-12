@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideArrowRight, lucideX } from '@ng-icons/lucide';
 import { forkJoin, Subscription } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
@@ -105,6 +107,7 @@ interface PaymentLinkSmsState {
     CommonModule,
     RouterLink,
     ReactiveFormsModule,
+    NgIcon,
     PhoneDisplayPipe,
     PaymentMethodLabelPipe,
     SystemActorLabelPipe,
@@ -114,6 +117,7 @@ interface PaymentLinkSmsState {
     HlmBadge,
     HlmInput,
   ],
+  providers: [provideIcons({ lucideArrowRight, lucideX })],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })

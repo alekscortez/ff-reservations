@@ -11,7 +11,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideEllipsis } from '@ng-icons/lucide';
+import { lucideEllipsis, lucideX } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -76,7 +76,7 @@ const PAGE_SIZE = 25;
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideEllipsis })],
+  providers: [provideIcons({ lucideEllipsis, lucideX })],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
