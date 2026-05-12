@@ -14,28 +14,18 @@ import { twMerge } from 'tailwind-merge';
  *   // Default (centered, max-w-2xl, fits content):
  *   <hlm-dialog *ngIf="showModal" (close)="showModal = false">
  *     <h3>Confirm action</h3>
- *     <button hlmBtn (click)="confirm()">Yes</button>
  *   </hlm-dialog>
  *
- *   // Full-screen on mobile, centered on desktop. Used for long forms
- *   // that need the full viewport on small screens (e.g. multi-step
- *   // create-event, frequent-client create, hold-then-reserve flow).
- *   <hlm-dialog
- *     *ngIf="showCreate"
- *     (close)="closeCreate()"
- *     size="full-on-mobile"
- *     panelClass="max-w-3xl pb-28"
- *   >…</hlm-dialog>
+ *   // Full-screen on mobile, centered on desktop:
+ *   <hlm-dialog *ngIf="showCreate" (close)="closeCreate()" size="full-on-mobile" panelClass="max-w-3xl pb-28">…</hlm-dialog>
  *
- *   // Custom panel shape via panelClass override (e.g. smaller max-width
- *   // for payment modal, full-height for detail modal). Classes merge
- *   // via tailwind-merge — conflicting Tailwind utilities resolve with
- *   // panelClass winning.
- *   <hlm-dialog
- *     *ngIf="showDetailModal"
- *     (close)="closeDetail()"
- *     panelClass="h-[92dvh] md:h-auto md:max-h-[92dvh]"
- *   >…</hlm-dialog>
+ *   // Slide-from-edge sheet (bottom on mobile, top-right on desktop):
+ *   <hlm-dialog *ngIf="showQuickActions" (close)="closeQuickActions()" size="sheet">…</hlm-dialog>
+ *
+ *   // Per-instance panel-shape override (e.g. smaller max-width). The
+ *   // panelClass merges into the size's defaults via tailwind-merge,
+ *   // last write wins.
+ *   <hlm-dialog *ngIf="showPayment" (close)="close()" panelClass="max-w-md">…</hlm-dialog>
  *
  * Behaviors:
  * - cdkTrapFocus pulls focus inside the panel on mount; Tab cycles
@@ -45,27 +35,41 @@ import { twMerge } from 'tailwind-merge';
  * - Body overflow is set to hidden while the dialog is mounted and
  *   restored on destroy.
  *
- * Future variants (when needed): `level` input for z-index (120/200/300),
- * `position="sheet"` for slide-from-edge variants.
+ * Z-index:
+ * - size=default / full-on-mobile: z-[200] (above page chrome, above
+ *   reservations-new's mobile CTA bar z-[220]? No — at z-[200] it's
+ *   BELOW the CTA bar, which is intentional: opening a page modal on
+ *   reservations-new shouldn't cover the staff's hold-countdown CTA).
+ * - size=sheet: z-[300] (the quick-actions sheet MUST sit above page
+ *   modals AND above reservations-new's CTA bar; the original
+ *   hand-rolled version sat at z-[300] for the same reason — see the
+ *   pre-migration comment in topbar.html).
  */
+const wrapperVariants = cva('fixed inset-0', {
+  variants: {
+    size: {
+      default: 'z-[200] flex items-center justify-center',
+      'full-on-mobile': 'z-[200] flex items-center justify-center',
+      sheet:
+        'z-[300] flex items-end justify-center p-0 sm:items-start sm:justify-end sm:p-4 sm:pt-[68px]',
+    },
+  },
+  defaultVariants: { size: 'default' },
+});
+
 const panelVariants = cva(
   'relative overflow-y-auto overflow-x-hidden bg-card p-4 shadow-2xl md:p-6',
   {
     variants: {
       size: {
-        // Centered, fits content up to 92vw / max-w-2xl with rounded corners.
-        // Backdrop click area = the surrounding flex container.
         default: 'max-h-[92dvh] w-[92vw] max-w-2xl rounded-2xl',
-        // Full-screen on mobile (no rounded corners, full viewport),
-        // becomes a centered dialog on md+. The pb-* bottom padding can
-        // be overridden via panelClass for footer / sticky CTA spacing.
         'full-on-mobile':
           'h-full w-full md:h-auto md:max-h-[92dvh] md:w-[92vw] md:max-w-2xl md:rounded-2xl',
+        sheet:
+          'w-full rounded-t-2xl border border-brand-100 sm:w-[360px] sm:rounded-2xl',
       },
     },
-    defaultVariants: {
-      size: 'default',
-    },
+    defaultVariants: { size: 'default' },
   },
 );
 
@@ -77,7 +81,7 @@ export type DialogVariants = VariantProps<typeof panelVariants>;
   imports: [CommonModule, A11yModule],
   template: `
     <div
-      class="fixed inset-0 z-[200] flex items-center justify-center"
+      [class]="wrapperClasses()"
       cdkTrapFocus
       cdkTrapFocusAutoCapture
       (keydown.escape)="close.emit()"
@@ -95,6 +99,10 @@ export class HlmDialog implements OnDestroy {
   public readonly close = output<void>();
   public readonly size = input<DialogVariants['size']>('default');
   public readonly panelClass = input<string>('');
+
+  protected readonly wrapperClasses = computed(() =>
+    wrapperVariants({ size: this.size() }),
+  );
 
   protected readonly panelClasses = computed(() =>
     twMerge(panelVariants({ size: this.size() }), this.panelClass()),
