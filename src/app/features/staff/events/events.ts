@@ -22,6 +22,7 @@ import {
 } from '@tanstack/angular-table';
 import { EventsService } from '../../../core/http/events.service';
 import { EventItem } from '../../../shared/models/event.model';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNumberedPagination } from '../../../shared/ui/pagination';
@@ -43,6 +44,7 @@ const PAGE_SIZE = 25;
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    HlmAlert,
     HlmButton,
     HlmInput,
     HlmNumberedPagination,

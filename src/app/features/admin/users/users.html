@@ -77,8 +77,8 @@
       </ng-template>
     </div>
 
-    <p class="text-sm text-success-700" *ngIf="notice">{{ notice }}</p>
-    <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+    <hlm-alert *ngIf="notice" variant="success">{{ notice }}</hlm-alert>
+    <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
 
     <div *ngIf="loading" class="text-sm text-brand-500">Loading users…</div>
     <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">

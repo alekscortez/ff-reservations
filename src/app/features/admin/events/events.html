@@ -19,7 +19,7 @@
     <div *ngIf="loading" class="text-sm text-brand-500">Loading…</div>
     <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">No events yet.</div>
     <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">No matches.</div>
-    <p class="text-sm text-danger-700" *ngIf="error && !showCreateModal">{{ error }}</p>
+    <hlm-alert *ngIf="error && !showCreateModal" variant="destructive">{{ error }}</hlm-alert>
 
     <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
       <div hlmTableContainer>
@@ -188,8 +188,8 @@
         </div>
       </details>
 
-      <p class="text-sm text-danger-700" *ngIf="error && !conflictDate">{{ error }}</p>
-      <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
+      <hlm-alert *ngIf="error && !conflictDate" variant="destructive">{{ error }}</hlm-alert>
+      <hlm-alert *ngIf="conflictDate" variant="destructive">An event already exists for {{ conflictDate }}.</hlm-alert>
 
       <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
         <div class="flex flex-wrap gap-2">
@@ -286,8 +286,8 @@
       </div>
     </details>
 
-    <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
-    <p class="text-sm text-danger-700" *ngIf="conflictDate">An event already exists for {{ conflictDate }}.</p>
+    <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
+    <hlm-alert *ngIf="conflictDate" variant="destructive">An event already exists for {{ conflictDate }}.</hlm-alert>
 
     <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
       <div class="flex flex-wrap gap-2">

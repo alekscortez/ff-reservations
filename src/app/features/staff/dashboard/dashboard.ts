@@ -25,6 +25,7 @@ import {
   TableLabelPipe,
 } from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
@@ -112,6 +113,7 @@ interface PaymentLinkSmsState {
     PaymentMethodLabelPipe,
     SystemActorLabelPipe,
     TableLabelPipe,
+    HlmAlert,
     HlmDialog,
     HlmButton,
     HlmBadge,

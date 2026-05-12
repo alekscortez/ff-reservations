@@ -2,12 +2,13 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AppSettings, SettingsService } from '../../../core/http/settings.service';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-admin-settings',
-  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmInput],
+  imports: [CommonModule, ReactiveFormsModule, HlmAlert, HlmButton, HlmInput],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })

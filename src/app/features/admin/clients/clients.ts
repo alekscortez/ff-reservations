@@ -25,6 +25,7 @@ import {
   normalizePhoneToE164,
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import {
@@ -56,6 +57,7 @@ const PAGE_SIZE = 50;
     ReactiveFormsModule,
     NgIcon,
     PhoneDisplayPipe,
+    HlmAlert,
     HlmButton,
     HlmConfirmDialog,
     HlmDialog,

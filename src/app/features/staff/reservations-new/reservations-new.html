@@ -18,7 +18,7 @@
     </div>
 
     <div *ngIf="eventsLoading" class="mt-3 text-sm text-brand-500">Loading events…</div>
-    <div *ngIf="eventsError" class="mt-3 text-sm text-danger-700">{{ eventsError }}</div>
+    <hlm-alert *ngIf="eventsError" variant="destructive" class="mt-3">{{ eventsError }}</hlm-alert>
 
     <div
       class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
@@ -956,7 +956,7 @@
           </article>
         </ng-template>
 
-        <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+        <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
 
         <p class="text-xs text-brand-500" *ngIf="!holdId && !createdReservation">
           You must create a hold before confirming.

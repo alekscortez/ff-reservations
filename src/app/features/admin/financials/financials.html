@@ -38,11 +38,11 @@
       {{ filteredEvents.length }} event(s) in range
     </p>
 
-    <p class="mt-3 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
-    <div *ngIf="warnings.length > 0" class="mt-3 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700">
+    <hlm-alert *ngIf="error" variant="destructive" class="mt-3">{{ error }}</hlm-alert>
+    <hlm-alert *ngIf="warnings.length > 0" variant="warning" class="mt-3">
       <p class="font-semibold">Some events could not be loaded:</p>
       <p *ngFor="let warning of warnings">• {{ warning }}</p>
-    </div>
+    </hlm-alert>
   </header>
 
   <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

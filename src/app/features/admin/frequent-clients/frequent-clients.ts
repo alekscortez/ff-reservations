@@ -38,6 +38,7 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { SettingsService } from '../../../core/http/settings.service';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
@@ -70,6 +71,7 @@ const PAGE_SIZE = 25;
     ReactiveFormsModule,
     NgIcon,
     PhoneDisplayPipe,
+    HlmAlert,
     HlmButton,
     HlmConfirmDialog,
     HlmDialog,

@@ -33,6 +33,7 @@ import {
   ReservationPayment,
 } from '../../../shared/models/reservation.model';
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import {
@@ -141,6 +142,7 @@ interface PaymentLedgerRow {
     ReactiveFormsModule,
     NgIcon,
     TableLabelPipe,
+    HlmAlert,
     HlmButton,
     HlmInput,
     HlmMenu,

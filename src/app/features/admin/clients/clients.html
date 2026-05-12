@@ -41,7 +41,7 @@
   <div *ngIf="!loading() && totalFiltered() === 0" class="text-sm text-brand-500">
     No clients.
   </div>
-  <p class="text-sm text-danger-700" *ngIf="error()">{{ error() }}</p>
+  <hlm-alert variant="destructive" *ngIf="error()">{{ error() }}</hlm-alert>
 
   <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
     <div hlmTableContainer>

@@ -83,6 +83,7 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
@@ -90,7 +91,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, HlmDialog, HlmButton, HlmInput, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, HlmAlert, HlmDialog, HlmButton, HlmInput, HlmToggle],
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',

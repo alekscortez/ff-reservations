@@ -8,11 +8,12 @@ import {
   PublicPayService,
 } from '../../../core/http/public-pay.service';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-public-pay',
-  imports: [CommonModule, HlmButton],
+  imports: [CommonModule, HlmAlert, HlmButton],
   templateUrl: './pay.html',
   styleUrl: './pay.scss',
 })

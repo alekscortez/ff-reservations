@@ -18,7 +18,7 @@
   <div *ngIf="loading" class="text-sm text-brand-500">Loading…</div>
   <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">No events found.</div>
   <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">No matches.</div>
-  <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+  <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
 
   <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
     <div hlmTableContainer>

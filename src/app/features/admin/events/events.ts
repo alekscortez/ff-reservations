@@ -28,6 +28,7 @@ import { FrequentClientsService } from '../../../core/http/frequent-clients.serv
 import { CreateEventPayload, EventItem } from '../../../shared/models/event.model';
 import { TableInfo } from '../../../shared/models/table.model';
 import { FrequentClient } from '../../../shared/models/frequent-client.model';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
@@ -58,6 +59,7 @@ const PAGE_SIZE = 25;
     CommonModule,
     ReactiveFormsModule,
     NgIcon,
+    HlmAlert,
     HlmConfirmDialog,
     HlmDialog,
     HlmButton,

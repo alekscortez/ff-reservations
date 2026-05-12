@@ -23,6 +23,7 @@ import {
   getSortedRowModel,
 } from '@tanstack/angular-table';
 import { AdminUser, UsersService } from '../../../core/http/users.service';
+import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { HlmConfirmDialog } from '../../../shared/ui/dialog';
@@ -53,6 +54,7 @@ const PAGE_SIZE = 25;
     CommonModule,
     ReactiveFormsModule,
     NgIcon,
+    HlmAlert,
     HlmButton,
     HlmBadge,
     HlmConfirmDialog,
