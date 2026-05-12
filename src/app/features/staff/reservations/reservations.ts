@@ -22,6 +22,7 @@ import { ClientsService, RescheduleCredit } from '../../../core/http/clients.ser
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 
 interface GeneratedPaymentLink {
   method: 'square' | 'cashapp';
@@ -77,6 +78,7 @@ interface PaymentLinkSmsState {
     TableLabelPipe,
     HlmDialog,
     HlmButton,
+    HlmBadge,
   ],
   templateUrl: './reservations.html',
   styleUrl: './reservations.scss',
@@ -428,16 +430,14 @@ export class Reservations implements OnInit, OnDestroy {
     return status;
   }
 
-  paymentStatusBadgeClass(item: ReservationItem): string {
-    if (item.status === 'CANCELLED') {
-      return 'border-danger-300 bg-danger-100 text-danger-800';
-    }
+  paymentStatusBadgeVariant(item: ReservationItem): BadgeVariants['variant'] {
+    if (item.status === 'CANCELLED') return 'danger';
     const status = String(item.paymentStatus ?? '').trim().toUpperCase();
-    if (status === 'PAID') return 'border-success-300 bg-success-100 text-success-800';
-    if (status === 'PARTIAL') return 'border-warning-300 bg-warning-100 text-warning-800';
-    if (status === 'PENDING') return 'border-warning-300 bg-warning-100 text-warning-800';
-    if (status === 'COURTESY') return 'border-brand-300 bg-brand-100 text-brand-800';
-    return 'border-brand-200 bg-brand-50 text-brand-700';
+    if (status === 'PAID') return 'success';
+    if (status === 'PARTIAL') return 'warning';
+    if (status === 'PENDING') return 'warning';
+    if (status === 'COURTESY') return 'secondary';
+    return 'secondary';
   }
 
   reservationListMeta(item: ReservationItem): string {
