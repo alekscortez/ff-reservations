@@ -99,5 +99,5 @@
   </article>
 
   <p class="mt-4 text-sm text-brand-500" *ngIf="loading">Loading availability…</p>
-  <p class="mt-4 rounded-xl border border-danger-200 bg-danger-50 p-3 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+  <hlm-alert variant="destructive" class="mt-4 rounded-xl p-3" *ngIf="error">{{ error }}</hlm-alert>
 </section>
