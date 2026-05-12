@@ -36,6 +36,13 @@ export const buttonVariants = cva(
           'bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/90',
         outline:
           'border border-input bg-background text-foreground hover:bg-muted active:bg-muted',
+        // Like `outline` but the border-color inherits the parent element's
+        // text color via `border-current` instead of resolving to the theme's
+        // --input. Used for inline action buttons inside status-colored cards
+        // (e.g. dashboard urgent-payment cards) where the card's urgencyClass
+        // sets the parent's text color and the buttons should pick that up.
+        'outline-current':
+          'border border-current bg-background/70 hover:bg-background active:bg-background',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/80',
         ghost:
