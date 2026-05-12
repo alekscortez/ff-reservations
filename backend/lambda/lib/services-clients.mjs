@@ -303,7 +303,23 @@ export function createClientsService({
     const phoneCountry = normalizedPhone.phoneCountry;
     const depositAmount = Number(payload?.depositAmount ?? 0);
     const eventDate = String(payload?.eventDate ?? "").trim();
-    const tableId = String(payload?.tableId ?? "").trim();
+    // Multi-table input: accept tableIds[] OR legacy tableId. The CRM row
+    // records `lastTableId` as the first table (display convenience for
+    // the staff form's typeahead) and adds `totalTables` so per-table
+    // lifetime metrics survive multi-table bookings. `totalReservations`
+    // is unchanged — semantically counts visits, not tables.
+    const tableIdsInput = Array.isArray(payload?.tableIds)
+      ? payload.tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+      : [];
+    const singleTableId = String(payload?.tableId ?? "").trim();
+    const tableIds =
+      tableIdsInput.length > 0
+        ? tableIdsInput
+        : singleTableId
+        ? [singleTableId]
+        : [];
+    const lastTableId = tableIds[0] ?? "";
+    const tableCount = Math.max(1, tableIds.length);
     if (!phone || !phoneE164) return;
 
     await ddb.send(
@@ -311,7 +327,7 @@ export function createClientsService({
         TableName: CLIENTS_TABLE,
         Key: { PK: "CLIENT", SK: `PHONE#${phone}` },
         UpdateExpression:
-          "SET #name = :name, #phone = :phone, #phoneCountry = :phoneCountry, #lastReservationAt = :now, #lastEventDate = :eventDate, #lastTableId = :tableId, #updatedBy = :by ADD #totalSpend :amt, #totalReservations :one",
+          "SET #name = :name, #phone = :phone, #phoneCountry = :phoneCountry, #lastReservationAt = :now, #lastEventDate = :eventDate, #lastTableId = :tableId, #updatedBy = :by ADD #totalSpend :amt, #totalReservations :one, #totalTables :tableCount",
         ExpressionAttributeNames: {
           "#name": "name",
           "#phone": "phone",
@@ -322,6 +338,7 @@ export function createClientsService({
           "#updatedBy": "updatedBy",
           "#totalSpend": "totalSpend",
           "#totalReservations": "totalReservations",
+          "#totalTables": "totalTables",
         },
         ExpressionAttributeValues: {
           ":name": name || "Unknown",
@@ -329,10 +346,11 @@ export function createClientsService({
           ":phoneCountry": phoneCountry,
           ":now": nowEpoch(),
           ":eventDate": eventDate,
-          ":tableId": tableId,
+          ":tableId": lastTableId,
           ":by": user,
           ":amt": depositAmount,
           ":one": 1,
+          ":tableCount": tableCount,
         },
       })
     );
@@ -608,6 +626,7 @@ export function createClientsService({
       phoneCountry: x.phoneCountry,
       totalSpend: x.totalSpend,
       totalReservations: x.totalReservations,
+      totalTables: x.totalTables ?? null,
       lastReservationAt: x.lastReservationAt,
       lastEventDate: x.lastEventDate,
       lastTableId: x.lastTableId,

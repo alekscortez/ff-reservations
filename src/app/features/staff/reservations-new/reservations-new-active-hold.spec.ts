@@ -5,6 +5,7 @@ import {
   clearActiveHoldSessionStorage,
   extractTableIdFromHoldLock,
   findActiveHoldLock,
+  findActiveHoldLocks,
   readActiveHoldSession,
   writeActiveHoldSession,
 } from './reservations-new-active-hold';
@@ -18,6 +19,15 @@ function makeSession(overrides: Partial<ActiveHoldSession> = {}): ActiveHoldSess
     holdId: 'h1',
     holdExpiresAt: FIXED_NOW_EPOCH + 3600,
     holdCreatedByMe: true,
+    tableIds: ['T1'],
+    holds: [
+      {
+        tableId: 'T1',
+        holdId: 'h1',
+        holdExpiresAt: FIXED_NOW_EPOCH + 3600,
+        holdCreatedByMe: true,
+      },
+    ],
     showReservationModal: false,
     customerName: 'Alice',
     phone: '+12025550100',
@@ -82,11 +92,31 @@ describe('writeActiveHoldSession + readActiveHoldSession', () => {
   });
 
   it('coerces non-finite holdExpiresAt to null', () => {
-    const session = makeSession();
-    localStorage.setItem(
-      ACTIVE_HOLD_STORAGE_KEY,
-      JSON.stringify({ ...session, holdExpiresAt: 'not a number' })
-    );
+    // Persist a legacy single-table session (no holds[] / tableIds[]).
+    // Multi-table-aware sessions take their expiresAt from holds[],
+    // which would mask the scalar coercion here; the legacy path is
+    // what guards against malformed JSON in older storage entries.
+    const legacy = {
+      eventDate: '2026-05-09',
+      tableId: 'T1',
+      holdId: 'h1',
+      holdExpiresAt: 'not a number',
+      holdCreatedByMe: true,
+      showReservationModal: false,
+      customerName: 'Alice',
+      phone: '+12025550100',
+      phoneCountry: 'US',
+      amountDue: 100,
+      depositAmount: 30,
+      paymentStatus: 'PAID',
+      paymentMethod: 'square',
+      allowCustomDeposit: false,
+      paymentDeadlineEnabled: true,
+      paymentDeadlineDate: '2026-05-10',
+      paymentDeadlineTime: '18:00',
+      savedAt: FIXED_NOW_EPOCH * 1000,
+    };
+    localStorage.setItem(ACTIVE_HOLD_STORAGE_KEY, JSON.stringify(legacy));
     expect(readActiveHoldSession()?.holdExpiresAt).toBe(null);
   });
 
@@ -196,5 +226,151 @@ describe('findActiveHoldLock', () => {
     ];
     const out = findActiveHoldLock(items, makeSession(), FIXED_NOW_EPOCH);
     expect(out).toEqual({ expiresAt: FIXED_NOW_EPOCH + 1000 });
+  });
+});
+
+describe('readActiveHoldSession multi-table', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('synthesizes tableIds[] / holds[] from a legacy single-table payload', () => {
+    // Persist the v1 shape (no tableIds / holds fields) and confirm the
+    // reader fills them in from the scalar primary.
+    const legacy = {
+      eventDate: '2026-05-09',
+      tableId: 'T1',
+      holdId: 'h1',
+      holdExpiresAt: FIXED_NOW_EPOCH + 3600,
+      holdCreatedByMe: true,
+      showReservationModal: false,
+      customerName: 'Alice',
+      phone: '+12025550100',
+      phoneCountry: 'US',
+      amountDue: 100,
+      depositAmount: 30,
+      paymentStatus: 'PAID',
+      paymentMethod: 'square',
+      allowCustomDeposit: false,
+      paymentDeadlineEnabled: true,
+      paymentDeadlineDate: '2026-05-10',
+      paymentDeadlineTime: '18:00',
+      savedAt: FIXED_NOW_EPOCH * 1000,
+    };
+    localStorage.setItem(ACTIVE_HOLD_STORAGE_KEY, JSON.stringify(legacy));
+    const out = readActiveHoldSession();
+    expect(out?.tableIds).toEqual(['T1']);
+    expect(out?.holds?.length).toBe(1);
+    expect(out?.holds?.[0].tableId).toBe('T1');
+    expect(out?.holds?.[0].holdId).toBe('h1');
+  });
+
+  it('round-trips a multi-table session through localStorage', () => {
+    const session = makeSession({
+      tableId: 'T1',
+      holdId: 'h1',
+      tableIds: ['T1', 'T2'],
+      holds: [
+        {
+          tableId: 'T1',
+          holdId: 'h1',
+          holdExpiresAt: FIXED_NOW_EPOCH + 3600,
+          holdCreatedByMe: true,
+        },
+        {
+          tableId: 'T2',
+          holdId: 'h2',
+          holdExpiresAt: FIXED_NOW_EPOCH + 1800,
+          holdCreatedByMe: true,
+        },
+      ],
+    });
+    writeActiveHoldSession(session);
+    const out = readActiveHoldSession();
+    expect(out?.tableIds).toEqual(['T1', 'T2']);
+    expect(out?.holds?.length).toBe(2);
+    expect(out?.holds?.[1].holdId).toBe('h2');
+  });
+});
+
+describe('findActiveHoldLocks', () => {
+  function makeLock(overrides: Record<string, unknown> = {}): any {
+    return {
+      SK: 'TABLE#T1',
+      lockType: 'HOLD',
+      holdId: 'h1',
+      expiresAt: FIXED_NOW_EPOCH + 3600,
+      ...overrides,
+    };
+  }
+
+  it('returns every still-live hold in the persisted session', () => {
+    const session = makeSession({
+      tableIds: ['T1', 'T2'],
+      holds: [
+        {
+          tableId: 'T1',
+          holdId: 'h1',
+          holdExpiresAt: FIXED_NOW_EPOCH + 3600,
+          holdCreatedByMe: true,
+        },
+        {
+          tableId: 'T2',
+          holdId: 'h2',
+          holdExpiresAt: FIXED_NOW_EPOCH + 1800,
+          holdCreatedByMe: true,
+        },
+      ],
+    });
+    const items = [
+      makeLock({ SK: 'TABLE#T1', holdId: 'h1' }),
+      makeLock({ SK: 'TABLE#T2', holdId: 'h2' }),
+    ];
+    const out = findActiveHoldLocks(items, session, FIXED_NOW_EPOCH);
+    expect(out.length).toBe(2);
+    expect(out[0].tableId).toBe('T1');
+    expect(out[1].tableId).toBe('T2');
+  });
+
+  it('drops entries whose hold expired or got claimed', () => {
+    const session = makeSession({
+      tableIds: ['T1', 'T2'],
+      holds: [
+        {
+          tableId: 'T1',
+          holdId: 'h1',
+          holdExpiresAt: FIXED_NOW_EPOCH + 3600,
+          holdCreatedByMe: true,
+        },
+        {
+          tableId: 'T2',
+          holdId: 'h2',
+          holdExpiresAt: FIXED_NOW_EPOCH - 10,
+          holdCreatedByMe: true,
+        },
+      ],
+    });
+    const items = [
+      makeLock({ SK: 'TABLE#T1', holdId: 'h1' }),
+      // T2 hold expired in the past — backend won't show it; reader
+      // also drops it.
+      makeLock({ SK: 'TABLE#T2', holdId: 'h2', expiresAt: FIXED_NOW_EPOCH - 10 }),
+    ];
+    const out = findActiveHoldLocks(items, session, FIXED_NOW_EPOCH);
+    expect(out.length).toBe(1);
+    expect(out[0].tableId).toBe('T1');
+  });
+
+  it('falls back to the scalar primary when session.holds is empty', () => {
+    const session = makeSession();
+    delete (session as any).holds;
+    delete (session as any).tableIds;
+    const items = [makeLock()];
+    const out = findActiveHoldLocks(items, session, FIXED_NOW_EPOCH);
+    expect(out.length).toBe(1);
+    expect(out[0].tableId).toBe('T1');
   });
 });

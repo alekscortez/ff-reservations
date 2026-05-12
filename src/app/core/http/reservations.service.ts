@@ -5,8 +5,13 @@ import { PaymentMethod, ReservationItem } from '../../shared/models/reservation.
 
 export interface CreateReservationPayload {
   eventDate: string;
-  tableId: string;
-  holdId: string;
+  // Single-table back-compat fields. Either these or the *Ids arrays must
+  // be set; the backend accepts either form. New multi-table callers
+  // should send tableIds[]+holdIds[].
+  tableId?: string;
+  holdId?: string;
+  tableIds?: string[];
+  holdIds?: string[];
   customerName: string;
   phone: string;
   phoneCountry?: 'US' | 'MX';
@@ -171,13 +176,15 @@ export class ReservationsService {
   cancel(
     reservationId: string,
     eventDate: string,
-    tableId: string,
+    tableId: string | null | undefined,
     cancelReason: string,
     resolutionType: CancellationResolutionType = 'CANCEL_NO_REFUND'
   ) {
     return this.api.put<void>(`/reservations/${reservationId}/cancel`, {
       eventDate,
-      tableId,
+      // Backend derives the hold-release list from reservation.tableIds[];
+      // tableId is kept for back-compat with older clients only.
+      tableId: tableId ?? null,
       cancelReason,
       resolutionType,
     });

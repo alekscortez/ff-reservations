@@ -1,5 +1,10 @@
 import { createHash, randomUUID, timingSafeEqual } from "crypto";
 
+import {
+  formatTablesLabel,
+  getReservationTableIds,
+} from "./services-reservations-shared.mjs";
+
 export async function handleReservationsAndHoldsRoute(ctx) {
   const {
     method,
@@ -426,14 +431,18 @@ export async function handleReservationsAndHoldsRoute(ctx) {
             ) {
               autoPaymentMethod = "square";
               autoLinkType = "square";
+              const reservationTableIds = getReservationTableIds(reservation);
+              const reservationTablesLabel =
+                formatTablesLabel(reservationTableIds) || "reservation";
               const square = await createSquarePaymentLink({
                 reservationId,
                 eventDate,
-                tableId: String(reservation?.tableId ?? "").trim(),
+                tableId: reservationTableIds[0] ?? null,
+                tableIds: reservationTableIds,
                 customerName: String(reservation?.customerName ?? "").trim(),
                 phone: String(reservation?.phone ?? "").trim(),
                 amount: remainingAmount,
-                note: `Auto Square link for table ${String(reservation?.tableId ?? "").trim()} via SMS`,
+                note: `Auto Square link for ${reservationTablesLabel.toLowerCase()} via SMS`,
               });
 
               const paymentLink = square?.paymentLink ?? {};
@@ -451,12 +460,16 @@ export async function handleReservationsAndHoldsRoute(ctx) {
                 actor: user,
               });
 
+              const linkTableIds =
+                getReservationTableIds(reservationAfterLink ?? reservation);
+
               const sms = await sendPaymentLinkSms({
                 phone: reservationAfterLink?.phone ?? reservation?.phone,
                 customerName:
                   reservationAfterLink?.customerName ?? reservation?.customerName,
                 eventDate,
-                tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+                tableId: linkTableIds[0] ?? null,
+                tableIds: linkTableIds,
                 paymentLinkUrl,
               });
 
@@ -467,7 +480,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
                   eventType: "PAYMENT_LINK_SMS_SENT",
                   actor: user,
                   source: "staff",
-                  tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+                  tableId: linkTableIds[0] ?? null,
+                  tableIds: linkTableIds,
                   customerName:
                     reservationAfterLink?.customerName ?? reservation?.customerName,
                   details: {
@@ -524,12 +538,16 @@ export async function handleReservationsAndHoldsRoute(ctx) {
                 );
               }
 
+              const linkTableIds =
+                getReservationTableIds(reservationAfterLink ?? reservation);
+
               const sms = await sendPaymentLinkSms({
                 phone: reservationAfterLink?.phone ?? reservation?.phone,
                 customerName:
                   reservationAfterLink?.customerName ?? reservation?.customerName,
                 eventDate,
-                tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+                tableId: linkTableIds[0] ?? null,
+                tableIds: linkTableIds,
                 paymentLinkUrl,
                 ttlMinutes: defaultTtl,
               });
@@ -541,7 +559,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
                   eventType: "PAYMENT_LINK_SMS_SENT",
                   actor: user,
                   source: "staff",
-                  tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+                  tableId: linkTableIds[0] ?? null,
+                  tableIds: linkTableIds,
                   customerName:
                     reservationAfterLink?.customerName ?? reservation?.customerName,
                   details: {
@@ -807,10 +826,12 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       requestedAmount = parsed;
     }
 
+    const reservationTableIdsForLink = getReservationTableIds(reservation);
     const square = await createSquarePaymentLink({
       reservationId,
       eventDate,
-      tableId: String(reservation?.tableId ?? "").trim(),
+      tableId: reservationTableIdsForLink[0] ?? null,
+      tableIds: reservationTableIdsForLink,
       customerName: String(reservation?.customerName ?? "").trim(),
       phone: String(reservation?.phone ?? "").trim(),
       amount: requestedAmount,
@@ -834,6 +855,9 @@ export async function handleReservationsAndHoldsRoute(ctx) {
             actor: user,
           })
         : reservation;
+    const afterLinkTableIds = getReservationTableIds(
+      reservationAfterLink ?? reservation
+    );
 
     return json(
       200,
@@ -841,7 +865,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         reservation: {
           reservationId,
           eventDate,
-          tableId: reservationAfterLink?.tableId ?? reservation?.tableId ?? null,
+          tableId: afterLinkTableIds[0] ?? null,
+          tableIds: afterLinkTableIds,
           paymentStatus:
             reservationAfterLink?.paymentStatus ?? reservation?.paymentStatus ?? null,
           amountDue,
@@ -947,10 +972,12 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         requestedAmount = parsed;
       }
 
+      const smsReservationTableIds = getReservationTableIds(reservation);
       const square = await createSquarePaymentLink({
         reservationId,
         eventDate,
-        tableId: String(reservation?.tableId ?? "").trim(),
+        tableId: smsReservationTableIds[0] ?? null,
+        tableIds: smsReservationTableIds,
         customerName: String(reservation?.customerName ?? "").trim(),
         phone: String(reservation?.phone ?? "").trim(),
         amount: requestedAmount,
@@ -975,12 +1002,15 @@ export async function handleReservationsAndHoldsRoute(ctx) {
               actor: user,
             })
           : reservation;
+      const afterLinkTableIds = getReservationTableIds(
+        reservationAfterLink ?? reservation
+      );
 
       console.info("payment_link_sms_requested", {
         reservationId,
         eventDate,
-        tableId:
-          String(reservationAfterLink?.tableId ?? reservation?.tableId ?? "").trim() || null,
+        tableId: afterLinkTableIds[0] ?? null,
+        tableIds: afterLinkTableIds,
         customerName:
           String(
             reservationAfterLink?.customerName ?? reservation?.customerName ?? ""
@@ -1000,7 +1030,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
           customerName:
             reservationAfterLink?.customerName ?? reservation?.customerName,
           eventDate,
-          tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+          tableId: afterLinkTableIds[0] ?? null,
+          tableIds: afterLinkTableIds,
           paymentLinkUrl,
         });
       } catch (err) {
@@ -1011,7 +1042,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
             eventType: "PAYMENT_LINK_SMS_FAILED",
             actor: user,
             source: "staff",
-            tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+            tableId: afterLinkTableIds[0] ?? null,
+            tableIds: afterLinkTableIds,
             customerName:
               reservationAfterLink?.customerName ?? reservation?.customerName,
             details: {
@@ -1043,7 +1075,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
           eventType: "PAYMENT_LINK_SMS_SENT",
           actor: user,
           source: "staff",
-          tableId: reservationAfterLink?.tableId ?? reservation?.tableId,
+          tableId: afterLinkTableIds[0] ?? null,
+          tableIds: afterLinkTableIds,
           customerName:
             reservationAfterLink?.customerName ?? reservation?.customerName,
           details: {
@@ -1079,7 +1112,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
           reservation: {
             reservationId,
             eventDate,
-            tableId: reservationAfterLink?.tableId ?? reservation?.tableId ?? null,
+            tableId: afterLinkTableIds[0] ?? null,
+            tableIds: afterLinkTableIds,
             customerName:
               reservationAfterLink?.customerName ??
               reservation?.customerName ??
@@ -1237,13 +1271,16 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         ? Math.max(1, Math.ceil((effectiveExpiresAt - now) / 60))
         : ttlMinutes;
 
+    const cashAppLinkTableIds = getReservationTableIds(updated ?? reservation);
+
     return json(
       200,
       {
         reservation: {
           reservationId,
           eventDate,
-          tableId: String(updated?.tableId ?? reservation?.tableId ?? "").trim() || null,
+          tableId: cashAppLinkTableIds[0] ?? null,
+          tableIds: cashAppLinkTableIds,
           customerName:
             String(updated?.customerName ?? reservation?.customerName ?? "").trim() || null,
           phone: String(updated?.phone ?? reservation?.phone ?? "").trim() || null,
@@ -1361,13 +1398,15 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       );
     }
 
+    const cashAppSmsTableIds = getReservationTableIds(updated ?? reservation);
     let sms;
     try {
       sms = await sendPaymentLinkSms({
         phone: updated?.phone ?? reservation?.phone,
         customerName: updated?.customerName ?? reservation?.customerName,
         eventDate,
-        tableId: updated?.tableId ?? reservation?.tableId,
+        tableId: cashAppSmsTableIds[0] ?? null,
+        tableIds: cashAppSmsTableIds,
         paymentLinkUrl: url,
         ttlMinutes,
       });
@@ -1379,7 +1418,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
           eventType: "PAYMENT_LINK_SMS_FAILED",
           actor,
           source: "staff",
-          tableId: updated?.tableId ?? reservation?.tableId,
+          tableId: cashAppSmsTableIds[0] ?? null,
+          tableIds: cashAppSmsTableIds,
           customerName: updated?.customerName ?? reservation?.customerName,
           details: {
             paymentMethod: "cashapp",
@@ -1400,7 +1440,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         eventType: "PAYMENT_LINK_SMS_SENT",
         actor,
         source: "staff",
-        tableId: updated?.tableId ?? reservation?.tableId,
+        tableId: cashAppSmsTableIds[0] ?? null,
+        tableIds: cashAppSmsTableIds,
         customerName: updated?.customerName ?? reservation?.customerName,
         details: {
           paymentMethod: "cashapp",
@@ -1425,7 +1466,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         reservation: {
           reservationId,
           eventDate,
-          tableId: String(updated?.tableId ?? reservation?.tableId ?? "").trim() || null,
+          tableId: cashAppSmsTableIds[0] ?? null,
+          tableIds: cashAppSmsTableIds,
           customerName:
             String(updated?.customerName ?? reservation?.customerName ?? "").trim() || null,
           phone: String(updated?.phone ?? reservation?.phone ?? "").trim() || null,
@@ -1475,6 +1517,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         ? await getEventByDate(context.eventDate)
         : null;
 
+    const sessionTableIds = getReservationTableIds(context.reservation);
     return json(
       200,
       {
@@ -1482,7 +1525,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
           reservationId: context.reservationId,
           eventDate: context.eventDate,
           eventName: String(eventRecord?.eventName ?? "").trim() || null,
-          tableId: String(context.reservation?.tableId ?? "").trim() || null,
+          tableId: sessionTableIds[0] ?? null,
+          tableIds: sessionTableIds,
           customerName: String(context.reservation?.customerName ?? "").trim() || null,
           paymentStatus:
             String(context.reservation?.paymentStatus ?? "").trim() || null,
@@ -1604,6 +1648,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       at: Math.floor(Date.now() / 1000),
     });
 
+    const chargeTableIds = getReservationTableIds(item ?? context.reservation);
     return json(
       200,
       {
@@ -1611,7 +1656,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         reservation: {
           reservationId: context.reservationId,
           eventDate: context.eventDate,
-          tableId: String(item?.tableId ?? context.reservation?.tableId ?? "").trim() || null,
+          tableId: chargeTableIds[0] ?? null,
+          tableIds: chargeTableIds,
           customerName:
             String(item?.customerName ?? context.reservation?.customerName ?? "").trim() ||
             null,
@@ -1645,19 +1691,22 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     const body = getBody(event);
     if (!body) return json(400, { message: "Invalid JSON body" }, cors);
     const eventDate = String(body?.eventDate ?? "").trim();
+    // tableId in the body is optional now; cancelReservation derives the
+    // hold-release list from reservation.tableIds. Kept here for legacy
+    // staff clients that still send it as a sanity check.
     const tableId = String(body?.tableId ?? "").trim();
     const cancelReason = String(body?.cancelReason ?? "").trim();
     const resolutionType = String(body?.resolutionType ?? "CANCEL_NO_REFUND")
       .trim()
       .toUpperCase();
-    if (!eventDate || !tableId) {
-      return json(400, { message: "eventDate and tableId are required" }, cors);
+    if (!eventDate) {
+      return json(400, { message: "eventDate is required" }, cors);
     }
     if (!cancelReason) {
       return json(400, { message: "cancelReason is required" }, cors);
     }
     const user = await getUserLabel(event);
-    await cancelReservation(eventDate, reservationId, tableId, user, cancelReason, {
+    await cancelReservation(eventDate, reservationId, tableId || null, user, cancelReason, {
       resolutionType,
     });
     return noContent(204, cors);

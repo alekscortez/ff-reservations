@@ -40,6 +40,44 @@ export const DEFAULT_HOLD_TTL_SECONDS = 300;
 // of their hold expiring. Audit M7. (Same hold owner only — if someone
 // else placed a new hold meanwhile, the holdId match still fails.)
 export const HOLD_EXPIRY_GRACE_SECONDS = 5;
+// Cap on tables per single reservation. Sized to leave comfortable headroom
+// under DynamoDB's TransactWrite 100-item limit (N hold upgrades + 1 res
+// put) while staying reasonable for staff UX. Bump only after auditing
+// the SMS body and the wallet pass for layout regressions.
+export const MAX_TABLES_PER_RESERVATION = 10;
+
+// Multi-table normalizers. Accept either the legacy scalar (`tableId`,
+// `holdId`) or the array form (`tableIds`, `holdIds`) and produce a
+// trimmed, non-empty string array. Callers that want both fields can
+// pass `payload?.tableIds ?? payload?.tableId`.
+export function normalizeIdList(input) {
+  if (input == null) return [];
+  const values = Array.isArray(input) ? input : [input];
+  return values
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+}
+
+// Read tableIds[] off a reservation row with back-compat to the legacy
+// scalar tableId. Single source of truth for "the tables on this booking."
+export function getReservationTableIds(reservation) {
+  const list = normalizeIdList(reservation?.tableIds);
+  if (list.length > 0) return list;
+  const legacy = String(reservation?.tableId ?? "").trim();
+  return legacy ? [legacy] : [];
+}
+
+// Human-friendly label for a list of tableIds. Single table renders as
+// "Table 5"; multi-table renders as "Tables 5, 7, 9". Used by SMS bodies,
+// payment-link descriptions, wallet pass face, share-message templates.
+export function formatTablesLabel(tableIds) {
+  const list = Array.isArray(tableIds)
+    ? tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+    : [];
+  if (list.length === 0) return "";
+  if (list.length === 1) return `Table ${list[0]}`;
+  return `Tables ${list.join(", ")}`;
+}
 
 export function createReservationsShared({
   ddb,
@@ -183,6 +221,7 @@ export function createReservationsShared({
     actor,
     source = null,
     tableId = null,
+    tableIds = null,
     customerName = null,
     details = null,
     at = null,
@@ -196,6 +235,11 @@ export function createReservationsShared({
       if (!normalizedReservationId || !normalizedEventType) return;
       const eventAt = Number(at ?? 0) || nowEpoch();
       const eventId = randomUUID();
+      // Write tableIds[] when multi-table; back-compat: tableId scalar is
+      // always the first id so old readers / dashboards keep working.
+      const tableIdList = normalizeIdList(tableIds);
+      const legacyTableId =
+        String(tableId ?? "").trim() || tableIdList[0] || null;
       await ddb.send(
         new PutCommand({
           TableName: RES_TABLE,
@@ -207,7 +251,8 @@ export function createReservationsShared({
             eventType: normalizedEventType,
             reservationId: normalizedReservationId,
             eventDate: normalizedEventDate,
-            tableId: String(tableId ?? "").trim() || null,
+            tableId: legacyTableId,
+            ...(tableIdList.length > 0 ? { tableIds: tableIdList } : {}),
             customerName: String(customerName ?? "").trim() || null,
             actor: String(actor ?? "").trim() || "system",
             source: String(source ?? "").trim() || null,
@@ -263,7 +308,8 @@ export function createReservationsShared({
     const passUrl = String(pass?.url ?? "").trim();
     const reservationId = String(reservation?.reservationId ?? "").trim();
     const eventDate = String(reservation?.eventDate ?? "").trim();
-    const tableId = String(reservation?.tableId ?? "").trim() || null;
+    const tableIds = getReservationTableIds(reservation);
+    const tableId = tableIds[0] ?? null;
     const customerName = String(reservation?.customerName ?? "").trim() || null;
     if (!passUrl || !reservationId || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return null;
 
@@ -274,6 +320,7 @@ export function createReservationsShared({
         customerName,
         eventDate,
         tableId,
+        tableIds,
         passUrl,
       });
       await appendReservationHistory({
@@ -283,6 +330,7 @@ export function createReservationsShared({
         actor,
         source: historySourceFromActor(actor),
         tableId,
+        tableIds,
         customerName,
         details: {
           passId: String(pass?.passId ?? "").trim() || null,
@@ -301,6 +349,7 @@ export function createReservationsShared({
         actor,
         source: historySourceFromActor(actor),
         tableId,
+        tableIds,
         customerName,
         details: {
           passId: String(pass?.passId ?? "").trim() || null,
@@ -490,12 +539,20 @@ export function createReservationsShared({
   async function shouldUseFrequentPaymentLinkTtl(reservation) {
     if (isFrequentAutoReservation(reservation)) return true;
     if (typeof isFrequentReservationByPhoneAndTable !== "function") return false;
+    // For multi-table bookings, treat as frequent when any of the booked
+    // tables is part of the frequent set for this phone. Bails out on the
+    // first match so the common single-table case is one call.
+    const tableIds = getReservationTableIds(reservation);
     try {
-      return await isFrequentReservationByPhoneAndTable({
-        phone: reservation?.phone,
-        phoneCountry: reservation?.phoneCountry,
-        tableId: reservation?.tableId,
-      });
+      for (const tableId of tableIds) {
+        const matched = await isFrequentReservationByPhoneAndTable({
+          phone: reservation?.phone,
+          phoneCountry: reservation?.phoneCountry,
+          tableId,
+        });
+        if (matched) return true;
+      }
+      return false;
     } catch (err) {
       console.warn("frequent_reservation_detection_failed", {
         reservationId: String(reservation?.reservationId ?? "").trim() || null,
@@ -576,6 +633,9 @@ export function createReservationsShared({
     localIsoToEpochSeconds,
     isFrequentAutoReservation,
     isOverdueReservation,
+    normalizeIdList,
+    getReservationTableIds,
+    formatTablesLabel,
     // settings resolvers
     getRuntimeSettings,
     resolveHoldTtlSeconds,

@@ -246,6 +246,59 @@ describe("buildPaymentLinkExpiredMessage", () => {
 // buildCheckInPassMessage
 // ---------------------------------------------------------------------------
 
+describe("multi-table SMS labels", () => {
+  it("buildPaymentLinkMessage renders 'Tables 1, 2, 3' when tableIds[] is supplied", () => {
+    const out = buildPaymentLinkMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableIds: ["A1", "B3", "C2"],
+      paymentLinkUrl: "https://sq.link/abc",
+      ttlMinutes: 60,
+    });
+    assert.match(out, /Tables A1, B3, C2/);
+    assert.ok(!out.match(/Table A1[^,]/));
+  });
+  it("buildPaymentLinkMessage falls back to scalar tableId when tableIds[] is empty", () => {
+    const out = buildPaymentLinkMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableId: "A1",
+      tableIds: [],
+      paymentLinkUrl: "https://x",
+      ttlMinutes: 30,
+    });
+    assert.match(out, /Table A1/);
+  });
+  it("buildPaymentLinkMessage prefers tableIds[] over scalar tableId", () => {
+    const out = buildPaymentLinkMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableId: "OLD",
+      tableIds: ["A1", "B3"],
+      paymentLinkUrl: "https://x",
+      ttlMinutes: 30,
+    });
+    assert.match(out, /Tables A1, B3/);
+    assert.ok(!out.includes("OLD"));
+  });
+  it("buildPaymentLinkExpiredMessage renders multi-table label", () => {
+    const out = buildPaymentLinkExpiredMessage({
+      customerName: "Alice",
+      tableIds: ["A1", "B3"],
+    });
+    assert.match(out, /for Tables A1, B3/);
+  });
+  it("buildCheckInPassMessage renders multi-table label", () => {
+    const out = buildCheckInPassMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableIds: ["A1", "B3", "C2"],
+      passUrl: "https://app/pass?t=xyz",
+    });
+    assert.match(out, /Tables A1, B3, C2/);
+  });
+});
+
 describe("buildCheckInPassMessage", () => {
   it("includes greeting, thanks, date, table, URL, OPT_OUT_SUFFIX", () => {
     const out = buildCheckInPassMessage({

@@ -76,19 +76,38 @@ export function formatTtlPhrase(ttlMinutes) {
   return `Expires in ${Math.round(minutes)} min.`;
 }
 
+// "Table 5" / "Tables 5, 7, 9" — single source of truth for SMS bodies.
+// Accepts either the legacy scalar `tableId` or a `tableIds[]` array
+// (callers may pass both; tableIds[] wins). Empty/whitespace inputs
+// return "" so callers can branch cleanly.
+export function formatTablesLabelForSms({ tableId, tableIds } = {}) {
+  const rawList = Array.isArray(tableIds) ? tableIds : [];
+  const fromList = rawList
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+  if (fromList.length === 0) {
+    const single = String(tableId ?? "").trim();
+    if (!single) return "";
+    return `Table ${single}`;
+  }
+  if (fromList.length === 1) return `Table ${fromList[0]}`;
+  return `Tables ${fromList.join(", ")}`;
+}
+
 export function buildPaymentLinkMessage({
   customerName,
   eventDate,
   tableId,
+  tableIds,
   paymentLinkUrl,
   ttlMinutes,
 }) {
   const name = String(customerName ?? "").trim();
   const eventDateLabel = formatEventDateLabel(eventDate);
-  const table = String(tableId ?? "").trim();
+  const tablesLabel = formatTablesLabelForSms({ tableId, tableIds });
   const url = String(paymentLinkUrl ?? "").trim();
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const dateAndTable = [eventDateLabel, table ? `Table ${table}` : ""]
+  const dateAndTable = [eventDateLabel, tablesLabel]
     .filter(Boolean)
     .join(" ");
   const dateAndTableText = dateAndTable ? `${dateAndTable}: ` : "";
@@ -96,21 +115,21 @@ export function buildPaymentLinkMessage({
   return `${greeting} pay ${dateAndTableText}${url}. ${expiresPhrase} Reservation confirms after payment. ${OPT_OUT_SUFFIX}`;
 }
 
-export function buildPaymentLinkExpiredMessage({ customerName, tableId }) {
+export function buildPaymentLinkExpiredMessage({ customerName, tableId, tableIds }) {
   const name = String(customerName ?? "").trim();
-  const table = String(tableId ?? "").trim();
+  const tablesLabel = formatTablesLabelForSms({ tableId, tableIds });
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const tableText = table ? ` for Table ${table}` : "";
+  const tableText = tablesLabel ? ` for ${tablesLabel}` : "";
   return `${greeting} your payment link${tableText} expired. Please call us to request a new link. ${OPT_OUT_SUFFIX}`;
 }
 
-export function buildCheckInPassMessage({ customerName, eventDate, tableId, passUrl }) {
+export function buildCheckInPassMessage({ customerName, eventDate, tableId, tableIds, passUrl }) {
   const name = String(customerName ?? "").trim();
   const eventDateLabel = formatEventDateLabel(eventDate);
-  const table = String(tableId ?? "").trim();
+  const tablesLabel = formatTablesLabelForSms({ tableId, tableIds });
   const url = String(passUrl ?? "").trim();
   const greeting = name ? `Hi ${name},` : "Hi,";
-  const dateAndTable = [eventDateLabel, table ? `Table ${table}` : ""]
+  const dateAndTable = [eventDateLabel, tablesLabel]
     .filter(Boolean)
     .join(" ");
   const dateAndTableText = dateAndTable ? `${dateAndTable}: ` : "";

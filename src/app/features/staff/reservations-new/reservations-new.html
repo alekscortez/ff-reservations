@@ -108,6 +108,23 @@
       </div>
     </div>
 
+    <div
+      class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-300 bg-accent-50 px-3 py-2 text-sm text-brand-900"
+      *ngIf="addAnotherTablePending"
+    >
+      <span>
+        <strong>Adding another table:</strong>
+        click a free (green) table on the map to add it to this booking.
+      </span>
+      <button
+        type="button"
+        class="h-8 rounded-lg border border-brand-200 bg-white px-3 text-xs font-semibold text-brand-800"
+        (click)="cancelAddAnotherTable()"
+      >
+        Cancel
+      </button>
+    </div>
+
     <div class="mt-4 grid gap-2 lg:hidden">
       <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
         <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
@@ -589,7 +606,12 @@
         <div class="flex items-center justify-between gap-4">
           <div>
             <h3 class="text-lg font-semibold text-brand-900">Reservation Details</h3>
-            <p class="text-sm text-brand-600">Table {{ selectedTable.id }} · ${{ selectedTable.price }}</p>
+            <p class="text-sm text-brand-600" *ngIf="!hasMultipleTables()">
+              Table {{ selectedTable.id }} · ${{ selectedTable.price }}
+            </p>
+            <p class="text-sm text-brand-600" *ngIf="hasMultipleTables()">
+              {{ selectedTables.length }} tables booked together · {{ bookingTablesLabel() }}
+            </p>
           </div>
           <div class="flex items-center gap-3">
             <span
@@ -607,6 +629,46 @@
               ✕
             </button>
           </div>
+        </div>
+        <div
+          class="rounded-xl border border-brand-100 bg-brand-50 p-3"
+          *ngIf="!createdReservation && (selectedTables.length > 0 || holdId)"
+        >
+          <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">
+            Tables in this booking
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <span
+              *ngFor="let t of selectedTables"
+              class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-sm text-brand-800"
+            >
+              Table {{ t.id }} · ${{ t.price }}
+              <button
+                type="button"
+                class="text-brand-500 hover:text-brand-900"
+                *ngIf="selectedTables.length > 1"
+                (click)="removeSelectedTable(t.id)"
+                [disabled]="loading"
+                aria-label="Remove this table from the booking"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+          <button
+            type="button"
+            class="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:border-brand-500 disabled:opacity-50"
+            (click)="beginAddAnotherTable()"
+            [disabled]="loading || !holdId || selectedTables.length >= maxTablesPerBooking"
+          >
+            + Add another table
+          </button>
+          <p
+            class="mt-1 text-xs text-red-600"
+            *ngIf="addAnotherTableError"
+          >
+            {{ addAnotherTableError }}
+          </p>
         </div>
         <ng-container *ngIf="!createdReservation; else postCreatePanel">
           <form [formGroup]="form" class="grid gap-4 md:grid-cols-2">
@@ -827,9 +889,19 @@
         <ng-template #postCreatePanel>
           <article class="grid gap-3 rounded-xl border border-brand-100 bg-brand-50 p-4">
             <h4 class="text-base font-semibold text-brand-900">Reservation Confirmed</h4>
-            <p class="text-sm text-brand-700">
+            <p
+              class="text-sm text-brand-700"
+              *ngIf="(createdReservation?.tableIds?.length ?? 0) <= 1"
+            >
               Reservation <span class="font-semibold">{{ createdReservation?.reservationId }}</span> created for
               Table {{ createdReservation?.tableId }}.
+            </p>
+            <p
+              class="text-sm text-brand-700"
+              *ngIf="(createdReservation?.tableIds?.length ?? 0) > 1"
+            >
+              Reservation <span class="font-semibold">{{ createdReservation?.reservationId }}</span> created for
+              {{ (createdReservation?.tableIds?.length ?? 0) }} tables ({{ createdReservation?.tableIds?.join(', ') }}).
             </p>
 
             <ng-container *ngIf="isLinkCollectionFlow(); else nonSquareSummary">

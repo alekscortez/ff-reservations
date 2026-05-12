@@ -92,6 +92,7 @@ export function createCheckInPassesService({
     actor,
     source = null,
     tableId = null,
+    tableIds = null,
     customerName = null,
     details = null,
     at = null,
@@ -105,6 +106,11 @@ export function createCheckInPassesService({
       if (!normalizedReservationId || !normalizedEventType) return;
       const eventAt = Number(at ?? 0) || nowEpoch();
       const eventId = randomUUID();
+      const tableIdList = Array.isArray(tableIds)
+        ? tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+        : [];
+      const legacyTableId =
+        String(tableId ?? "").trim() || tableIdList[0] || null;
       await ddb.send(
         new PutCommand({
           TableName: reservationsTableName,
@@ -116,7 +122,8 @@ export function createCheckInPassesService({
             eventType: normalizedEventType,
             reservationId: normalizedReservationId,
             eventDate: normalizedEventDate,
-            tableId: String(tableId ?? "").trim() || null,
+            tableId: legacyTableId,
+            ...(tableIdList.length > 0 ? { tableIds: tableIdList } : {}),
             customerName: String(customerName ?? "").trim() || null,
             actor: String(actor ?? "").trim() || "system",
             source: String(source ?? "").trim() || null,
@@ -139,14 +146,25 @@ export function createCheckInPassesService({
     return buildPassUrlFromBaseUrl(await resolvePassBaseUrl(), token);
   }
 
+  function passTableIds(item) {
+    const list = Array.isArray(item?.tableIds)
+      ? item.tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+      : [];
+    if (list.length > 0) return list;
+    const legacy = String(item?.tableId ?? "").trim();
+    return legacy ? [legacy] : [];
+  }
+
   async function toPassResponse(item, includeToken = false) {
     if (!item) return null;
     const token = includeToken ? String(item.token ?? "").trim() : "";
+    const tableIds = passTableIds(item);
     return {
       passId: String(item.passId ?? "").trim() || null,
       reservationId: String(item.reservationId ?? "").trim() || null,
       eventDate: String(item.eventDate ?? "").trim() || null,
-      tableId: String(item.tableId ?? "").trim() || null,
+      tableId: tableIds[0] ?? null,
+      tableIds,
       customerName: String(item.customerName ?? "").trim() || null,
       phone: String(item.phone ?? "").trim() || null,
       status: String(item.status ?? "").trim() || null,
@@ -302,7 +320,11 @@ export function createCheckInPassesService({
   async function issuePassForReservation({ reservation, issuedBy, reissue = false }) {
     const reservationId = String(reservation?.reservationId ?? "").trim();
     const eventDate = String(reservation?.eventDate ?? "").trim();
-    const tableId = String(reservation?.tableId ?? "").trim();
+    // Single pass per reservation, regardless of table count. tableIds[]
+    // is the source of truth; tableId scalar is back-compat for legacy
+    // rows + a convenience for old readers / display code.
+    const reservationTableIds = passTableIds(reservation);
+    const tableId = reservationTableIds[0] ?? "";
     const status = String(reservation?.status ?? "").toUpperCase();
     const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
     if (!reservationId || !eventDate || !tableId) {
@@ -348,6 +370,7 @@ export function createCheckInPassesService({
         reservationId,
         eventDate,
         tableId,
+        tableIds: reservationTableIds,
         customerName: String(reservation?.customerName ?? "").trim() || null,
         phone: String(reservation?.phone ?? "").trim() || null,
         status: "ISSUED",
@@ -371,6 +394,7 @@ export function createCheckInPassesService({
         reservationId,
         eventDate,
         tableId,
+        tableIds: reservationTableIds,
         passId,
         reservationPk: passPk,
         reservationSk: passSk,
@@ -425,6 +449,7 @@ export function createCheckInPassesService({
         passId,
         expiresAt,
         reissue: Boolean(reissue),
+        tableIds: reservationTableIds,
       },
     });
 
@@ -494,6 +519,7 @@ export function createCheckInPassesService({
       reservationId: String(pass?.reservationId ?? "").trim() || null,
       eventDate: String(pass?.eventDate ?? "").trim() || null,
       tableId: String(pass?.tableId ?? "").trim() || null,
+      tableIds: Array.isArray(pass?.tableIds) ? pass.tableIds : [],
       customerName: String(pass?.customerName ?? "").trim() || null,
       status: String(pass?.status ?? "").trim() || null,
       expiresAt: Number(pass?.expiresAt ?? 0) || null,
@@ -512,6 +538,7 @@ export function createCheckInPassesService({
             reservationId: pass.reservationId,
             eventDate: pass.eventDate,
             tableId: pass.tableId,
+            tableIds: pass.tableIds,
             customerName: pass.customerName,
           }
         : null,
@@ -690,13 +717,18 @@ export function createCheckInPassesService({
       });
     }
 
+    const consumedTableIds = passTableIds(consumed);
+    const lookupTableIds = passTableIds(lookup);
+    const checkInTableIds =
+      consumedTableIds.length > 0 ? consumedTableIds : lookupTableIds;
     await appendReservationHistory({
       eventDate: String(consumed.eventDate ?? lookup.eventDate ?? "").trim(),
       reservationId: String(consumed.reservationId ?? lookup.reservationId ?? "").trim(),
       eventType: "CHECKED_IN",
       actor: by,
       source: "scanner",
-      tableId: String(consumed.tableId ?? lookup.tableId ?? "").trim() || null,
+      tableId: checkInTableIds[0] ?? null,
+      tableIds: checkInTableIds,
       customerName: String(consumed.customerName ?? "").trim() || null,
       at: now,
       details: {

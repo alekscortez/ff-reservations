@@ -220,6 +220,7 @@ export function createSquarePaymentsService({
     reservationId,
     eventDate,
     tableId,
+    tableIds,
     customerName,
     phone,
     amount,
@@ -259,9 +260,24 @@ export function createSquarePaymentsService({
     const paymentNote = noteText ? `${noteText} | ${reservationRefText}` : reservationRefText;
     const eventDateLabel = formatEventDateForLabel(eventDate);
 
+    // Render "Tables 1, 2, 3" for multi-table bookings; fall back to the
+    // legacy scalar `tableId` for back-compat with callers that haven't
+    // been multi-tabled yet.
+    const tableIdListForLabel = Array.isArray(tableIds)
+      ? tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+      : [];
+    let tablesLabel = "";
+    if (tableIdListForLabel.length > 1) {
+      tablesLabel = `Tables ${tableIdListForLabel.join(", ")}`;
+    } else if (tableIdListForLabel.length === 1) {
+      tablesLabel = `Table ${tableIdListForLabel[0]}`;
+    } else {
+      const single = String(tableId ?? "").trim();
+      if (single) tablesLabel = `Table ${single}`;
+    }
     const itemNameParts = [
       eventDateLabel ? `${eventDateLabel}` : "",
-      String(tableId ?? "").trim() ? `Table ${String(tableId ?? "").trim()}` : "",
+      tablesLabel,
       String(customerName ?? "").trim(),
     ].filter(Boolean);
     const itemName = itemNameParts.join(" • ") || "Reservation Payment";

@@ -41,9 +41,11 @@ import {
   todayString,
 } from './reservations-new-utils';
 import {
+  ActiveHoldEntry,
   ActiveHoldSession,
   clearActiveHoldSessionStorage,
   findActiveHoldLock,
+  findActiveHoldLocks,
   readActiveHoldSession,
   writeActiveHoldSession,
 } from './reservations-new-active-hold';
@@ -65,6 +67,7 @@ import {
 import {
   buildShareMessage,
   CreatedReservationContext,
+  formatTablesLabel as formatBookingTablesLabel,
   toCreatePaymentMethod,
   toLinkMode,
   toSmsRecipient,
@@ -128,6 +131,21 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private holdTimer: ReturnType<typeof setInterval> | null = null;
   holdCreatedByMe = false;
   showReleaseConfirm = false;
+  // Multi-table booking state. selectedTables stays in 1:1 alignment with
+  // holdEntries (same length, same order); the scalars above mirror the
+  // first element for back-compat with existing template bindings + the
+  // hold-countdown timer (which is keyed off the primary hold).
+  selectedTables: TableForEvent[] = [];
+  holdEntries: ActiveHoldEntry[] = [];
+  // True after the staff clicks "+ Add another table" in the modal. The
+  // next AVAILABLE-table click in the map gets appended to the booking
+  // instead of replacing the selection. The flag is consumed on click
+  // and reset.
+  addAnotherTablePending = false;
+  addAnotherTableError: string | null = null;
+  // Max tables enforced server-side too; keep this in sync with
+  // MAX_TABLES_PER_RESERVATION in services-reservations-shared.mjs.
+  readonly maxTablesPerBooking = 10;
   private pollSub: Subscription | null = null;
   showReservationModal = false;
   sections: string[] = [];
@@ -481,10 +499,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.tables = [];
     this.selectedTable = null;
     this.selectedTableId = null;
+    this.selectedTables = [];
+    this.holdEntries = [];
     this.holdId = null;
     this.holdExpiresAt = null;
     this.holdCountdown = 0;
     this.clearHoldTimer();
+    this.addAnotherTablePending = false;
+    this.addAnotherTableError = null;
     this.showPastModal = false;
     this.showReservationModal = false;
     this.showFiltersPanel = false;
@@ -519,9 +541,23 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   selectTable(t: TableForEvent): void {
     if (t.status !== 'AVAILABLE') return;
+    // Multi-table "Add another" path: the staff clicked "+ Add another
+    // table" in the modal, then a free table on the map. Append it to
+    // the booking instead of replacing the selection. Releases the flag
+    // either way (consume-on-click).
+    if (this.addAnotherTablePending && this.holdId && this.eventDate) {
+      this.addAnotherTablePending = false;
+      if (this.selectedTables.some((existing) => existing.id === t.id)) return;
+      this.addAnotherTable(t);
+      return;
+    }
+    this.addAnotherTablePending = false;
+    this.addAnotherTableError = null;
     this.clearActiveHoldSession();
     this.selectedTable = t;
     this.selectedTableId = t.id;
+    this.selectedTables = [t];
+    this.holdEntries = [];
     this.resetCreatedReservationState();
     this.holdId = null;
     this.holdExpiresAt = null;
@@ -533,6 +569,143 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     const price = t.price ?? 0;
     this.form.controls.amountDue.setValue(price);
     this.applyPaymentDefaultsForCurrentMethod();
+  }
+
+  // "Add another table" toggle in the modal. Sets a one-shot pending
+  // flag — the staff's next AVAILABLE-table click on the map appends
+  // instead of replacing.
+  beginAddAnotherTable(): void {
+    if (!this.holdId || !this.eventDate) return;
+    if (this.selectedTables.length >= this.maxTablesPerBooking) {
+      this.addAnotherTableError = `Maximum ${this.maxTablesPerBooking} tables per booking.`;
+      return;
+    }
+    this.addAnotherTableError = null;
+    this.addAnotherTablePending = true;
+    // Closing the modal makes the map reachable; staff picks the next
+    // table from the same view they used to pick the primary.
+    this.showReservationModal = false;
+    this.saveActiveHoldSessionIfNeeded();
+  }
+
+  cancelAddAnotherTable(): void {
+    this.addAnotherTablePending = false;
+    this.addAnotherTableError = null;
+  }
+
+  // Creates a hold for an additional table and appends it to the
+  // booking. Reopens the reservation modal on success so the staff can
+  // confirm the multi-table booking.
+  addAnotherTable(t: TableForEvent): void {
+    if (!this.eventDate) return;
+    if (this.selectedTables.some((existing) => existing.id === t.id)) return;
+    if (this.selectedTables.length >= this.maxTablesPerBooking) {
+      this.addAnotherTableError = `Maximum ${this.maxTablesPerBooking} tables per booking.`;
+      this.showReservationModal = true;
+      return;
+    }
+    this.loading = true;
+    this.error = null;
+    this.addAnotherTableError = null;
+    const phone = normalizePhoneToE164(
+      this.form.controls.phone.value,
+      normalizePhoneCountry(this.phoneCountry)
+    );
+    this.holdsApi
+      .createHold({
+        eventDate: this.eventDate,
+        tableId: t.id,
+        customerName: this.form.controls.customerName.value,
+        phone: phone || undefined,
+        phoneCountry: this.phoneCountry,
+      })
+      .subscribe({
+        next: (item) => {
+          this.selectedTables = [...this.selectedTables, t];
+          this.holdEntries = [
+            ...this.holdEntries,
+            {
+              tableId: t.id,
+              holdId: item.holdId,
+              holdExpiresAt: item.expiresAt ?? null,
+              holdCreatedByMe: true,
+            },
+          ];
+          // Reflect the added table's per-unit cost into amountDue if
+          // the staff hasn't manually overridden it. The form's `amountDue`
+          // starts as the primary table's price; we top it up by the new
+          // table's price so the default deposit math stays correct.
+          const extraPrice = Number(t.price ?? 0);
+          if (Number.isFinite(extraPrice) && extraPrice > 0) {
+            const next = Number(
+              (Number(this.form.controls.amountDue.value ?? 0) + extraPrice).toFixed(2)
+            );
+            this.form.controls.amountDue.setValue(next);
+            this.applyPaymentDefaultsForCurrentMethod();
+          }
+          this.showReservationModal = true;
+          this.saveActiveHoldSessionIfNeeded();
+          this.loadTables(this.eventDate!);
+          this.loading = false;
+        },
+        error: (err) => {
+          this.addAnotherTableError =
+            err?.error?.message ||
+            err?.message ||
+            `Failed to hold table ${t.id}`;
+          this.showReservationModal = true;
+          this.loading = false;
+        },
+      });
+  }
+
+  // Removes one table from a multi-table booking, releasing its hold.
+  // Cannot remove the last remaining table — use "Close" / release-all
+  // for that.
+  removeSelectedTable(tableId: string): void {
+    if (!this.eventDate) return;
+    if (this.selectedTables.length <= 1) return;
+    const entry = this.holdEntries.find((h) => h.tableId === tableId);
+    if (!entry) return;
+    this.loading = true;
+    this.holdsApi.releaseHold(this.eventDate, tableId).subscribe({
+      next: () => {
+        this.selectedTables = this.selectedTables.filter((t) => t.id !== tableId);
+        this.holdEntries = this.holdEntries.filter((h) => h.tableId !== tableId);
+        // Rebalance amountDue: deduct the removed table's price.
+        const removed = entry && this.tables.find((t) => t.id === tableId);
+        const extraPrice = Number(removed?.price ?? 0);
+        if (Number.isFinite(extraPrice) && extraPrice > 0) {
+          const next = Math.max(
+            0,
+            Number(
+              (Number(this.form.controls.amountDue.value ?? 0) - extraPrice).toFixed(2)
+            )
+          );
+          this.form.controls.amountDue.setValue(next);
+          this.applyPaymentDefaultsForCurrentMethod();
+        }
+        this.saveActiveHoldSessionIfNeeded();
+        this.loadTables(this.eventDate!);
+        this.loading = false;
+      },
+      error: (err) => {
+        this.addAnotherTableError =
+          err?.error?.message ||
+          err?.message ||
+          `Failed to release hold on table ${tableId}`;
+        this.loading = false;
+      },
+    });
+  }
+
+  bookingTablesLabel(): string {
+    const ids = this.selectedTables.map((t) => t.id).filter(Boolean);
+    return formatBookingTablesLabel(ids);
+  }
+
+  hasMultipleTables(): boolean {
+    return this.selectedTables.length > 1;
   }
 
   startHoldFlow(): void {
@@ -549,10 +722,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     );
     this.loading = true;
     this.error = null;
+    const primaryTable = this.selectedTable;
     this.holdsApi
       .createHold({
         eventDate: this.eventDate,
-        tableId: this.selectedTable.id,
+        tableId: primaryTable.id,
         customerName: this.form.controls.customerName.value,
         phone: phone || undefined,
         phoneCountry: this.phoneCountry,
@@ -562,6 +736,17 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.holdId = item.holdId;
           this.holdExpiresAt = item.expiresAt ?? null;
           this.holdCreatedByMe = true;
+          // Sync the multi-table mirrors. createHold owns the primary
+          // entry; addAnotherTable owns subsequent entries.
+          this.selectedTables = [primaryTable];
+          this.holdEntries = [
+            {
+              tableId: primaryTable.id,
+              holdId: item.holdId,
+              holdExpiresAt: item.expiresAt ?? null,
+              holdCreatedByMe: true,
+            },
+          ];
           this.startHoldTimer();
           this.saveActiveHoldSessionIfNeeded();
           this.loading = false;
@@ -576,26 +761,59 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   releaseHold(): void {
-    if (!this.eventDate || !this.selectedTable) return;
+    if (!this.eventDate) return;
+    const eventDate = this.eventDate;
+    const entries =
+      this.holdEntries.length > 0
+        ? this.holdEntries
+        : this.selectedTable
+        ? [
+            {
+              tableId: this.selectedTable.id,
+              holdId: this.holdId ?? '',
+              holdExpiresAt: this.holdExpiresAt,
+              holdCreatedByMe: this.holdCreatedByMe,
+            } as ActiveHoldEntry,
+          ]
+        : [];
+    if (entries.length === 0) return;
     this.loading = true;
     this.error = null;
-    this.holdsApi.releaseHold(this.eventDate, this.selectedTable.id).subscribe({
-      next: () => {
-        this.holdId = null;
-        this.holdExpiresAt = null;
-        this.holdCountdown = 0;
-        this.clearHoldTimer();
-        this.holdCreatedByMe = false;
-        this.showReleaseConfirm = false;
-        this.showReservationModal = false;
-        this.clearActiveHoldSession();
-        this.loadTables(this.eventDate!);
-        this.loading = false;
-      },
-      error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to release hold';
-        this.loading = false;
-      },
+    // Release every hold in parallel. Individual releaseHold rejections
+    // (e.g. the lock was already swept) shouldn't block clearing local
+    // state — the cron sweeps stale rows independently. We log a single
+    // best-effort error if any failed.
+    Promise.allSettled(
+      entries.map(
+        (entry) =>
+          new Promise<void>((resolve, reject) => {
+            this.holdsApi.releaseHold(eventDate, entry.tableId).subscribe({
+              next: () => resolve(),
+              error: (err) => reject(err),
+            });
+          })
+      )
+    ).then((results) => {
+      const failed = results.find((r) => r.status === 'rejected');
+      this.selectedTables = [];
+      this.holdEntries = [];
+      this.holdId = null;
+      this.holdExpiresAt = null;
+      this.holdCountdown = 0;
+      this.clearHoldTimer();
+      this.holdCreatedByMe = false;
+      this.showReleaseConfirm = false;
+      this.showReservationModal = false;
+      this.clearActiveHoldSession();
+      this.loadTables(eventDate);
+      this.loading = false;
+      if (failed && failed.status === 'rejected') {
+        const reason = (failed as PromiseRejectedResult).reason;
+        this.error =
+          reason?.error?.message ||
+          reason?.message ||
+          'Failed to release one or more holds';
+      }
     });
   }
 
@@ -677,11 +895,30 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         return;
       }
     }
+    // Build the multi-table arrays from the live selection. When the
+    // booking is single-table these collapse to length-1 arrays and the
+    // backend handles them identically. The scalars below stay for back-
+    // compat with the old singular branch.
+    const bookingTableIds =
+      this.selectedTables.length > 0
+        ? this.selectedTables.map((t) => t.id)
+        : [this.selectedTable.id];
+    const bookingHoldIds =
+      this.holdEntries.length > 0
+        ? this.holdEntries.map((h) => h.holdId)
+        : [this.holdId];
+    if (bookingTableIds.length !== bookingHoldIds.length) {
+      this.error = 'Selected tables and holds are out of sync. Refresh and try again.';
+      this.loading = false;
+      return;
+    }
     this.reservationsApi
       .create({
         eventDate: this.eventDate,
-        tableId: this.selectedTable.id,
-        holdId: this.holdId,
+        tableId: bookingTableIds[0],
+        holdId: bookingHoldIds[0]!,
+        tableIds: bookingTableIds,
+        holdIds: bookingHoldIds.map((h) => String(h ?? '')),
         customerName: this.form.controls.customerName.value,
         phone,
         phoneCountry: this.phoneCountry,
@@ -703,6 +940,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.clearHoldTimer();
           this.holdCreatedByMe = false;
           this.showReleaseConfirm = false;
+          // Holds have been promoted to RESERVED in the same TransactWrite
+          // as the reservation row; clearing the local hold map keeps the
+          // UI from showing a stale "release" action.
+          this.holdEntries = [];
+          this.addAnotherTablePending = false;
+          this.addAnotherTableError = null;
           this.clearActiveHoldSession();
           this.loadTables(this.eventDate!);
 
@@ -716,7 +959,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             this.createdReservation = {
               reservationId,
               eventDate: this.eventDate!,
-              tableId: this.selectedTable!.id,
+              tableId: bookingTableIds[0],
+              tableIds: bookingTableIds,
               customerName: this.form.controls.customerName.value,
               phone,
               amount: creditRemainingAmount > 0 ? creditRemainingAmount : amountDue,
@@ -788,7 +1032,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             this.createdReservation = {
               reservationId,
               eventDate: this.eventDate!,
-              tableId: this.selectedTable!.id,
+              tableId: bookingTableIds[0],
+              tableIds: bookingTableIds,
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
@@ -808,7 +1053,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             this.createdReservation = {
               reservationId,
               eventDate: this.eventDate!,
-              tableId: this.selectedTable!.id,
+              tableId: bookingTableIds[0],
+              tableIds: bookingTableIds,
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
@@ -1178,7 +1424,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         reservationId: this.createdReservation.reservationId,
         eventDate: this.createdReservation.eventDate,
         amount: this.createdReservation.amount,
-        note: `Square link for table ${this.createdReservation.tableId}`,
+        note: `Square link for ${
+          formatBookingTablesLabel(this.createdReservation.tableIds) ||
+          `table ${this.createdReservation.tableId}`
+        }`,
       })
       .subscribe({
         next: (res) => {
@@ -1398,6 +1647,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.resetCreatedReservationState();
     this.selectedTable = null;
     this.selectedTableId = null;
+    this.selectedTables = [];
+    this.holdEntries = [];
+    this.addAnotherTablePending = false;
+    this.addAnotherTableError = null;
     this.allowCustomDeposit = false;
     this.paymentDeadlineEnabled = false;
     this.showReservationModal = false;
@@ -1687,14 +1940,32 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.holdsApi.listLocks(this.eventDate).subscribe({
       next: (items) => {
         this.holdRestoreInFlight = false;
-        const lock = findActiveHoldLock(items, session);
-        if (!lock) {
+        // Resolve every persisted hold in one shot. Holds that expired
+        // or got claimed by someone else drop out — if the primary is
+        // gone we treat the whole session as dead.
+        const liveHolds = findActiveHoldLocks(items, session);
+        const primary = liveHolds.find((h) => h.tableId === session.tableId);
+        if (!primary) {
           this.clearActiveHoldSession();
           return;
         }
-        this.selectedTableId = session.tableId;
-        this.selectedTable = this.tables.find((t) => t.id === session.tableId) ?? null;
-        if (!this.selectedTable) return;
+        const restoredTables: TableForEvent[] = [];
+        const restoredEntries: ActiveHoldEntry[] = [];
+        // Preserve session order; primary first.
+        for (const entry of liveHolds) {
+          const t = this.tables.find((tab) => tab.id === entry.tableId);
+          if (!t) continue;
+          restoredTables.push(t);
+          restoredEntries.push(entry);
+        }
+        if (restoredTables.length === 0) {
+          this.clearActiveHoldSession();
+          return;
+        }
+        this.selectedTableId = restoredTables[0].id;
+        this.selectedTable = restoredTables[0];
+        this.selectedTables = restoredTables;
+        this.holdEntries = restoredEntries;
         this.form.patchValue(
           {
             customerName: session.customerName,
@@ -1711,9 +1982,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         this.paymentDeadlineEnabled = session.paymentDeadlineEnabled;
         this.paymentDeadlineDate.setValue(session.paymentDeadlineDate, { emitEvent: false });
         this.paymentDeadlineTime.setValue(session.paymentDeadlineTime, { emitEvent: false });
-        this.holdId = session.holdId;
-        this.holdExpiresAt = lock.expiresAt ?? session.holdExpiresAt ?? null;
-        this.holdCreatedByMe = session.holdCreatedByMe !== false;
+        this.holdId = primary.holdId;
+        this.holdExpiresAt = primary.holdExpiresAt ?? null;
+        this.holdCreatedByMe = primary.holdCreatedByMe !== false;
         this.showReservationModal = session.showReservationModal !== false;
         this.showReleaseConfirm = false;
         this.startHoldTimer();
@@ -1727,12 +1998,29 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   private saveActiveHoldSessionIfNeeded(): void {
     if (!this.eventDate || !this.selectedTable?.id || !this.holdId) return;
+    // Persist every hold so a multi-table booking survives reload. The
+    // scalar (tableId/holdId/etc.) mirrors the first entry — legacy
+    // reads-without-multi still resolve a single-table session.
+    const holdsForStorage: ActiveHoldEntry[] = (() => {
+      if (this.holdEntries.length > 0) return this.holdEntries;
+      return [
+        {
+          tableId: this.selectedTable.id,
+          holdId: this.holdId,
+          holdExpiresAt: this.holdExpiresAt ?? null,
+          holdCreatedByMe: this.holdCreatedByMe,
+        },
+      ];
+    })();
+    const primary = holdsForStorage[0];
     const session: ActiveHoldSession = {
       eventDate: this.eventDate,
-      tableId: this.selectedTable.id,
-      holdId: this.holdId,
-      holdExpiresAt: this.holdExpiresAt ?? null,
-      holdCreatedByMe: this.holdCreatedByMe,
+      tableId: primary.tableId,
+      holdId: primary.holdId,
+      holdExpiresAt: primary.holdExpiresAt ?? null,
+      holdCreatedByMe: primary.holdCreatedByMe,
+      tableIds: holdsForStorage.map((h) => h.tableId),
+      holds: holdsForStorage,
       showReservationModal: this.showReservationModal,
       customerName: this.form.controls.customerName.value,
       phone: this.form.controls.phone.value,

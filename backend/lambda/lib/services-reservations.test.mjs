@@ -611,6 +611,35 @@ describe("cancelReservation CANCEL_NO_REFUND", () => {
     assert.equal(markInactiveCalls.length, 1);
     assert.equal(markInactiveCalls[0].status, "DEACTIVATED");
   });
+
+  it("multi-table: deletes a hold row per tableId on the reservation", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildReservations({
+      ddb,
+      shared: {
+        getReservationById: async () =>
+          reservationItem({ tableId: "T1", tableIds: ["T1", "T2", "T3"] }),
+      },
+    });
+    await svc.cancelReservation(
+      TODAY_LOCAL_DATE,
+      "r1",
+      "T1",
+      "staff@x",
+      "Customer cancelled"
+    );
+    const deletes = ddb.calls.filter((c) => c.name === "DeleteCommand");
+    assert.equal(deletes.length, 3, "one DeleteCommand per table");
+    assert.deepEqual(
+      deletes.map((d) => d.input.Key.SK).sort(),
+      ["TABLE#T1", "TABLE#T2", "TABLE#T3"]
+    );
+    // History entry carries tableIds[]
+    const cancelEvent = historyCalls.find(
+      (h) => h.eventType === "RESERVATION_CANCELLED"
+    );
+    assert.deepEqual(cancelEvent.tableIds, ["T1", "T2", "T3"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1275,6 +1304,189 @@ describe("createReservation TransactWrite happy path", () => {
       (err) =>
         err?.statusCode === 400 &&
         /paymentDeadlineAt must be in the future/.test(err.message)
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createReservation — multi-table bookings (tableIds[] + holdIds[])
+// ---------------------------------------------------------------------------
+
+describe("createReservation multi-table", () => {
+  it("happy path: N hold-updates + 1 reservation Put with tableIds[] + tablePrices[]", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildReservations({ ddb });
+    const out = await svc.createReservation(
+      {
+        eventDate: TODAY_LOCAL_DATE,
+        tableIds: ["T1", "T2"],
+        holdIds: ["h1", "h2"],
+        customerName: "Alice",
+        phone: "+12025550100",
+        depositAmount: 0,
+        paymentDeadlineAt: "2026-05-10T18:00:00",
+      },
+      "staff@x",
+      false
+    );
+    const txn = ddb.calls.find((c) => c.name === "TransactWriteCommand");
+    assert.ok(txn);
+    // 2 hold updates + 1 reservation Put
+    assert.equal(txn.input.TransactItems.length, 3);
+    const holdT1 = txn.input.TransactItems[0].Update;
+    const holdT2 = txn.input.TransactItems[1].Update;
+    assert.equal(holdT1.Key.SK, "TABLE#T1");
+    assert.equal(holdT1.ExpressionAttributeValues[":hid"], "h1");
+    assert.equal(holdT2.Key.SK, "TABLE#T2");
+    assert.equal(holdT2.ExpressionAttributeValues[":hid"], "h2");
+    // Both holds share the same generated reservationId
+    assert.equal(
+      holdT1.ExpressionAttributeValues[":rid"],
+      holdT2.ExpressionAttributeValues[":rid"]
+    );
+
+    const resPut = txn.input.TransactItems[2].Put;
+    assert.equal(resPut.TableName, "ff-reservations");
+    assert.deepEqual(resPut.Item.tableIds, ["T1", "T2"]);
+    // Back-compat scalar = first
+    assert.equal(resPut.Item.tableId, "T1");
+    // Sum of per-table prices (100 + 200 = 300)
+    assert.deepEqual(resPut.Item.tablePrices, [100, 200]);
+    assert.equal(resPut.Item.tablePrice, 300);
+    assert.equal(resPut.Item.amountDue, 300);
+    assert.equal(out.reservationId, resPut.Item.reservationId);
+    // History entry carries tableIds[]
+    const created = historyCalls.find(
+      (h) => h.eventType === "RESERVATION_CREATED"
+    );
+    assert.deepEqual(created.tableIds, ["T1", "T2"]);
+  });
+
+  it("legacy singular tableId/holdId still works (back-compat)", async () => {
+    const ddb = makeFakeDdb();
+    const { svc } = buildReservations({ ddb });
+    await svc.createReservation(
+      {
+        eventDate: TODAY_LOCAL_DATE,
+        tableId: "T1",
+        holdId: "h1",
+        customerName: "Alice",
+        phone: "+12025550100",
+        depositAmount: 0,
+        paymentDeadlineAt: "2026-05-10T18:00:00",
+      },
+      "staff@x",
+      false
+    );
+    const txn = ddb.calls.find((c) => c.name === "TransactWriteCommand");
+    assert.equal(txn.input.TransactItems.length, 2);
+    const resPut = txn.input.TransactItems[1].Put;
+    assert.deepEqual(resPut.Item.tableIds, ["T1"]);
+    assert.equal(resPut.Item.tableId, "T1");
+  });
+
+  it("rejects mismatched lengths between tableIds[] and holdIds[]", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.createReservation(
+          {
+            eventDate: TODAY_LOCAL_DATE,
+            tableIds: ["T1", "T2"],
+            holdIds: ["h1"],
+            customerName: "Alice",
+            phone: "+12025550100",
+            depositAmount: 0,
+            paymentDeadlineAt: "2026-05-10T18:00:00",
+          },
+          "staff@x",
+          false
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /tableIds and holdIds must align 1:1/.test(err.message)
+    );
+  });
+
+  it("rejects duplicate tableIds", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.createReservation(
+          {
+            eventDate: TODAY_LOCAL_DATE,
+            tableIds: ["T1", "T1"],
+            holdIds: ["h1", "h2"],
+            customerName: "Alice",
+            phone: "+12025550100",
+            depositAmount: 0,
+            paymentDeadlineAt: "2026-05-10T18:00:00",
+          },
+          "staff@x",
+          false
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /tableIds must be unique/.test(err.message)
+    );
+  });
+
+  it("rejects bookings exceeding the MAX_TABLES_PER_RESERVATION cap", async () => {
+    const { svc } = buildReservations({
+      // Synthetic event with 11 priced tables so we hit the cap, not the
+      // per-table price lookup.
+      getEventByDate: async () => ({
+        eventId: "ev1",
+        eventDate: TODAY_LOCAL_DATE,
+        minDeposit: 0,
+        tablePrices: Object.fromEntries(
+          Array.from({ length: 11 }, (_, i) => [`T${i + 1}`, 100])
+        ),
+      }),
+    });
+    const tableIds = Array.from({ length: 11 }, (_, i) => `T${i + 1}`);
+    const holdIds = Array.from({ length: 11 }, (_, i) => `h${i + 1}`);
+    await assert.rejects(
+      () =>
+        svc.createReservation(
+          {
+            eventDate: TODAY_LOCAL_DATE,
+            tableIds,
+            holdIds,
+            customerName: "Alice",
+            phone: "+12025550100",
+            depositAmount: 0,
+            paymentDeadlineAt: "2026-05-10T18:00:00",
+          },
+          "staff@x",
+          false
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /Cannot reserve more than 10 tables/.test(err.message)
+    );
+  });
+
+  it("rejects invalid tableId in the array (event has no price for it)", async () => {
+    const { svc } = buildReservations();
+    await assert.rejects(
+      () =>
+        svc.createReservation(
+          {
+            eventDate: TODAY_LOCAL_DATE,
+            tableIds: ["T1", "T999"],
+            holdIds: ["h1", "h2"],
+            customerName: "Alice",
+            phone: "+12025550100",
+            depositAmount: 0,
+            paymentDeadlineAt: "2026-05-10T18:00:00",
+          },
+          "staff@x",
+          false
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /Invalid tableId for event: T999/.test(err.message)
     );
   });
 });

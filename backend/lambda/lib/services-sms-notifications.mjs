@@ -70,6 +70,7 @@ export function createSmsNotificationsService({
     customerName,
     eventDate,
     tableId,
+    tableIds,
     paymentLinkUrl,
     ttlMinutes,
   }) {
@@ -91,6 +92,7 @@ export function createSmsNotificationsService({
       customerName,
       eventDate,
       tableId,
+      tableIds,
       paymentLinkUrl: link,
       ttlMinutes: ttlMinutes ?? 10,
     });
@@ -133,6 +135,7 @@ export function createSmsNotificationsService({
     phone,
     customerName,
     tableId,
+    tableIds,
   }) {
     if (!(await resolveSmsEnabled())) {
       throw httpError(503, "SMS notifications are disabled");
@@ -146,6 +149,7 @@ export function createSmsNotificationsService({
     const message = buildPaymentLinkExpiredMessage({
       customerName,
       tableId,
+      tableIds,
     });
 
     try {
@@ -185,6 +189,7 @@ export function createSmsNotificationsService({
     customerName,
     eventDate,
     tableId,
+    tableIds,
     passUrl,
   }) {
     if (!(await resolveSmsEnabled())) {
@@ -205,6 +210,7 @@ export function createSmsNotificationsService({
       customerName,
       eventDate,
       tableId,
+      tableIds,
       passUrl: url,
     });
 

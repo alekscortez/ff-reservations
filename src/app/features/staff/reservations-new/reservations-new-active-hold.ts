@@ -15,12 +15,26 @@ import { normalizePhoneCountry } from '../../../shared/phone';
 
 export const ACTIVE_HOLD_STORAGE_KEY = 'ff_new_res_active_hold_v1';
 
-export interface ActiveHoldSession {
-  eventDate: string;
+// One hold inside a multi-table active session.
+export interface ActiveHoldEntry {
   tableId: string;
   holdId: string;
   holdExpiresAt: number | null;
   holdCreatedByMe: boolean;
+}
+
+export interface ActiveHoldSession {
+  eventDate: string;
+  // Primary hold (back-compat scalar = first of `holds` when present).
+  // Old persisted sessions written before multi-table only have these
+  // fields; new sessions stamp `holds`/`tableIds` too.
+  tableId: string;
+  holdId: string;
+  holdExpiresAt: number | null;
+  holdCreatedByMe: boolean;
+  // Multi-table addition (optional for back-compat).
+  tableIds?: string[];
+  holds?: ActiveHoldEntry[];
   showReservationModal: boolean;
   customerName: string;
   phone: string;
@@ -56,14 +70,46 @@ export function readActiveHoldSession(): ActiveHoldSession | null {
     const phoneCountry = normalizePhoneCountry(parsed.phoneCountry);
     const paymentStatus = String(parsed.paymentStatus ?? '').trim().toUpperCase();
     const paymentMethod = String(parsed.paymentMethod ?? '').trim().toLowerCase();
-    return {
-      eventDate,
+    // Multi-table additions: parse the new arrays if present, else
+    // synthesize from the scalar primary so callers can rely on
+    // tableIds/holds always being populated.
+    const persistedHolds = Array.isArray(parsed.holds) ? parsed.holds : null;
+    const normalizedHolds: ActiveHoldEntry[] = persistedHolds
+      ? persistedHolds
+          .map((entry) => {
+            const t = String(entry?.tableId ?? '').trim();
+            const h = String(entry?.holdId ?? '').trim();
+            if (!t || !h) return null;
+            return {
+              tableId: t,
+              holdId: h,
+              holdExpiresAt: Number.isFinite(Number(entry?.holdExpiresAt))
+                ? Number(entry?.holdExpiresAt)
+                : null,
+              holdCreatedByMe: entry?.holdCreatedByMe !== false,
+            } as ActiveHoldEntry;
+          })
+          .filter((entry): entry is ActiveHoldEntry => entry !== null)
+      : [];
+    const fallbackPrimary: ActiveHoldEntry = {
       tableId,
       holdId,
       holdExpiresAt: Number.isFinite(Number(parsed.holdExpiresAt))
         ? Number(parsed.holdExpiresAt)
         : null,
       holdCreatedByMe: parsed.holdCreatedByMe !== false,
+    };
+    const holds =
+      normalizedHolds.length > 0 ? normalizedHolds : [fallbackPrimary];
+    const tableIds = holds.map((h) => h.tableId);
+    return {
+      eventDate,
+      tableId: holds[0].tableId,
+      holdId: holds[0].holdId,
+      holdExpiresAt: holds[0].holdExpiresAt,
+      holdCreatedByMe: holds[0].holdCreatedByMe,
+      tableIds,
+      holds,
       showReservationModal: parsed.showReservationModal !== false,
       customerName: String(parsed.customerName ?? ''),
       phone: String(parsed.phone ?? ''),
@@ -135,4 +181,55 @@ export function findActiveHoldLock(
     return { expiresAt };
   }
   return null;
+}
+
+// Multi-table extension of findActiveHoldLock. Walks the persisted
+// session.holds[], returns one entry per still-live hold lock. Used to
+// restore a multi-table booking after a navigation: any holds that
+// expired or were claimed by someone else simply drop out of the
+// returned list (and the caller can decide whether to keep or discard
+// the rest).
+export function findActiveHoldLocks(
+  items: HoldLockItem[],
+  session: ActiveHoldSession,
+  nowEpoch: number = Math.floor(Date.now() / 1000)
+): ActiveHoldEntry[] {
+  const holds = session.holds && session.holds.length > 0
+    ? session.holds
+    : [
+        {
+          tableId: session.tableId,
+          holdId: session.holdId,
+          holdExpiresAt: session.holdExpiresAt,
+          holdCreatedByMe: session.holdCreatedByMe,
+        },
+      ];
+  const out: ActiveHoldEntry[] = [];
+  for (const entry of holds) {
+    const match = items?.find((item) => {
+      const lockType = String(item.lockType ?? '').toUpperCase();
+      if (lockType !== 'HOLD') return false;
+      const holdId = String(item.holdId ?? '').trim();
+      if (!holdId || holdId !== entry.holdId) return false;
+      const tableId = extractTableIdFromHoldLock(item);
+      if (tableId && tableId !== entry.tableId) return false;
+      const expiresRaw = Number(item.expiresAt ?? 0);
+      if (Number.isFinite(expiresRaw) && expiresRaw > 0 && expiresRaw <= nowEpoch) {
+        return false;
+      }
+      return true;
+    });
+    if (!match) continue;
+    const expiresRaw = Number(match.expiresAt ?? 0);
+    out.push({
+      tableId: entry.tableId,
+      holdId: entry.holdId,
+      holdExpiresAt:
+        Number.isFinite(expiresRaw) && expiresRaw > 0
+          ? Math.floor(expiresRaw)
+          : entry.holdExpiresAt ?? null,
+      holdCreatedByMe: entry.holdCreatedByMe,
+    });
+  }
+  return out;
 }

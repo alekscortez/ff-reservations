@@ -109,7 +109,21 @@ export function createWalletPassService({
 
   function buildPassFields(reservation, formattedDate) {
     const customerName = String(reservation?.customerName ?? "").trim() || "Guest";
-    const tableId = String(reservation?.tableId ?? "").trim();
+    // tableIds[] preferred; legacy scalar tableId is the fallback. Multi-
+    // table bookings render as "1, 2, 3" with a "TABLES" label so guests
+    // see all their tables on one pass face.
+    const rawTableIds = Array.isArray(reservation?.tableIds)
+      ? reservation.tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+      : [];
+    const fallbackTableId = String(reservation?.tableId ?? "").trim();
+    const passTableIds =
+      rawTableIds.length > 0
+        ? rawTableIds
+        : fallbackTableId
+        ? [fallbackTableId]
+        : [];
+    const tableLabel = passTableIds.length > 1 ? "TABLES" : "TABLE";
+    const tableValue = passTableIds.length > 0 ? passTableIds.join(", ") : "—";
     const depositAmount = Number(reservation?.depositAmount ?? 0);
     const paid = Number(reservation?.paymentTotal ?? reservation?.paid ?? depositAmount);
     return {
@@ -131,8 +145,8 @@ export function createWalletPassService({
       secondaryFields: [
         {
           key: "table",
-          label: "TABLE",
-          value: tableId || "—",
+          label: tableLabel,
+          value: tableValue,
           textAlignment: "PKTextAlignmentLeft",
         },
         {

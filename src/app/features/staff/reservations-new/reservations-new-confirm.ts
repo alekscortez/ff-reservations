@@ -16,11 +16,25 @@
 export interface CreatedReservationContext {
   reservationId: string;
   eventDate: string;
+  // tableId is the *primary* (first) table for back-compat; tableIds[] is
+  // the full set. Single-table bookings have tableIds.length === 1, so
+  // tableId === tableIds[0]. Multi-table renders as "Tables 1, 2, 3".
   tableId: string;
+  tableIds: string[];
   customerName: string;
   phone: string;
   amount: number;
   linkMode: 'square' | 'client' | null;
+}
+
+// "Table 5" / "Tables 5, 7, 9". Empty list returns "" so callers can branch.
+export function formatTablesLabel(tableIds: string[] | undefined | null): string {
+  const list = Array.isArray(tableIds)
+    ? tableIds.map((v) => String(v ?? '').trim()).filter(Boolean)
+    : [];
+  if (list.length === 0) return '';
+  if (list.length === 1) return `table ${list[0]}`;
+  return `tables ${list.join(', ')}`;
 }
 
 // Maps the form's payment-method enum to the API's payment-method enum.
@@ -44,7 +58,18 @@ export function toLinkMode(
 
 // Builds the SMS / WhatsApp body for sharing a payment link.
 export function buildShareMessage(ctx: CreatedReservationContext, url: string): string {
-  return `Hi ${ctx.customerName}, here is your table link for ${ctx.eventDate} table ${ctx.tableId}: ${url}`;
+  // Prefer tableIds[] over the scalar fallback so multi-table renders as
+  // "tables 1, 2, 3" instead of just the primary.
+  const tablesLabel = formatTablesLabel(
+    Array.isArray(ctx.tableIds) && ctx.tableIds.length > 0
+      ? ctx.tableIds
+      : ctx.tableId
+      ? [ctx.tableId]
+      : []
+  );
+  const noun = (ctx.tableIds?.length ?? 0) > 1 ? 'tables link' : 'table link';
+  const suffix = tablesLabel ? ` ${tablesLabel}` : '';
+  return `Hi ${ctx.customerName}, here is your ${noun} for ${ctx.eventDate}${suffix}: ${url}`;
 }
 
 // Normalizes a phone for the sms: protocol — keeps leading + and digits.

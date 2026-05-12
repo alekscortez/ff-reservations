@@ -12,7 +12,11 @@ import {
   DEFAULT_DEADLINE_TZ,
   DEFAULT_HOLD_TTL_SECONDS,
   HOLD_EXPIRY_GRACE_SECONDS,
+  MAX_TABLES_PER_RESERVATION,
   createReservationsShared,
+  formatTablesLabel,
+  getReservationTableIds,
+  normalizeIdList,
 } from "./services-reservations-shared.mjs";
 
 const FIXED_NOW = 1_700_000_000;
@@ -245,6 +249,41 @@ describe("isOverdueReservation", () => {
       }),
       true
     );
+  });
+});
+
+describe("multi-table helpers", () => {
+  it("MAX_TABLES_PER_RESERVATION is 10", () => {
+    assert.equal(MAX_TABLES_PER_RESERVATION, 10);
+  });
+
+  it("normalizeIdList accepts scalars, arrays, and nullish inputs", () => {
+    assert.deepEqual(normalizeIdList("T1"), ["T1"]);
+    assert.deepEqual(normalizeIdList("  T1  "), ["T1"]);
+    assert.deepEqual(normalizeIdList(""), []);
+    assert.deepEqual(normalizeIdList(null), []);
+    assert.deepEqual(normalizeIdList(undefined), []);
+    assert.deepEqual(normalizeIdList(["T1", " T2 ", ""]), ["T1", "T2"]);
+    assert.deepEqual(normalizeIdList([null, "T1", undefined]), ["T1"]);
+  });
+
+  it("getReservationTableIds prefers tableIds[] then falls back to tableId", () => {
+    assert.deepEqual(
+      getReservationTableIds({ tableIds: ["A", "B"], tableId: "OLD" }),
+      ["A", "B"]
+    );
+    assert.deepEqual(getReservationTableIds({ tableId: "OLD" }), ["OLD"]);
+    assert.deepEqual(getReservationTableIds({ tableIds: [], tableId: "OLD" }), ["OLD"]);
+    assert.deepEqual(getReservationTableIds({}), []);
+    assert.deepEqual(getReservationTableIds(null), []);
+  });
+
+  it("formatTablesLabel renders singular vs plural", () => {
+    assert.equal(formatTablesLabel(["A1"]), "Table A1");
+    assert.equal(formatTablesLabel(["A1", "B3"]), "Tables A1, B3");
+    assert.equal(formatTablesLabel(["A1", "B3", "C2"]), "Tables A1, B3, C2");
+    assert.equal(formatTablesLabel([]), "");
+    assert.equal(formatTablesLabel(null), "");
   });
 });
 

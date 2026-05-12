@@ -33,6 +33,9 @@ import {
   DEFAULT_AUTO_RELEASE_USER,
   DEFAULT_RESCHEDULE_CREDIT_TTL_DAYS,
   HOLD_EXPIRY_GRACE_SECONDS,
+  MAX_TABLES_PER_RESERVATION,
+  normalizeIdList,
+  getReservationTableIds,
 } from "./services-reservations-shared.mjs";
 
 // Bounded concurrency for the cron sweep. With many active events, the
@@ -363,6 +366,19 @@ export function createReservationsService(
       );
     }
 
+    // All tables the reservation covers — drives the hold-release loop and
+    // the frequent-table-released marker. Falls back to the legacy scalar
+    // tableId for rows written before multi-table support landed; falls
+    // back to the caller-supplied tableId only if both are missing (cron
+    // and route both pass it but it's redundant now).
+    const reservationTableIds = (() => {
+      const fromRow = getReservationTableIds(current);
+      if (fromRow.length > 0) return fromRow;
+      const fromArg = String(tableId ?? "").trim();
+      return fromArg ? [fromArg] : [];
+    })();
+    const primaryTableId = reservationTableIds[0] ?? null;
+
     const cancelAt = nowEpoch();
     let issuedCredit = null;
     let cancelled = null;
@@ -535,7 +551,8 @@ export function createReservationsService(
           eventType: "REFUND_FAILED",
           actor: user,
           source: historySourceFromActor(user),
-          tableId,
+          tableId: primaryTableId,
+          tableIds: reservationTableIds,
           customerName: String(current?.customerName ?? "").trim() || null,
           details: {
             cancelReason,
@@ -597,7 +614,8 @@ export function createReservationsService(
             eventType: "REFUND_ORPHANED",
             actor: user,
             source: historySourceFromActor(user),
-            tableId,
+            tableId: primaryTableId,
+            tableIds: reservationTableIds,
             customerName: String(current?.customerName ?? "").trim() || null,
             details: {
               cancelReason,
@@ -614,7 +632,8 @@ export function createReservationsService(
           console.error("refund_orphaned", {
             reservationId,
             eventDate,
-            tableId,
+            tableId: primaryTableId,
+            tableIds: reservationTableIds,
             cancelReason,
             totalRefundedAmount,
             refundCount: refundResults.length,
@@ -633,7 +652,8 @@ export function createReservationsService(
         eventType: "REFUND_ISSUED",
         actor: user,
         source: historySourceFromActor(user),
-        tableId,
+        tableId: primaryTableId,
+        tableIds: reservationTableIds,
         customerName: String(current?.customerName ?? "").trim() || null,
         details: {
           cancelReason,
@@ -671,21 +691,28 @@ export function createReservationsService(
       cancelled = cancelResult?.Attributes ?? null;
     }
 
-    try {
-      await ddb.send(
-        new DeleteCommand({
-          TableName: HOLDS_TABLE,
-          Key: { PK: pk, SK: `TABLE#${tableId}` },
-          ConditionExpression: "lockType = :reserved AND reservationId = :rid",
-          ExpressionAttributeValues: {
-            ":reserved": "RESERVED",
-            ":rid": reservationId,
-          },
-        })
-      );
-    } catch (err) {
-      if (err?.name !== "ConditionalCheckFailedException") {
-        throw err;
+    // Release every hold row tied to this reservation. Loop is
+     // independent per-table: one already-released hold doesn't block the
+     // others. ConditionalCheckFailedException is normal (e.g. the hold
+     // was already swept) — swallow it. Anything else surfaces.
+    for (const tid of reservationTableIds) {
+      try {
+        await ddb.send(
+          new DeleteCommand({
+            TableName: HOLDS_TABLE,
+            Key: { PK: pk, SK: `TABLE#${tid}` },
+            ConditionExpression:
+              "lockType = :reserved AND reservationId = :rid",
+            ExpressionAttributeValues: {
+              ":reserved": "RESERVED",
+              ":rid": reservationId,
+            },
+          })
+        );
+      } catch (err) {
+        if (err?.name !== "ConditionalCheckFailedException") {
+          throw err;
+        }
       }
     }
 
@@ -749,11 +776,17 @@ export function createReservationsService(
     }
 
     if (shouldNotifyLinkExpired) {
+      const cancelledTableIds = (() => {
+        const fromRow = getReservationTableIds(cancelled);
+        if (fromRow.length > 0) return fromRow;
+        return reservationTableIds;
+      })();
       try {
         const sms = await sendPaymentLinkExpiredSms({
           phone: cancelled?.phone,
           customerName: cancelled?.customerName,
-          tableId: cancelled?.tableId,
+          tableId: cancelledTableIds[0] ?? null,
+          tableIds: cancelledTableIds,
         });
         await appendReservationHistory({
           eventDate,
@@ -761,7 +794,8 @@ export function createReservationsService(
           eventType: "PAYMENT_LINK_EXPIRED_SMS_SENT",
           actor: user,
           source: String(user ?? "").startsWith("system:") ? "system" : "staff",
-          tableId: String(cancelled?.tableId ?? tableId ?? "").trim() || null,
+          tableId: cancelledTableIds[0] ?? primaryTableId,
+          tableIds: cancelledTableIds,
           customerName: String(cancelled?.customerName ?? "").trim() || null,
           details: {
             to: String(sms?.to ?? "").trim() || null,
@@ -784,7 +818,8 @@ export function createReservationsService(
           eventType: "PAYMENT_LINK_EXPIRED_SMS_FAILED",
           actor: user,
           source: String(user ?? "").startsWith("system:") ? "system" : "staff",
-          tableId: String(cancelled?.tableId ?? tableId ?? "").trim() || null,
+          tableId: cancelledTableIds[0] ?? primaryTableId,
+          tableIds: cancelledTableIds,
           customerName: String(cancelled?.customerName ?? "").trim() || null,
           details: {
             to: String(cancelled?.phone ?? "").trim() || null,
@@ -800,7 +835,12 @@ export function createReservationsService(
       cancelReason === AUTO_RELEASE_REASON &&
       isFrequentAutoReservation(current)
     ) {
-      await markFrequentTableReleasedForEvent(eventDate, tableId, user);
+      // Mark every table released so the event's frequentReleasedTables[]
+      // covers the whole booking. markFrequentTableReleasedForEvent is
+      // idempotent on already-released tables.
+      for (const tid of reservationTableIds) {
+        await markFrequentTableReleasedForEvent(eventDate, tid, user);
+      }
     }
 
     if (resolutionType === "RESCHEDULE_CREDIT" && issuedCredit) {
@@ -810,7 +850,8 @@ export function createReservationsService(
         eventType: "RESCHEDULE_CREDIT_ISSUED",
         actor: user,
         source: String(user ?? "").startsWith("system:") ? "system" : "staff",
-        tableId: String(cancelled?.tableId ?? tableId ?? "").trim() || null,
+        tableId: primaryTableId,
+        tableIds: reservationTableIds,
         customerName: String(cancelled?.customerName ?? "").trim() || null,
         details: {
           creditId: issuedCredit.creditId,
@@ -829,7 +870,8 @@ export function createReservationsService(
       eventType: "RESERVATION_CANCELLED",
       actor: user,
       source: String(user ?? "").startsWith("system:") ? "system" : "staff",
-      tableId,
+      tableId: primaryTableId,
+      tableIds: reservationTableIds,
       details: {
         reason: cancelReason,
         resolutionType,
@@ -853,8 +895,13 @@ export function createReservationsService(
     const defaultPaymentDeadlineMinute = resolveDefaultPaymentDeadlineMinute(settings);
 
     const eventDate = String(payload?.eventDate ?? "").trim();
-    const tableId = String(payload?.tableId ?? "").trim();
-    const holdId = String(payload?.holdId ?? "").trim();
+    // Multi-table input: accept tableIds[]/holdIds[] OR legacy singular
+    // tableId/holdId. Both forms produce N-length arrays where N is the
+    // number of tables in this booking. The reservation row stores
+    // tableIds[] plus tableId = tableIds[0] so legacy readers (frontend
+    // dashboards, history dumps) still see something sensible.
+    const tableIds = normalizeIdList(payload?.tableIds ?? payload?.tableId);
+    const holdIds = normalizeIdList(payload?.holdIds ?? payload?.holdId);
     const customerName = String(payload?.customerName ?? "").trim();
     const customerCognitoSub =
       String(payload?.customerCognitoSub ?? "").trim() || null;
@@ -879,8 +926,23 @@ export function createReservationsService(
     if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
       throw httpError(400, "eventDate must be YYYY-MM-DD");
     }
-    if (!tableId) throw httpError(400, "tableId is required");
-    if (!holdId) throw httpError(400, "holdId is required");
+    if (tableIds.length === 0) throw httpError(400, "tableId is required");
+    if (holdIds.length === 0) throw httpError(400, "holdId is required");
+    if (tableIds.length > MAX_TABLES_PER_RESERVATION) {
+      throw httpError(
+        400,
+        `Cannot reserve more than ${MAX_TABLES_PER_RESERVATION} tables in one booking`
+      );
+    }
+    if (tableIds.length !== holdIds.length) {
+      throw httpError(400, "tableIds and holdIds must align 1:1");
+    }
+    if (new Set(tableIds).size !== tableIds.length) {
+      throw httpError(400, "tableIds must be unique");
+    }
+    if (new Set(holdIds).size !== holdIds.length) {
+      throw httpError(400, "holdIds must be unique");
+    }
     if (!customerName) throw httpError(400, "customerName is required");
     if (!phone || !phoneKey) {
       throw httpError(400, "phone must be a valid US or MX number");
@@ -894,8 +956,19 @@ export function createReservationsService(
     if (!isAdmin && depositAmount < (eventRecord.minDeposit ?? 0)) {
       throw httpError(400, "depositAmount is below minimum for this event");
     }
-    const tablePrice = getTablePriceForEvent(eventRecord, tableId);
-    if (tablePrice === null) throw httpError(400, "Invalid tableId for event");
+    // Per-table prices; tablePrice on the row is the SUM (the reservation's
+    // total cost). tablePrices[] preserves the breakdown for reporting.
+    const tablePrices = [];
+    let tablePriceSum = 0;
+    for (const tid of tableIds) {
+      const price = getTablePriceForEvent(eventRecord, tid);
+      if (price === null) {
+        throw httpError(400, `Invalid tableId for event: ${tid}`);
+      }
+      tablePrices.push(Number(price));
+      tablePriceSum += Number(price);
+    }
+    const tablePrice = roundMoney(tablePriceSum);
 
     const amountDue =
       amountDueInput !== null && Number.isFinite(amountDueInput) ? amountDueInput : tablePrice;
@@ -1003,33 +1076,43 @@ export function createReservationsService(
           ]
         : [];
 
-    const holdKey = { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tableId}` };
+    // Build the TransactWrite: one Update per hold (HOLD -> RESERVED with
+     // matching holdId + within grace window), plus one Put for the new
+     // reservation row. Either all N+1 land or none do; DynamoDB rejects
+     // the whole transaction if any single CAS fails (e.g. a hold expired,
+     // someone else's hold landed, or a duplicate reservationId — which
+     // can only happen on UUID collision, never in practice).
+    const holdItems = tableIds.map((tid, idx) => ({
+      Update: {
+        TableName: HOLDS_TABLE,
+        Key: { PK: `EVENTDATE#${eventDate}`, SK: `TABLE#${tid}` },
+        UpdateExpression:
+          "SET lockType = :reserved, reservationId = :rid, customerName = :name, phone = :phone, createdAt = :now, createdBy = :by REMOVE expiresAt, holdId",
+        ConditionExpression:
+          "lockType = :hold AND holdId = :hid AND expiresAt >= :graceCutoff",
+        ExpressionAttributeValues: {
+          ":reserved": "RESERVED",
+          ":hold": "HOLD",
+          ":hid": holdIds[idx],
+          ":rid": reservationId,
+          ":name": customerName,
+          ":phone": phone,
+          ":now": now,
+          ":graceCutoff": now - HOLD_EXPIRY_GRACE_SECONDS,
+          ":by": user,
+        },
+      },
+    }));
+    const primaryHoldKey = {
+      PK: `EVENTDATE#${eventDate}`,
+      SK: `TABLE#${tableIds[0]}`,
+    };
 
     try {
       await ddb.send(
         new TransactWriteCommand({
           TransactItems: [
-            {
-              Update: {
-                TableName: HOLDS_TABLE,
-                Key: holdKey,
-                UpdateExpression:
-                  "SET lockType = :reserved, reservationId = :rid, customerName = :name, phone = :phone, createdAt = :now, createdBy = :by REMOVE expiresAt, holdId",
-                ConditionExpression:
-                  "lockType = :hold AND holdId = :hid AND expiresAt >= :graceCutoff",
-                ExpressionAttributeValues: {
-                  ":reserved": "RESERVED",
-                  ":hold": "HOLD",
-                  ":hid": holdId,
-                  ":rid": reservationId,
-                  ":name": customerName,
-                  ":phone": phone,
-                  ":now": now,
-                  ":graceCutoff": now - HOLD_EXPIRY_GRACE_SECONDS,
-                  ":by": user,
-                },
-              },
-            },
+            ...holdItems,
             {
               Put: {
                 TableName: RES_TABLE,
@@ -1038,13 +1121,17 @@ export function createReservationsService(
                   SK: `RES#${reservationId}`,
                   reservationId,
                   eventDate,
-                  tableId,
+                  // Back-compat scalar: always tableIds[0]. Readers should
+                  // prefer tableIds[] via getReservationTableIds.
+                  tableId: tableIds[0],
+                  tableIds,
                   customerName,
                   phone,
                   phoneCountry: normalizedPhoneCountry,
                   depositAmount: effectiveDeposit,
                   amountDue: effectiveAmountDue,
                   tablePrice,
+                  tablePrices,
                   paymentStatus,
                   paymentDeadlineAt: effectiveDeadlineAt || null,
                   paymentDeadlineTz: effectiveDeadlineTz,
@@ -1068,10 +1155,13 @@ export function createReservationsService(
       if (err?.name !== "TransactionCanceledException") throw err;
       // Most common cause of TransactionCanceledException here: the client
       // retried POST /reservations after the first call already succeeded.
-      // The hold has been converted to RESERVED with a reservationId set.
-      // Look it up and return idempotently. (Audit M3.)
+      // The first hold has been converted to RESERVED with a reservationId
+      // set; look it up and return idempotently. (Audit M3.) For multi-
+      // table replay, reading the first hold is sufficient — the original
+      // call promoted all N atomically, so finding any one as RESERVED
+      // means the whole booking landed.
       const holdRow = await ddb.send(
-        new GetCommand({ TableName: HOLDS_TABLE, Key: holdKey })
+        new GetCommand({ TableName: HOLDS_TABLE, Key: primaryHoldKey })
       );
       const lock = holdRow?.Item;
       if (lock?.lockType === "RESERVED") {
@@ -1096,7 +1186,7 @@ export function createReservationsService(
           }
         }
       }
-      // Not an idempotent replay — the hold expired, was claimed by someone
+      // Not an idempotent replay — a hold expired, was claimed by someone
       // else, or never existed. Surface a clean 409.
       throw httpError(
         409,
@@ -1107,7 +1197,8 @@ export function createReservationsService(
     const created = {
       reservationId,
       eventDate,
-      tableId,
+      tableId: tableIds[0],
+      tableIds,
       customerName,
       phone,
       depositAmount: effectiveDeposit,
@@ -1122,7 +1213,8 @@ export function createReservationsService(
       eventType: "RESERVATION_CREATED",
       actor: user,
       source: historySourceFromActor(user),
-      tableId,
+      tableId: tableIds[0],
+      tableIds,
       customerName,
       at: now,
       details: {
@@ -1130,6 +1222,7 @@ export function createReservationsService(
         paymentMethod: effectivePaymentMethod,
         amountDue: effectiveAmountDue,
         depositAmount: effectiveDeposit,
+        tableIds,
       },
     });
     if (payments.length > 0) {
@@ -1139,7 +1232,8 @@ export function createReservationsService(
         eventType: "PAYMENT_RECORDED",
         actor: user,
         source: historySourceFromActor(user),
-        tableId,
+        tableId: tableIds[0],
+        tableIds,
         customerName,
         at: now,
         details: {

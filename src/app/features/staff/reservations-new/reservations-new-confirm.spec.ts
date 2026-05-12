@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildShareMessage,
   CreatedReservationContext,
+  formatTablesLabel,
   toCreatePaymentMethod,
   toLinkMode,
   toSmsRecipient,
@@ -14,6 +15,7 @@ function makeCtx(overrides: Partial<CreatedReservationContext> = {}): CreatedRes
     reservationId: 'r1',
     eventDate: '2026-05-09',
     tableId: 'A1',
+    tableIds: ['A1'],
     customerName: 'Alice',
     phone: '+12025550100',
     amount: 100,
@@ -56,6 +58,40 @@ describe('buildShareMessage', () => {
   it('handles empty customer name without crashing', () => {
     const out = buildShareMessage(makeCtx({ customerName: '' }), 'https://x');
     expect(out).toBe('Hi , here is your table link for 2026-05-09 table A1: https://x');
+  });
+  it('renders "tables 1, 2, 3" + "tables link" for multi-table bookings', () => {
+    const out = buildShareMessage(
+      makeCtx({ tableId: 'A1', tableIds: ['A1', 'B3', 'C2'] }),
+      'https://x/y'
+    );
+    expect(out).toBe(
+      'Hi Alice, here is your tables link for 2026-05-09 tables A1, B3, C2: https://x/y'
+    );
+  });
+  it('prefers tableIds[] over the scalar tableId', () => {
+    const out = buildShareMessage(
+      makeCtx({ tableId: 'OLD', tableIds: ['A1', 'B3'] }),
+      'https://x'
+    );
+    expect(out).toContain('tables A1, B3');
+    expect(out).not.toContain('OLD');
+  });
+});
+
+describe('formatTablesLabel', () => {
+  it('returns "table N" for a single-table list', () => {
+    expect(formatTablesLabel(['A1'])).toBe('table A1');
+  });
+  it('returns "tables N, M, ..." for multi-table lists', () => {
+    expect(formatTablesLabel(['A1', 'B3', 'C2'])).toBe('tables A1, B3, C2');
+  });
+  it('returns "" for empty / nullish input', () => {
+    expect(formatTablesLabel([])).toBe('');
+    expect(formatTablesLabel(null)).toBe('');
+    expect(formatTablesLabel(undefined)).toBe('');
+  });
+  it('trims whitespace + drops empty entries', () => {
+    expect(formatTablesLabel(['A1', '  ', 'B3'])).toBe('tables A1, B3');
   });
 });
 
