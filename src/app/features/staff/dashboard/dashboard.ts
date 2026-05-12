@@ -26,6 +26,7 @@ import { ClientsService, RescheduleCredit } from '../../../core/http/clients.ser
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
+import { HlmInput } from '../../../shared/ui/input';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
 interface TableKpis {
@@ -111,6 +112,7 @@ interface PaymentLinkSmsState {
     HlmDialog,
     HlmButton,
     HlmBadge,
+    HlmInput,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
