@@ -25,7 +25,11 @@ export class HlmSidebarFooter {
       this.el.nativeElement.setAttribute(
         'class',
         twMerge(
-          'flex flex-col gap-2 border-t border-sidebar-border p-3',
+          // No `border-t` — Spartan's nav-user pattern relies on the
+          // chip's own visual weight + padding for separation, not a
+          // divider line. Restore a top border if you ever swap the
+          // chip back to a hand-rolled label + button block.
+          'flex flex-col gap-2 p-3',
           this.consumerClasses,
         ),
       );

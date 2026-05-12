@@ -16,7 +16,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## UI primitives — read before adding new UI
 
-Ten Spartan-style primitive families live under `src/app/shared/ui/`. Use them
+Eleven Spartan-style primitive families live under `src/app/shared/ui/`. Use them
 instead of hand-rolling new Tailwind class strings. Each is a
 standalone Angular directive/component with `cva` variants +
 `tailwind-merge` for consumer-class overrides.
@@ -29,6 +29,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmDialog` | `<hlm-dialog>` (component) | sizes: `default \| full-on-mobile \| sheet` + `panelClass` override input | All modals. `default` for centered, `full-on-mobile` for long forms (frequent-clients create), `sheet` for slide-from-edge (topbar quick-actions, z-[300] above page modals). |
 | `HlmToggle` | `button[hlmToggle]` | `default \| outline \| warning` × `[active]` boolean | Toggle pills (filter chips, section/table selectors). Caller manages `[active]` state. |
 | `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
+| `HlmAvatar` (compound family) | `<hlm-avatar>` + `img[hlmAvatarImage]` + `span[hlmAvatarFallback]` | sizes: `sm \| default \| lg` (size-6 / size-8 / size-10). Default shape `rounded-full`; override to `rounded-lg` via consumer class. | Round/square photo tile with initials fallback. Image directive auto-hides until `load` fires; fallback (initials, icon) stays visible until then and reappears on `error`. Today the sidebar footer user chip + the popup menu's account-tile header are the only consumers; `[src]` is wired through `AuthService.photoUrl$()` which returns `null` until Cognito's `picture` claim is surfaced. |
 | `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile slide-over via own fixed `<aside>` + backdrop (NOT HlmDialog); cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
 | `HlmPagination` (compound family — see "Pagination" below) | `<hlm-numbered-pagination>` high-level wrapper, or compose from `nav[hlmPagination]` + `ul[hlmPaginationContent]` + `li[hlmPaginationItem]` + `button[hlmPaginationLink]` + `<hlm-pagination-previous>` / `<hlm-pagination-next>` / `<hlm-pagination-ellipsis>` | Two-way `[(currentPage)]` + `[(itemsPerPage)]` model signals + `[totalItems]` input. Sliding window with ellipses (default `maxSize=7`). Event-only — no RouterLink integration | Any long client-side list that doesn't fit on one screen. Currently used by the admin Clients page (1,400+ rows, 50 per page). |
 | `HlmTable` (compound family — see "Data tables" below) | `<div hlmTableContainer>` + `<table hlmTable>` + `<thead hlmTHead>` + `<tbody hlmTBody>` + `<tfoot hlmTFoot>` + `<tr hlmTr>` + `<th hlmTh>` + `<td hlmTd>` + `<caption hlmCaption>`, plus `<hlm-table-sort-header [column] label>` for sortable headers | Pure CSS class application matching the existing hand-rolled table markup; sort-header composes with TanStack `Column<T>` | Long lists that need sort / filter / pagination. Pair with `@tanstack/angular-table`'s `createAngularTable` for state. Currently used by the admin Clients page. |
@@ -81,7 +82,7 @@ block pattern. DOM structure (only renders when authenticated; `App.html`):
           <aside sidebar-container>    <!-- fixed left:0; animates left:0↔-16rem -->
             <hlm-sidebar-header>       <!-- FF monogram brand chip -->
             <hlm-sidebar-content>      <!-- groups: Staff / Admin links -->
-            <hlm-sidebar-footer>       <!-- user chip + logout -->
+            <hlm-sidebar-footer>       <!-- user chip → popup menu w/ logout -->
       <main hlmSidebarInset>           <!-- flex-1; reflows when gap collapses -->
         <div class="flex flex-1 flex-col p-3 md:p-4">
           <app-auth-health-banner/>
@@ -119,18 +120,67 @@ keydown.escape that HlmDialog normally provides are re-implemented
 inline in `HlmSidebar` (effect-driven lock, A11yModule directives on
 the aside).
 
-`<hlm-sidebar>` and `<app-shell>` use `display: flex` (not
-`display: contents`) because **Safari has long-standing bugs where
-descendants under a contents-displayed element don't reliably pick up
-flex sizing from the grandparent**. The contents-display pattern works
-in Chrome but breaks Safari reflow on toggle. Use real flex items
-throughout the shell chain.
+**Mobile slide animation**: the backdrop + aside are *always mounted*
+inside `@if (service.isMobile())` and toggled via inline `[style.*]`
+bindings, NOT via `@if (service.openMobile())` and NOT via Tailwind
+class toggles. Two reasons for inline styles over Tailwind classes:
+
+1. **Dev-server Tailwind scanner staleness.** The JIT content scanner
+   sometimes misses newly-added utilities (`transition-transform`,
+   `opacity-0`, etc.) until the dev server restarts. Inline-style
+   bindings sidestep this entirely — they always apply.
+2. **`[class.-translate-x-full]` doesn't parse.** Angular's template
+   parser reads the leading `-` in `[class.-foo]` as a unary minus
+   expression and bails out. The workaround is `[style.transform]` or
+   `[ngClass]`. (See memory `feedback_negative_class_bindings.md`.)
+
+Concretely:
+- Backdrop: `[style.opacity]="service.openMobile() ? 1 : 0"` +
+  `[style.pointer-events]="service.openMobile() ? 'auto' : 'none'"` +
+  `[style.transition]="'opacity 200ms ease-out'"`. Fades both
+  directions; pointer-events flips so the layer doesn't intercept
+  clicks while invisible.
+- Aside: `[style.transform]="service.openMobile() ? 'translateX(0)' : 'translateX(-100%)'"` +
+  `[style.transition]="'transform 200ms ease-out'"`. Use explicit
+  `translateX(0)` for the open state — going to or from
+  `transform: none` has known browser interpolation quirks; two
+  explicit matrix values interpolate reliably.
+- While closed, `[attr.inert]=""` + `[attr.aria-hidden]="true"`
+  remove the aside from the focus order and from AT trees, even
+  though the DOM remains rendered. When `openMobile` flips true,
+  both attributes go null and `cdkTrapFocus` / `cdkTrapFocusAutoCapture`
+  also flip true — CDK captures focus into the panel and restores it
+  to the trigger on close.
+
+`<hlm-sidebar>` uses `display: block` (NOT `display: contents`) and
+`<app-shell>` uses `display: flex`. **Safari has long-standing bugs
+where descendants under a contents-displayed element don't reliably
+pick up flex sizing from the grandparent.** The contents-display
+pattern works in Chrome but breaks Safari reflow on toggle. The chain
+is `<app-shell flex>` > `<app-sidebar flex>` > `<hlm-sidebar block>` >
+gap div + fixed aside — every layer is a real layout-tree participant.
 
 **Brand chip uses `src/assets/FF_monogram.svg`** rendered through an
 `<img class="invert">` — the SVG ships with black fill and `invert`
 flips it to white on the dark `bg-sidebar-primary` tile. If you ever
 need to tweak the chip color theme, change the `--sidebar-primary` HSL
 in `styles.scss`, not the SVG.
+
+**Footer user chip is a dropdown trigger** (Spartan `nav-user`
+pattern). The chip is a single `<button hlmSidebarMenuButton size="lg"
+[hlmMenuTriggerFor]="userMenu">` containing an `<hlm-avatar
+class="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">`
+(with `<img hlmAvatarImage>` rendered only when `photoUrl$` is
+non-null, otherwise the `<span hlmAvatarFallback>` shows initials),
+the name + email/role stack, and a trailing
+`lucideChevronsUpDown` icon. Clicking opens an `<ng-template
+#userMenu>`-defined panel — currently just the account-tile header +
+separator + Log out item — positioned to the right of the chip on
+desktop and above it on mobile via a `computed<ConnectedPosition[]>`
+that reads `HlmSidebarService.isMobile()`. To add more menu items
+(Profile, Notifications, etc.), append `hlmMenuItem` buttons inside
+the `<ng-template>` block — there's no separate config or registration
+step. See `src/app/core/layout/sidebar/sidebar.{html,ts}`.
 
 **DO NOT run `@spartan-ng/cli ui` generators.** They would (a) overwrite
 our hand-rolled `HlmButton` + `HlmInput` with Spartan's CSS-class-driven

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { buildCognitoLogoutUrl } from '../config/app-config';
 import { decodeJwt, normalizeGroupsClaim, JwtClaims } from './jwt';
-import { Observable, distinctUntilChanged, map } from 'rxjs';
+import { Observable, combineLatest, distinctUntilChanged, map } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -54,6 +54,46 @@ export class AuthService {
   roleLabel$(): Observable<string> {
     return this.groups$().pipe(
       map(groups => (groups.includes('Admin') ? 'Admin' : groups.includes('Staff') ? 'Staff' : 'User'))
+    );
+  }
+
+  /**
+   * Best-effort email from ID token. Returns `null` if Cognito didn't
+   * include the `email` claim in the access/ID token scopes.
+   */
+  email$(): Observable<string | null> {
+    return this.idTokenClaims$().pipe(
+      map(claims => {
+        const e = claims?.['email'];
+        return typeof e === 'string' && e.length > 0 ? e : null;
+      })
+    );
+  }
+
+  /**
+   * Profile-picture URL from the ID token's `picture` claim. Returns
+   * `null` today — Cognito doesn't surface `picture` unless the user
+   * pool schema is extended and the scope is mapped through OIDC.
+   * Wired now so the sidebar chip + future profile UI can light up
+   * without a template change the day photos arrive.
+   */
+  photoUrl$(): Observable<string | null> {
+    return this.idTokenClaims$().pipe(
+      map(claims => {
+        const p = claims?.['picture'];
+        return typeof p === 'string' && p.length > 0 ? p : null;
+      })
+    );
+  }
+
+  /**
+   * Subtitle line for the user chip. Prefers the email claim; falls
+   * back to the role label when the token has no email (so staff still
+   * see "Admin" instead of an empty second line).
+   */
+  subtitle$(): Observable<string> {
+    return combineLatest([this.email$(), this.roleLabel$()]).pipe(
+      map(([email, role]) => email ?? role)
     );
   }
 

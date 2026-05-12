@@ -41,7 +41,14 @@ import { HlmSidebarService } from './hlm-sidebar.service';
   host: {
     '[attr.data-state]': 'service.state()',
     '[attr.data-mobile]': 'service.isMobile()',
-    class: 'contents',
+    // `block` — not `contents` — because `display: contents` has long-
+    // standing Safari bugs where descendants don't pick up flex sizing
+    // from the grandparent (see memory:
+    // safari_display_contents_flex_bug.md). The chain
+    // <app-shell flex> > <app-sidebar flex> > <hlm-sidebar block> >
+    // gap div + fixed aside keeps every layer as a real layout-tree
+    // participant.
+    class: 'block',
   },
   template: `
     <ng-template #contents>
@@ -49,27 +56,43 @@ import { HlmSidebarService } from './hlm-sidebar.service';
     </ng-template>
 
     @if (service.isMobile()) {
-      @if (service.openMobile()) {
-        <!-- Backdrop: dismisses on click -->
-        <div
-          class="fixed inset-0 z-[290] bg-black/50"
-          (click)="service.setOpenMobile(false)"
-          aria-hidden="true"
-        ></div>
-        <!-- Slide-over sheet from left. Plain fixed positioning so we
-             land at left:0 regardless of any parent's flex alignment. -->
-        <aside
-          data-slot="sidebar-mobile"
-          class="fixed inset-y-0 left-0 z-[300] flex h-svh w-64 flex-col rounded-r-2xl bg-sidebar text-sidebar-foreground shadow-2xl"
-          cdkTrapFocus
-          cdkTrapFocusAutoCapture
-          role="dialog"
-          aria-modal="true"
-          (keydown.escape)="service.setOpenMobile(false)"
-        >
-          <ng-container *ngTemplateOutlet="contents"></ng-container>
-        </aside>
-      }
+      <!-- Backdrop: always rendered, opacity-toggled so the fade
+           animates in both directions. Inline styles (not Tailwind
+           classes) for opacity / transition because the dev-server
+           Tailwind content scanner can miss newly-added utilities
+           until restart; inline bindings work regardless of scanner
+           state. -->
+      <div
+        class="fixed inset-0 z-[290] bg-black/50"
+        [style.opacity]="service.openMobile() ? 1 : 0"
+        [style.pointer-events]="service.openMobile() ? 'auto' : 'none'"
+        [style.transition]="'opacity 200ms ease-out'"
+        (click)="service.setOpenMobile(false)"
+        aria-hidden="true"
+      ></div>
+      <!-- Slide-over sheet from left. Always rendered; slides on/off
+           via inline transform. Explicit translateX(0) for the open
+           state (not removing the inline style) because going to or
+           from transform:none has known browser interpolation quirks
+           — interpolating between two explicit matrix values is
+           reliable. The inert attribute keeps it out of focus and
+           interaction order while hidden; cdkTrapFocus activates
+           only when open. -->
+      <aside
+        data-slot="sidebar-mobile"
+        class="fixed inset-y-0 left-0 z-[300] flex h-svh w-64 flex-col rounded-r-2xl bg-sidebar text-sidebar-foreground shadow-2xl"
+        [style.transform]="service.openMobile() ? 'translateX(0)' : 'translateX(-100%)'"
+        [style.transition]="'transform 200ms ease-out'"
+        [attr.aria-hidden]="!service.openMobile() ? 'true' : null"
+        [attr.inert]="!service.openMobile() ? '' : null"
+        [cdkTrapFocus]="service.openMobile()"
+        [cdkTrapFocusAutoCapture]="service.openMobile()"
+        role="dialog"
+        aria-modal="true"
+        (keydown.escape)="service.setOpenMobile(false)"
+      >
+        <ng-container *ngTemplateOutlet="contents"></ng-container>
+      </aside>
     } @else {
       <!-- Gap: real layout-occupying div in the flex row. Animating its
            width drives the inset's flex-grow reflow automatically. -->

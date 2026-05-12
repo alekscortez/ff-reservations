@@ -114,6 +114,24 @@
           <li hlmSidebarMenuItem>
             <a
               hlmSidebarMenuButton
+              routerLink="/admin/financials"
+              routerLinkActive
+              #fiRla="routerLinkActive"
+              [active]="fiRla.isActive"
+              (click)="onNavigate()"
+            >
+              <ng-icon name="lucideReceipt"></ng-icon>
+              <span>Financials</span>
+            </a>
+          </li>
+        </ul>
+      </hlm-sidebar-group>
+
+      <hlm-sidebar-group class="mt-auto">
+        <ul hlmSidebarMenu>
+          <li hlmSidebarMenuItem>
+            <a
+              hlmSidebarMenuButton
               routerLink="/admin/users"
               routerLinkActive
               #usRla="routerLinkActive"
@@ -137,41 +155,57 @@
               <span>Settings</span>
             </a>
           </li>
-          <li hlmSidebarMenuItem>
-            <a
-              hlmSidebarMenuButton
-              routerLink="/admin/financials"
-              routerLinkActive
-              #fiRla="routerLinkActive"
-              [active]="fiRla.isActive"
-              (click)="onNavigate()"
-            >
-              <ng-icon name="lucideReceipt"></ng-icon>
-              <span>Financials</span>
-            </a>
-          </li>
         </ul>
       </hlm-sidebar-group>
     </ng-container>
   </hlm-sidebar-content>
 
   <hlm-sidebar-footer *ngIf="isAuthenticated$ | async">
-    <div class="flex items-center gap-2 rounded-md px-2 py-1.5">
-      <ng-icon name="lucideCircleUser" class="size-6 shrink-0 text-sidebar-foreground/70"></ng-icon>
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-sm font-semibold text-sidebar-foreground">{{ (name$ | async) || 'User' }}</p>
-        <p class="truncate text-xs text-sidebar-foreground/60">{{ (role$ | async) || 'User' }}</p>
+    <ul hlmSidebarMenu>
+      <li hlmSidebarMenuItem>
+        <button
+          hlmSidebarMenuButton
+          size="lg"
+          type="button"
+          [hlmMenuTriggerFor]="userMenu"
+          [hlmMenuPosition]="menuPosition()"
+          aria-label="Open account menu"
+        >
+          <hlm-avatar class="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            <ng-container *ngIf="photoUrl$ | async as photoUrl">
+              <img hlmAvatarImage [src]="photoUrl" [alt]="(name$ | async) || 'User avatar'" />
+            </ng-container>
+            <span hlmAvatarFallback>{{ initials$ | async }}</span>
+          </hlm-avatar>
+          <div class="grid flex-1 text-left text-sm leading-tight">
+            <span class="truncate font-medium">{{ (name$ | async) || 'User' }}</span>
+            <span class="truncate text-xs text-sidebar-foreground/60">{{ subtitle$ | async }}</span>
+          </div>
+          <ng-icon name="lucideChevronsUpDown" class="ml-auto size-4 shrink-0 text-sidebar-foreground/60"></ng-icon>
+        </button>
+      </li>
+    </ul>
+  </hlm-sidebar-footer>
+</hlm-sidebar>
+
+<ng-template #userMenu>
+  <div hlmMenu class="min-w-56 rounded-lg">
+    <div class="flex items-center gap-2 px-2 py-1.5 text-left text-sm">
+      <hlm-avatar class="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+        <ng-container *ngIf="photoUrl$ | async as photoUrl">
+          <img hlmAvatarImage [src]="photoUrl" [alt]="(name$ | async) || 'User avatar'" />
+        </ng-container>
+        <span hlmAvatarFallback>{{ initials$ | async }}</span>
+      </hlm-avatar>
+      <div class="grid flex-1 leading-tight">
+        <span class="truncate font-medium">{{ (name$ | async) || 'User' }}</span>
+        <span class="truncate text-xs text-brand-500">{{ subtitle$ | async }}</span>
       </div>
     </div>
-    <button
-      hlmBtn
-      variant="outline"
-      type="button"
-      class="w-full justify-center gap-2"
-      (click)="logout()"
-    >
+    <hlm-menu-separator />
+    <button hlmMenuItem (click)="logout()">
       <ng-icon name="lucideLogOut" class="size-4"></ng-icon>
       Log out
     </button>
-  </hlm-sidebar-footer>
-</hlm-sidebar>
+  </div>
+</ng-template>
