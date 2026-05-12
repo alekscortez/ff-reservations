@@ -27,7 +27,17 @@ function makeMergeEffect(host: HTMLElement, defaults: string) {
   };
 }
 
-/** Wrap a <table hlmTable> in this to get a horizontally scrollable container. */
+/**
+ * Inner scroll container for `<table hlmTable>`. Pure horizontal-scroll
+ * behavior so wide tables don't overflow their parent on small viewports.
+ *
+ * For the Spartan-stock "card" look, wrap this in an outer
+ * `<div class="overflow-hidden rounded-md border border-brand-200">`
+ * — the outer's `overflow-hidden` clips the row dividers against the
+ * rounded corners. Splitting the two wrappers is necessary because
+ * `overflow-x-auto` would force a vertical scrollbar if combined with
+ * the rounded clip on a single element.
+ */
 @Directive({
   selector: 'div[hlmTableContainer]',
   exportAs: 'hlmTableContainer',
@@ -37,7 +47,7 @@ function makeMergeEffect(host: HTMLElement, defaults: string) {
 export class HlmTableContainer {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    effect(makeMergeEffect(el, 'w-full overflow-x-auto'));
+    effect(makeMergeEffect(el, 'relative w-full overflow-x-auto'));
   }
 }
 
@@ -50,7 +60,7 @@ export class HlmTableContainer {
 export class HlmTable {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    effect(makeMergeEffect(el, 'w-full border-collapse text-left text-sm text-brand-900'));
+    effect(makeMergeEffect(el, 'w-full caption-bottom border-collapse text-sm text-brand-900'));
   }
 }
 
@@ -63,12 +73,9 @@ export class HlmTable {
 export class HlmTHead {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    effect(
-      makeMergeEffect(
-        el,
-        'border-b border-brand-100 text-xs uppercase tracking-[0.18em] text-brand-500',
-      ),
-    );
+    // No bottom border on thead itself — the last header row's hlmTr
+    // carries the divider so tbody and thead share the same line.
+    effect(makeMergeEffect(el, ''));
   }
 }
 
@@ -81,7 +88,7 @@ export class HlmTHead {
 export class HlmTBody {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
-    effect(makeMergeEffect(el, ''));
+    effect(makeMergeEffect(el, '[&_tr:last-child]:border-0'));
   }
 }
 
@@ -95,7 +102,7 @@ export class HlmTFoot {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
     effect(
-      makeMergeEffect(el, 'border-t border-brand-100 bg-brand-50/40 font-medium'),
+      makeMergeEffect(el, 'border-t border-brand-200 bg-brand-50/40 font-medium'),
     );
   }
 }
@@ -112,7 +119,7 @@ export class HlmTr {
     effect(
       makeMergeEffect(
         el,
-        'border-b border-brand-100 transition-colors last:border-0 hover:bg-brand-50/40',
+        'border-b border-brand-100 transition-colors hover:bg-brand-50/40 data-[state=selected]:bg-brand-50',
       ),
     );
   }
@@ -127,10 +134,13 @@ export class HlmTr {
 export class HlmTh {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    // Spartan-stock: 12 px tall, left-aligned, regular body-color text
+    // with reduced contrast. No uppercase tracking — sort header /
+    // visual hierarchy carries weight.
     effect(
       makeMergeEffect(
         el,
-        'h-10 py-3 pr-3 align-middle font-semibold text-brand-500 [&:has([role=checkbox])]:pr-0',
+        'h-12 px-4 text-left align-middle font-medium text-brand-500 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
       ),
     );
   }
@@ -146,7 +156,7 @@ export class HlmTd {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
     effect(
-      makeMergeEffect(el, 'py-3 pr-3 align-middle [&:has([role=checkbox])]:pr-0'),
+      makeMergeEffect(el, 'p-4 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]'),
     );
   }
 }

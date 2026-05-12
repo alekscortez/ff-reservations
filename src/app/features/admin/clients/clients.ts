@@ -2,6 +2,8 @@ import { Component, OnInit, computed, effect, inject, signal } from '@angular/co
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideEllipsis } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -23,6 +25,12 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
+import {
+  HlmMenu,
+  HlmMenuItem,
+  HlmMenuSeparator,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNumberedPagination } from '../../../shared/ui/pagination';
 import {
@@ -43,9 +51,14 @@ const PAGE_SIZE = 50;
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    NgIcon,
     PhoneDisplayPipe,
     HlmButton,
     HlmInput,
+    HlmMenu,
+    HlmMenuItem,
+    HlmMenuSeparator,
+    HlmMenuTrigger,
     HlmNumberedPagination,
     HlmTable,
     HlmTBody,
@@ -56,6 +69,7 @@ const PAGE_SIZE = 50;
     HlmTh,
     HlmTr,
   ],
+  providers: [provideIcons({ lucideEllipsis })],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
