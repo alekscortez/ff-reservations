@@ -9,7 +9,7 @@
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-brand-200 text-brand-700"
+          hlmBtn variant="outline" size="icon" class="rounded-full"
           (click)="refresh()"
           [disabled]="loading"
           title="Refresh report"
@@ -19,7 +19,7 @@
         </button>
         <button
           type="button"
-          class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:opacity-50"
+          hlmBtn variant="outline"
           (click)="exportCsv()"
           [disabled]="rows.length === 0 || loading"
         >
@@ -58,14 +58,14 @@
       </label>
       <button
         type="button"
-        class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white"
+        hlmBtn size="lg"
         (click)="applyFilters()"
       >
         Apply
       </button>
       <button
         type="button"
-        class="h-11 rounded-lg border border-brand-200 px-4 text-sm font-semibold text-brand-700"
+        hlmBtn variant="outline" size="lg"
         (click)="resetFilters()"
       >
         Reset
