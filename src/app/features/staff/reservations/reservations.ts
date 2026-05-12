@@ -663,9 +663,12 @@ export class Reservations implements OnInit, OnDestroy {
     return this.remainingAmount(item);
   }
 
+  readonly detailTab = signal<'overview' | 'links' | 'pass' | 'history'>('overview');
+
   openDetails(item: ReservationItem): void {
     this.detailItem = item;
     this.showDetailsModal = true;
+    this.detailTab.set('overview');
     this.syncSidebarModalLock();
     this.checkInPassError = null;
     this.checkInPassNotice = null;

@@ -112,38 +112,6 @@ export class Topbar implements OnInit, OnDestroy {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
-  // Memoized so a fresh array is only produced when the underlying state
-  // actually changes (urgent count or the next-event query param). Without
-  // this, every change-detection cycle returned a brand-new array of
-  // brand-new objects, and *ngFor's default identity tracking destroyed
-  // and recreated each <a> element on EVERY CD pass — including the CD
-  // cycle that Angular runs in response to a touchstart. iOS Chrome
-  // (stricter than Safari) couldn't dispatch the trailing touchend on
-  // the disposed element, so no click ever fired.
-  private cachedQuickActions: Array<{ label: string; route: string; queryParams?: { date: string } | null; badge?: string | null }> = [];
-  private cachedQuickActionsKey = '';
-
-  quickActions(): Array<{ label: string; route: string; queryParams?: { date: string } | null; badge?: string | null }> {
-    const qp = this.newReservationQueryParams();
-    const key = `${this.urgentPaymentCount}|${qp ? qp.date : ''}`;
-    if (key === this.cachedQuickActionsKey && this.cachedQuickActions.length) {
-      return this.cachedQuickActions;
-    }
-    this.cachedQuickActionsKey = key;
-    this.cachedQuickActions = [
-      { label: 'New Reservation', route: '/staff/reservations/new', queryParams: qp },
-      { label: 'Reservations', route: '/staff/reservations' },
-      { label: 'Check-In', route: '/staff/check-in' },
-      {
-        label: 'Urgent Payments',
-        route: '/staff/dashboard',
-        badge: this.urgentPaymentCount > 0 ? `${this.urgentPaymentCount}` : null,
-      },
-      { label: 'Dashboard', route: '/staff/dashboard' },
-    ];
-    return this.cachedQuickActions;
-  }
-
   // trackBy for the *ngFor below: stable identity by route so *ngFor never
   // tears down the rendered <a> elements while the user's finger is on them.
   trackQuickAction(_index: number, item: { route: string }): string {

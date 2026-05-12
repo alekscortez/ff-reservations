@@ -328,7 +328,62 @@
       </article>
     </div>
 
-    <div class="mt-4 grid gap-3">
+    <nav class="mt-4 flex flex-wrap gap-1 rounded-lg border border-brand-200 bg-brand-50 p-1" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+        [class.bg-white]="detailTab() === 'overview'"
+        [class.text-brand-900]="detailTab() === 'overview'"
+        [class.shadow-sm]="detailTab() === 'overview'"
+        [class.text-brand-600]="detailTab() !== 'overview'"
+        [attr.aria-selected]="detailTab() === 'overview'"
+        (click)="detailTab.set('overview')"
+      >
+        Overview
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+        [class.bg-white]="detailTab() === 'links'"
+        [class.text-brand-900]="detailTab() === 'links'"
+        [class.shadow-sm]="detailTab() === 'links'"
+        [class.text-brand-600]="detailTab() !== 'links'"
+        [attr.aria-selected]="detailTab() === 'links'"
+        (click)="detailTab.set('links')"
+      >
+        Links
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+        [class.bg-white]="detailTab() === 'pass'"
+        [class.text-brand-900]="detailTab() === 'pass'"
+        [class.shadow-sm]="detailTab() === 'pass'"
+        [class.text-brand-600]="detailTab() !== 'pass'"
+        [attr.aria-selected]="detailTab() === 'pass'"
+        (click)="detailTab.set('pass')"
+      >
+        Pass
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+        [class.bg-white]="detailTab() === 'history'"
+        [class.text-brand-900]="detailTab() === 'history'"
+        [class.shadow-sm]="detailTab() === 'history'"
+        [class.text-brand-600]="detailTab() !== 'history'"
+        [attr.aria-selected]="detailTab() === 'history'"
+        (click)="detailTab.set('history')"
+      >
+        Activity
+      </button>
+    </nav>
+
+    <div class="mt-4 grid gap-3" *ngIf="detailTab() === 'overview'" role="tabpanel">
       <article class="rounded-xl border border-brand-100 p-3">
         <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Info</p>
         <dl class="mt-2 grid gap-2 text-sm text-brand-800">
@@ -342,6 +397,46 @@
           </div>
         </dl>
       </article>
+
+      <article class="rounded-xl border border-brand-100 p-3">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Audit</p>
+        <dl class="mt-2 grid gap-2 text-sm text-brand-800">
+          <div class="flex items-center justify-between gap-3">
+            <dt class="text-brand-500">Created By</dt>
+            <dd class="font-medium text-brand-900">{{ detailItem.createdBy || '—' }}</dd>
+          </div>
+          <div class="flex items-start justify-between gap-3">
+            <dt class="text-brand-500">Cancel Reason</dt>
+            <dd class="max-w-[70%] text-right font-medium text-brand-900">{{ detailItem.cancelReason || '—' }}</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="rounded-xl border border-brand-100 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Reservation Status</p>
+          <button
+            type="button"
+            hlmBtn variant="outline" size="xs" class="border-danger-200 text-danger-700"
+            [disabled]="!canCancelReservation(detailItem)"
+            (click)="cancel(detailItem)"
+          >
+            Cancel Reservation
+          </button>
+        </div>
+        <p class="mt-2 text-xs text-brand-500" *ngIf="isPastEvent(detailItem)">
+          Past event reservation: payments and cancellation are disabled.
+        </p>
+      </article>
+    </div>
+
+    <div class="mt-4 grid gap-3" *ngIf="detailTab() === 'links'" role="tabpanel">
+      <p
+        class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600"
+        *ngIf="!canGeneratePaymentLink(detailItem)"
+      >
+        Payment links are unavailable: this reservation is either paid in full, cancelled, or for a past event.
+      </p>
 
       <article class="rounded-xl border border-brand-100 p-3" *ngIf="canGeneratePaymentLink(detailItem)">
         <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Links</p>
@@ -444,6 +539,9 @@
         </div>
       </article>
 
+    </div>
+
+    <div class="mt-4 grid gap-3" *ngIf="detailTab() === 'pass'" role="tabpanel">
       <article class="rounded-xl border border-brand-100 p-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Check-In Pass</p>
@@ -521,9 +619,11 @@
           <p class="break-all text-xs text-brand-500">{{ checkInPassShareMessage(detailItem) }}</p>
         </div>
       </article>
+    </div>
 
-      <details class="rounded-xl border border-brand-100 bg-white p-3">
-        <summary class="cursor-pointer text-sm font-semibold text-brand-900">Activity Log</summary>
+    <div class="mt-4 grid gap-3" *ngIf="detailTab() === 'history'" role="tabpanel">
+      <article class="rounded-xl border border-brand-100 bg-white p-3">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Activity Log</p>
 
         <p class="mt-2 text-xs text-brand-500" *ngIf="historyLoadingId === detailItem.reservationId">Loading history…</p>
         <p class="mt-2 text-xs text-danger-700" *ngIf="historyError">{{ historyError }}</p>
@@ -549,37 +649,6 @@
             </div>
           </article>
         </div>
-      </details>
-
-      <article class="rounded-xl border border-brand-100 p-3">
-        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Audit</p>
-        <dl class="mt-2 grid gap-2 text-sm text-brand-800">
-          <div class="flex items-center justify-between gap-3">
-            <dt class="text-brand-500">Created By</dt>
-            <dd class="font-medium text-brand-900">{{ detailItem.createdBy || '—' }}</dd>
-          </div>
-          <div class="flex items-start justify-between gap-3">
-            <dt class="text-brand-500">Cancel Reason</dt>
-            <dd class="max-w-[70%] text-right font-medium text-brand-900">{{ detailItem.cancelReason || '—' }}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <article class="rounded-xl border border-brand-100 p-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Reservation Status</p>
-          <button
-            type="button"
-            hlmBtn variant="outline" size="xs" class="border-danger-200 text-danger-700"
-            [disabled]="!canCancelReservation(detailItem)"
-            (click)="cancel(detailItem)"
-          >
-            Cancel Reservation
-          </button>
-        </div>
-        <p class="mt-2 text-xs text-brand-500" *ngIf="isPastEvent(detailItem)">
-          Past event reservation: payments and cancellation are disabled.
-        </p>
       </article>
     </div>
 </hlm-dialog>

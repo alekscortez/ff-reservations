@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription } from 'rxjs';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowRight, lucideChevronDown } from '@ng-icons/lucide';
@@ -140,7 +139,6 @@ interface PaymentLedgerRow {
   imports: [
     CommonModule,
     ReactiveFormsModule,
-    RouterLink,
     NgIcon,
     TableLabelPipe,
     HlmButton,

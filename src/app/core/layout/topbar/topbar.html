@@ -92,34 +92,24 @@
   </div>
 
   <div class="mt-3 grid gap-2">
-    <button
-      hlmBtn size="lg"
-      type="button"
-      (click)="sharePublicAvailability()"
-    >
+    <button hlmBtn size="lg" type="button" (click)="sharePublicAvailability()">
       Share Availability Link
     </button>
+
+    <a
+      *ngIf="urgentPaymentCount > 0"
+      hlmBtn variant="outline" size="lg"
+      [routerLink]="['/staff/dashboard']"
+      class="justify-between"
+      (click)="closeQuickActions()"
+    >
+      <span>Urgent Payments</span>
+      <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-700 px-1 text-[10px] font-semibold text-white">
+        {{ urgentPaymentCount }}
+      </span>
+    </a>
   </div>
 
   <p class="mt-2 text-xs text-success-700" *ngIf="quickAvailabilityNotice">{{ quickAvailabilityNotice }}</p>
   <p class="mt-2 text-xs text-danger-700" *ngIf="quickAvailabilityError">{{ quickAvailabilityError }}</p>
-
-  <div class="mt-3 grid gap-2">
-    <a
-      hlmBtn variant="outline" size="lg"
-      *ngFor="let action of quickActions(); trackBy: trackQuickAction"
-      [routerLink]="[action.route]"
-      [queryParams]="action.queryParams ?? null"
-      class="justify-between"
-      (click)="closeQuickActions()"
-    >
-      <span>{{ action.label }}</span>
-      <span
-        *ngIf="action.badge"
-        class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger-700 px-1 text-[10px] font-semibold text-white"
-      >
-        {{ action.badge }}
-      </span>
-    </a>
-  </div>
 </hlm-dialog>
