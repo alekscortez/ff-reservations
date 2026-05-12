@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideEllipsis } from '@ng-icons/lucide';
+import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
   type SortingState,
+  type VisibilityState,
   createAngularTable,
   getCoreRowModel,
   getFilteredRowModel,
@@ -27,6 +28,7 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
 import {
   HlmMenu,
+  HlmMenuCheckbox,
   HlmMenuItem,
   HlmMenuSeparator,
   HlmMenuTrigger,
@@ -56,6 +58,7 @@ const PAGE_SIZE = 50;
     HlmButton,
     HlmInput,
     HlmMenu,
+    HlmMenuCheckbox,
     HlmMenuItem,
     HlmMenuSeparator,
     HlmMenuTrigger,
@@ -69,7 +72,7 @@ const PAGE_SIZE = 50;
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideEllipsis })],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -88,6 +91,33 @@ export class Clients implements OnInit {
 
   readonly sorting = signal<SortingState>([{ id: 'lastEventDate', desc: true }]);
   readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
+  readonly columnVisibility = signal<VisibilityState>({});
+
+  /**
+   * Hidable column IDs in the order they're rendered. The `actions`
+   * column is intentionally NOT in this list — the row-actions button
+   * is always visible.
+   */
+  readonly hidableColumnIds: ReadonlyArray<string> = [
+    'name',
+    'phone',
+    'totalSpend',
+    'totalReservations',
+    'lastEventDate',
+    'lastTableId',
+    'updatedBy',
+  ];
+
+  /** Map of column id → human-readable label for the "Columns" toggle menu. */
+  private readonly columnLabels: Record<string, string> = {
+    name: 'Name',
+    phone: 'Phone',
+    totalSpend: 'Total Spend',
+    totalReservations: 'Reservations',
+    lastEventDate: 'Last Event',
+    lastTableId: 'Last Table',
+    updatedBy: 'Updated By',
+  };
 
   private readonly columns: ColumnDef<CrmClient>[] = [
     { id: 'name', accessorKey: 'name', enableSorting: true, sortingFn: 'alphanumeric' },
@@ -122,6 +152,7 @@ export class Clients implements OnInit {
       sorting: this.sorting(),
       globalFilter: this.query(),
       pagination: this.pagination(),
+      columnVisibility: this.columnVisibility(),
     },
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(this.sorting()) : updater;
@@ -130,6 +161,11 @@ export class Clients implements OnInit {
     onPaginationChange: (updater) => {
       const next = typeof updater === 'function' ? updater(this.pagination()) : updater;
       this.pagination.set(next);
+    },
+    onColumnVisibilityChange: (updater) => {
+      const next =
+        typeof updater === 'function' ? updater(this.columnVisibility()) : updater;
+      this.columnVisibility.set(next);
     },
     globalFilterFn: (row, _columnId, filterValue: string) => {
       const q = String(filterValue ?? '').trim().toLowerCase();
@@ -206,6 +242,27 @@ export class Clients implements OnInit {
   onPageSizeChange(size: number): void {
     this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
   }
+
+  /**
+   * VisibilityState only stores entries for columns the user has toggled
+   * away from default. Missing entry === visible (TanStack convention).
+   */
+  isColumnVisible(id: string): boolean {
+    return this.columnVisibility()[id] !== false;
+  }
+
+  toggleColumnVisibility(id: string): void {
+    this.columnVisibility.update((s) => ({ ...s, [id]: !this.isColumnVisible(id) }));
+  }
+
+  columnLabel(id: string): string {
+    return this.columnLabels[id] ?? id;
+  }
+
+  /** Visible column count + 1 for the always-on actions column — used by the edit row's colspan. */
+  readonly visibleColumnCount = computed(
+    () => this.hidableColumnIds.filter((id) => this.isColumnVisible(id)).length + 1,
+  );
 
   /** Adapter used by sort-header components in the template. */
   column(id: string) {

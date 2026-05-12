@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { HlmMenu, HlmMenuItem, HlmMenuTrigger } from './hlm-menu';
+import { HlmMenuCheckbox } from './hlm-menu-checkbox';
 import { HlmMenuSeparator } from './hlm-menu-separator';
 
 @Component({
@@ -112,5 +113,66 @@ describe('HlmMenu (dropdown)', () => {
     expect(sep).toBeTruthy();
     expect(sep.getAttribute('role')).toBe('separator');
     expect(sep.className).toContain('bg-brand-100');
+  });
+});
+
+@Component({
+  standalone: true,
+  imports: [HlmMenuTrigger, HlmMenu, HlmMenuCheckbox],
+  template: `
+    <button [hlmMenuTriggerFor]="columnsMenu" type="button" aria-label="Open columns menu">
+      Columns
+    </button>
+    <ng-template #columnsMenu>
+      <div hlmMenu>
+        <button hlmMenuCheckbox [checked]="visible.name" (triggered)="toggle('name')">Name</button>
+        <button hlmMenuCheckbox [checked]="visible.phone" (triggered)="toggle('phone')">Phone</button>
+      </div>
+    </ng-template>
+  `,
+})
+class CheckboxHost {
+  visible = { name: true, phone: false };
+  toggle(k: 'name' | 'phone') {
+    this.visible = { ...this.visible, [k]: !this.visible[k] };
+  }
+}
+
+describe('HlmMenuCheckbox', () => {
+  afterEach(() => {
+    document.querySelectorAll('.cdk-overlay-container').forEach((el) => el.remove());
+  });
+
+  async function createHost() {
+    TestBed.configureTestingModule({ imports: [CheckboxHost] });
+    const fixture = TestBed.createComponent(CheckboxHost);
+    fixture.detectChanges();
+    (fixture.nativeElement as HTMLElement)
+      .querySelector('button[aria-label="Open columns menu"]')!
+      .dispatchEvent(new MouseEvent('click'));
+    fixture.detectChanges();
+    await nextTick();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders the leading checkmark indicator only for items with checked=true', async () => {
+    const fixture = await createHost();
+    const items = document.querySelectorAll('[hlmMenu] button[hlmMenuCheckbox]');
+    // Item 1 (Name) is checked → has the icon
+    const item1Icon = (items[0] as HTMLElement).querySelector('ng-icon');
+    expect(item1Icon).toBeTruthy();
+    // Item 2 (Phone) is unchecked → no icon
+    const item2Icon = (items[1] as HTMLElement).querySelector('ng-icon');
+    expect(item2Icon).toBeNull();
+  });
+
+  it('fires (triggered) on click and updates the parent state', async () => {
+    const fixture = await createHost();
+    const items = document.querySelectorAll('[hlmMenu] button[hlmMenuCheckbox]');
+    (items[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await nextTick();
+    expect(fixture.componentInstance.visible.phone).toBe(true);
   });
 });
