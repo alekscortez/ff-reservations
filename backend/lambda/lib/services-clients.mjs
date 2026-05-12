@@ -4,6 +4,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
@@ -17,6 +18,7 @@ export function createClientsService({
   normalizePhoneCountry,
   detectPhoneCountryFromE164,
   buildPhoneSearchCandidates,
+  normalizeNameForSearch,
   nowEpoch,
   httpError,
   addDaysToIsoDate,
@@ -336,6 +338,120 @@ export function createClientsService({
     );
   }
 
+  async function bulkImportCrmClients(payload, user) {
+    requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
+    const contacts = Array.isArray(payload?.contacts) ? payload.contacts : null;
+    if (!contacts) throw httpError(400, "contacts must be an array");
+    const MAX_BATCH = 500;
+    if (contacts.length > MAX_BATCH) {
+      throw httpError(400, `contacts must contain at most ${MAX_BATCH} entries per request`);
+    }
+    if (contacts.length === 0) {
+      return { imported: 0, skipped: 0, invalid: 0, errors: 0, invalidDetails: [], errorDetails: [] };
+    }
+
+    const prepared = contacts.map((c, index) => {
+      const name = String(c?.name ?? "").trim();
+      const normalized = normalizePhoneForWrite(c?.phone ?? "", c?.phoneCountry);
+      const totalReservations = Number.isFinite(Number(c?.totalReservations))
+        ? Math.max(0, Math.floor(Number(c.totalReservations)))
+        : 0;
+      const totalSpend = Number.isFinite(Number(c?.totalSpend))
+        ? Math.max(0, Number(c.totalSpend))
+        : 0;
+      const lastEventDate = String(c?.lastEventDate ?? "").trim();
+      let lastReservationAt = null;
+      const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(lastEventDate);
+      if (isoMatch) {
+        const ms = Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+        if (Number.isFinite(ms)) lastReservationAt = Math.floor(ms / 1000);
+      }
+
+      if (!name) {
+        return { index, valid: false, reason: "name is required", phone: c?.phone ?? null };
+      }
+      if (!normalized.phoneE164 || !normalized.phoneKey) {
+        return {
+          index,
+          valid: false,
+          reason: "phone must be a valid US or MX number",
+          phone: c?.phone ?? null,
+        };
+      }
+
+      return {
+        index,
+        valid: true,
+        item: {
+          PK: "CLIENT",
+          SK: `PHONE#${normalized.phoneKey}`,
+          name,
+          phone: normalized.phoneE164,
+          phoneCountry: normalized.phoneCountry,
+          totalReservations,
+          totalSpend,
+          lastReservationAt,
+          lastEventDate: lastEventDate || null,
+          updatedBy: user,
+          importedAt: nowEpoch(),
+          importedBy: user,
+        },
+      };
+    });
+
+    const summary = {
+      imported: 0,
+      skipped: 0,
+      invalid: 0,
+      errors: 0,
+      invalidDetails: [],
+      errorDetails: [],
+    };
+
+    for (const p of prepared) {
+      if (!p.valid) {
+        summary.invalid += 1;
+        summary.invalidDetails.push({ index: p.index, phone: p.phone, reason: p.reason });
+      }
+    }
+
+    const writable = prepared.filter((p) => p.valid);
+    const CONCURRENCY = 10;
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < writable.length) {
+        const myIndex = cursor++;
+        const entry = writable[myIndex];
+        try {
+          await ddb.send(
+            new PutCommand({
+              TableName: CLIENTS_TABLE,
+              Item: entry.item,
+              ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+            })
+          );
+          summary.imported += 1;
+        } catch (err) {
+          if (err?.name === "ConditionalCheckFailedException") {
+            summary.skipped += 1;
+            continue;
+          }
+          summary.errors += 1;
+          summary.errorDetails.push({
+            index: entry.index,
+            phone: entry.item.phone,
+            error: String(err?.message ?? err ?? "unknown"),
+          });
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY, writable.length) }, worker);
+    await Promise.all(workers);
+    return summary;
+  }
+
   async function getDisabledTablesFromFrequent(eventRecord) {
     const disabledClients = new Set(eventRecord?.disabledClients ?? []);
     const releasedFrequentTables = new Set(eventRecord?.frequentReleasedTables ?? []);
@@ -501,35 +617,80 @@ export function createClientsService({
     return items;
   }
 
-  async function searchCrmClients(phoneQuery) {
+  // Accepts { phone, q }. At least one must produce candidates. phone runs the
+  // existing prefix-match query (cheap, indexed). q runs a Scan with a pushed-
+  // down BeginsWith filter on PK (so the engine only walks CLIENT rows) +
+  // accent-insensitive substring filter on the normalized name in JS. ~1.4k
+  // rows ≈ <300ms cold; sub-50ms warm. If both are present, results are
+  // de-duped on SK and merged.
+  async function searchCrmClients(arg) {
     requiredEnv("CLIENTS_TABLE", CLIENTS_TABLE);
-    const candidates = buildPhoneSearchCandidates(phoneQuery);
-    if (!candidates.length) return [];
 
-    const responses = await Promise.all(
-      candidates.map((candidate) =>
-        ddb.send(
-          new QueryCommand({
-            TableName: CLIENTS_TABLE,
-            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-            ExpressionAttributeValues: {
-              ":pk": "CLIENT",
-              ":sk": `PHONE#${candidate}`,
-            },
-            Limit: 10,
-            ScanIndexForward: false,
-          })
-        )
-      )
-    );
-    const byKey = new Map();
-    for (const res of responses) {
-      for (const item of res.Items ?? []) {
-        if (item?.SK) byKey.set(String(item.SK), item);
+    // Backwards-compatible: callers that pass a string still get phone search.
+    const phone = typeof arg === "string" ? arg : (arg?.phone ?? "");
+    const q = typeof arg === "string" ? "" : String(arg?.q ?? "").trim();
+
+    const collected = new Map();
+
+    if (phone) {
+      const candidates = buildPhoneSearchCandidates(phone);
+      if (candidates.length) {
+        const responses = await Promise.all(
+          candidates.map((candidate) =>
+            ddb.send(
+              new QueryCommand({
+                TableName: CLIENTS_TABLE,
+                KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+                ExpressionAttributeValues: {
+                  ":pk": "CLIENT",
+                  ":sk": `PHONE#${candidate}`,
+                },
+                Limit: 10,
+                ScanIndexForward: false,
+              })
+            )
+          )
+        );
+        for (const res of responses) {
+          for (const item of res.Items ?? []) {
+            if (item?.SK) collected.set(String(item.SK), item);
+          }
+        }
       }
     }
 
-    const items = [...byKey.values()].map((x) => ({
+    if (q.length >= 2) {
+      const needle = normalizeNameForSearch(q);
+      if (needle) {
+        // Scan + server-side filter to PHONE# rows only, then JS-filter by
+        // normalized substring. Pagination loop in case the table grows past
+        // the 1MB scan page (we'll be fine for years at current volume).
+        let exclusiveStartKey;
+        do {
+          const res = await ddb.send(
+            new ScanCommand({
+              TableName: CLIENTS_TABLE,
+              FilterExpression: "PK = :pk AND begins_with(SK, :sk)",
+              ExpressionAttributeValues: {
+                ":pk": "CLIENT",
+                ":sk": "PHONE#",
+              },
+              ExclusiveStartKey: exclusiveStartKey,
+            })
+          );
+          for (const item of res.Items ?? []) {
+            if (!item?.SK) continue;
+            const name = normalizeNameForSearch(item.name ?? "");
+            if (name && name.includes(needle)) {
+              collected.set(String(item.SK), item);
+            }
+          }
+          exclusiveStartKey = res.LastEvaluatedKey;
+        } while (exclusiveStartKey);
+      }
+    }
+
+    const items = [...collected.values()].map((x) => ({
       name: x.name,
       phone: x.phone,
       phoneCountry: x.phoneCountry,
@@ -541,7 +702,7 @@ export function createClientsService({
       updatedBy: x.updatedBy,
     }));
     items.sort((a, b) => (b.lastReservationAt ?? 0) - (a.lastReservationAt ?? 0));
-    return items;
+    return items.slice(0, 10);
   }
 
   async function updateCrmClient(phoneKey, payload, user) {
@@ -749,6 +910,7 @@ export function createClientsService({
     updateFrequentClient,
     deleteFrequentClient,
     upsertCrmClient,
+    bulkImportCrmClients,
     listCrmClients,
     searchCrmClients,
     updateCrmClient,

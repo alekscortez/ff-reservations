@@ -10,6 +10,7 @@ import {
   detectPhoneCountryFromE164,
   getBody,
   httpError,
+  normalizeNameForSearch,
   normalizePhone,
   normalizePhoneCountry,
   normalizePhoneE164,
@@ -243,5 +244,28 @@ describe("httpError + nowEpoch + requiredEnv", () => {
       () => requiredEnv("FOO", undefined),
       (err) => err?.statusCode === 500
     );
+  });
+});
+
+describe("normalizeNameForSearch", () => {
+  it("lowercases", () => {
+    assert.equal(normalizeNameForSearch("JULIO"), "julio");
+    assert.equal(normalizeNameForSearch("Julio Torres"), "julio torres");
+  });
+  it("strips diacritics: á → a, ñ → n, ó → o, í → i, é → e, ü → u", () => {
+    assert.equal(normalizeNameForSearch("Julián"), "julian");
+    assert.equal(normalizeNameForSearch("Núñez"), "nunez");
+    assert.equal(normalizeNameForSearch("José Hernández"), "jose hernandez");
+    assert.equal(normalizeNameForSearch("Müller"), "muller");
+  });
+  it("collapses internal whitespace + trims", () => {
+    assert.equal(normalizeNameForSearch("  Julio   Torres  "), "julio torres");
+    assert.equal(normalizeNameForSearch("\tJulio\n"), "julio");
+  });
+  it("returns empty string for null / undefined / non-string", () => {
+    assert.equal(normalizeNameForSearch(null), "");
+    assert.equal(normalizeNameForSearch(undefined), "");
+    assert.equal(normalizeNameForSearch(""), "");
+    assert.equal(normalizeNameForSearch(123), "123");
   });
 });

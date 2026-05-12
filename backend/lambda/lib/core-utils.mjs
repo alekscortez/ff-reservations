@@ -168,6 +168,18 @@ export function buildPhoneSearchCandidates(phone, countryHint = "US") {
   return [...set].filter(Boolean);
 }
 
+// Lowercase, accent-stripped, whitespace-normalized form for substring search
+// across customer-typed name input. "Júlián  García " → "julian garcia"
+export function normalizeNameForSearch(name) {
+  if (name === null || name === undefined) return "";
+  return String(name)
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function addDaysToIsoDate(dateStr, days) {
   const parts = String(dateStr ?? "").split("-").map((p) => Number(p));
   if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return dateStr;

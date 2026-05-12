@@ -24,6 +24,7 @@ function makeCtx(overrides = {}) {
     deleteCrmClient: [],
     searchCrmClients: [],
     listRescheduleCreditsByPhone: [],
+    bulkImportCrmClients: [],
   };
   return {
     calls,
@@ -81,6 +82,17 @@ function makeCtx(overrides = {}) {
       listRescheduleCreditsByPhone: async (phone, country) => {
         calls.listRescheduleCreditsByPhone.push({ phone, country });
         return overrides.creditsResult ?? [];
+      },
+      bulkImportCrmClients: async (body, user) => {
+        calls.bulkImportCrmClients.push({ body, user });
+        return overrides.bulkImportResult ?? {
+          imported: 0,
+          skipped: 0,
+          invalid: 0,
+          errors: 0,
+          invalidDetails: [],
+          errorDetails: [],
+        };
       },
     },
   };
@@ -259,7 +271,7 @@ describe("GET /clients/search (staff/admin)", () => {
     assert.equal(calls.requireStaffOrAdmin.length, 1);
   });
 
-  it("400 when phone is missing", async () => {
+  it("400 when both phone and q are missing", async () => {
     const { ctx } = makeCtx({
       method: "GET",
       path: "/clients/search",
@@ -267,17 +279,37 @@ describe("GET /clients/search (staff/admin)", () => {
     });
     const res = await handleClientsRoute(ctx);
     assert.equal(res.statusCode, 400);
-    assert.match(res.body.message, /phone/);
+    assert.match(res.body.message, /phone or q/);
   });
 
-  it("dispatches phone to searchCrmClients", async () => {
+  it("dispatches phone to searchCrmClients as { phone, q }", async () => {
     const { ctx, calls } = makeCtx({
       method: "GET",
       path: "/clients/search",
       event: { queryStringParameters: { phone: "2025550100" } },
     });
     await handleClientsRoute(ctx);
-    assert.equal(calls.searchCrmClients[0], "2025550100");
+    assert.deepEqual(calls.searchCrmClients[0], { phone: "2025550100", q: "" });
+  });
+
+  it("dispatches q-only as { phone: '', q: 'julio' }", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/clients/search",
+      event: { queryStringParameters: { q: "julio" } },
+    });
+    await handleClientsRoute(ctx);
+    assert.deepEqual(calls.searchCrmClients[0], { phone: "", q: "julio" });
+  });
+
+  it("dispatches both phone and q together", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/clients/search",
+      event: { queryStringParameters: { phone: "956", q: "julio" } },
+    });
+    await handleClientsRoute(ctx);
+    assert.deepEqual(calls.searchCrmClients[0], { phone: "956", q: "julio" });
   });
 });
 
@@ -315,5 +347,61 @@ describe("GET /clients/credits (staff/admin)", () => {
     });
     await handleClientsRoute(ctx);
     assert.equal(calls.listRescheduleCreditsByPhone[0].country, "MX");
+  });
+});
+
+describe("POST /clients/bulk-import (admin only)", () => {
+  it("requireAdmin (staff CANNOT import)", async () => {
+    const denied = Object.assign(new Error("forbidden"), { statusCode: 403 });
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/clients/bulk-import",
+      requireAdminThrows: denied,
+    });
+    await assert.rejects(() => handleClientsRoute(ctx), (err) => err?.statusCode === 403);
+    assert.equal(calls.bulkImportCrmClients.length, 0);
+  });
+
+  it("400 on missing JSON body", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/clients/bulk-import",
+      body: null,
+    });
+    const res = await handleClientsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("forwards body + user; returns the summary as 200", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/clients/bulk-import",
+      body: { contacts: [{ name: "Alice", phone: "+12025550100" }] },
+      userLabel: "admin@x",
+      bulkImportResult: {
+        imported: 1, skipped: 0, invalid: 0, errors: 0,
+        invalidDetails: [], errorDetails: [],
+      },
+    });
+    const res = await handleClientsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.imported, 1);
+    assert.equal(calls.bulkImportCrmClients[0].user, "admin@x");
+    assert.equal(calls.bulkImportCrmClients[0].body.contacts.length, 1);
+  });
+
+  it("does not collide with PUT /clients/:phone (different methods)", async () => {
+    // Sanity: /clients/bulk-import as PUT should fall through to updateCrmClient
+    // with phone="bulk-import" (which the service would later reject) — i.e. our
+    // POST handler does not steal other verbs.
+    const { ctx, calls } = makeCtx({
+      method: "PUT",
+      path: "/clients/bulk-import",
+      body: { name: "Whatever" },
+    });
+    await handleClientsRoute(ctx);
+    assert.equal(calls.bulkImportCrmClients.length, 0);
+    assert.equal(calls.updateCrmClient.length, 1);
+    assert.equal(calls.updateCrmClient[0].phone, "bulk-import");
   });
 });

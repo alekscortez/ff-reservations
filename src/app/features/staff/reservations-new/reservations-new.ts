@@ -307,6 +307,46 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.refreshClientCreditsForCurrentPhone();
         },
       });
+
+    // Mirror search-by-phone but for the customer name input. Catches the
+    // typo'd-phone case (PR #X / Julio Torres incident): staff who knows the
+    // name can pick the existing CRM record from the dropdown instead of
+    // typing a wrong phone number.
+    this.form.controls.customerName.valueChanges
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap((value) => {
+          const q = String(value ?? '').trim();
+          // Only search once the user has typed enough to be meaningful, and
+          // skip the search if a non-empty phone is also being typed (the
+          // phone search is already firing for that case).
+          const phoneDigits = normalizePhone(this.form.controls.phone.value);
+          if (q.length < 2 || phoneDigits.length >= 4) {
+            return of(null);
+          }
+          this.clientLoading = true;
+          return this.clientsApi.searchByName(q);
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (items: CrmClient[] | null) => {
+          if (items === null) return; // skipped — leave existing matches alone
+          const matches = items ?? [];
+          this.clientMatches = matches;
+          this.noClientMatch =
+            matches.length === 0 &&
+            String(this.form.controls.customerName.value ?? '').trim().length >= 2;
+          this.clientLoading = false;
+          this.exactMatchPhone = null;
+        },
+        error: () => {
+          this.clientMatches = [];
+          this.noClientMatch = false;
+          this.clientLoading = false;
+        },
+      });
   }
 
   ngAfterViewInit(): void {

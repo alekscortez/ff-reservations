@@ -43,6 +43,12 @@ export class ClientsService {
       .pipe(map((res) => res.items ?? []));
   }
 
+  searchByName(q: string) {
+    return this.api
+      .get<{ items: CrmClient[] }>('/clients/search', { q })
+      .pipe(map((res) => res.items ?? []));
+  }
+
   listRescheduleCredits(phone: string, phoneCountry: 'US' | 'MX' = 'US') {
     return this.api
       .get<{ items: RescheduleCredit[] }>('/clients/credits', { phone, phoneCountry })

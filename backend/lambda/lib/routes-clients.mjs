@@ -20,6 +20,7 @@ export async function handleClientsRoute(ctx) {
     deleteCrmClient,
     searchCrmClients,
     listRescheduleCreditsByPhone,
+    bulkImportCrmClients,
   } = ctx;
 
   if (method === "GET" && path === "/frequent-clients") {
@@ -68,6 +69,15 @@ export async function handleClientsRoute(ctx) {
     return json(200, { items }, cors);
   }
 
+  if (method === "POST" && path === "/clients/bulk-import") {
+    requireAdmin(event);
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const user = await getUserLabel(event);
+    const summary = await bulkImportCrmClients(body, user);
+    return json(200, summary, cors);
+  }
+
   const clientMatch = path.match(/^\/clients\/([^/]+)$/);
   if (clientMatch && method === "PUT") {
     requireAdmin(event);
@@ -88,9 +98,12 @@ export async function handleClientsRoute(ctx) {
 
   if (method === "GET" && path === "/clients/search") {
     requireStaffOrAdmin(event);
-    const phone = event.queryStringParameters?.phone;
-    if (!phone) return json(400, { message: "phone is required" }, cors);
-    const items = await searchCrmClients(phone);
+    const phone = String(event.queryStringParameters?.phone ?? "").trim();
+    const q = String(event.queryStringParameters?.q ?? "").trim();
+    if (!phone && !q) {
+      return json(400, { message: "phone or q is required" }, cors);
+    }
+    const items = await searchCrmClients({ phone, q });
     return json(200, { items }, cors);
   }
 

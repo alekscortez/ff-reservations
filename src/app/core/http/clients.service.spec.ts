@@ -80,6 +80,24 @@ describe('ClientsService', () => {
     expect(res).toEqual([{ phone: '+1' }]);
   });
 
+  it('searchByName: GET /clients/search with q param; unwraps items', async () => {
+    const { svc, calls } = setup({
+      'GET /clients/search': { items: [{ phone: '+19564147489', name: 'Julio Torres' }] },
+    });
+    const res = await firstValueFrom(svc.searchByName('julio'));
+    expect(calls[0]).toEqual({
+      method: 'GET',
+      path: '/clients/search',
+      params: { q: 'julio' },
+    });
+    expect(res).toEqual([{ phone: '+19564147489', name: 'Julio Torres' }]);
+  });
+
+  it('searchByName: defaults missing items to []', async () => {
+    const { svc } = setup({ 'GET /clients/search': {} });
+    expect(await firstValueFrom(svc.searchByName('xyz'))).toEqual([]);
+  });
+
   it('listRescheduleCredits: defaults phoneCountry to "US"', async () => {
     const { svc, calls } = setup({ 'GET /clients/credits': { items: [] } });
     await firstValueFrom(svc.listRescheduleCredits('+1'));

@@ -32,6 +32,7 @@ import {
   httpError,
   json,
   noContent,
+  normalizeNameForSearch,
   normalizePhone,
   normalizePhoneCountry,
   normalizePhoneE164,
@@ -349,6 +350,7 @@ const clientsService = createClientsService({
   normalizePhoneCountry,
   detectPhoneCountryFromE164,
   buildPhoneSearchCandidates,
+  normalizeNameForSearch,
   nowEpoch,
   httpError,
   addDaysToIsoDate,
@@ -717,6 +719,7 @@ export const handler = async (event) => {
       deleteCrmClient: clientsService.deleteCrmClient,
       searchCrmClients: clientsService.searchCrmClients,
       listRescheduleCreditsByPhone: clientsService.listRescheduleCreditsByPhone,
+      bulkImportCrmClients: clientsService.bulkImportCrmClients,
     });
     if (clientsRouteResponse) return clientsRouteResponse;
 

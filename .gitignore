@@ -64,3 +64,9 @@ backend/cognito-customer-auth/function.zip
 
 # Unattended-session log (local only)
 UNATTENDED_LOG.md
+
+# One-off script outputs (may contain customer PII — phone numbers, names)
+scripts/out/
+
+# Legacy reservations workbook (contains customer PII — keep local only)
+src/assets/reservations.xlsx
