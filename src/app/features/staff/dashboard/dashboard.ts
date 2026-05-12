@@ -469,7 +469,7 @@ export class Dashboard implements OnInit, OnDestroy {
   urgencyClass(item: UrgentPaymentItem): string {
     return item.urgency === 'OVERDUE'
       ? 'bg-danger-50 text-danger-700 border-danger-100'
-      : 'bg-accent-50 text-accent-700 border-accent-200';
+      : 'bg-warm-50 text-warm-700 border-warm-200';
   }
 
   canTakePayment(item: ReservationItem): boolean {
@@ -1492,7 +1492,7 @@ export class Dashboard implements OnInit, OnDestroy {
     if (activity.type === 'CANCELLED') return 'bg-danger-100 text-danger-700';
     if (activity.type === 'CHECKED_IN') return 'bg-success-100 text-success-700';
     if (activity.type === 'PAID') return 'bg-success-100 text-success-700';
-    if (activity.type === 'PARTIAL') return 'bg-accent-100 text-accent-800';
+    if (activity.type === 'PARTIAL') return 'bg-warm-100 text-warm-800';
     return 'bg-brand-100 text-brand-700';
   }
 
