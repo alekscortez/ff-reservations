@@ -116,10 +116,13 @@ export class HlmTFoot {
 export class HlmTr {
   constructor() {
     const el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    // Mirrors Spartan's spartan-table-row: subtle hover tint that's
+    // visible without competing for attention. `bg-brand-100/50` ≈
+    // `bg-muted/50` in shadcn's default light theme.
     effect(
       makeMergeEffect(
         el,
-        'border-b border-brand-100 transition-colors hover:bg-brand-50/40 data-[state=selected]:bg-brand-50',
+        'border-b border-brand-100 transition-colors hover:bg-brand-100/50 data-[state=selected]:bg-brand-100',
       ),
     );
   }
