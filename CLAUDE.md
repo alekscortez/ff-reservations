@@ -10,13 +10,13 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## Stack
 
-- **Frontend:** Angular 21 (standalone components), Tailwind 3.4, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering. **Spartan-style component library** under `src/app/shared/ui/` — see "UI primitives" section below.
+- **Frontend:** Angular 21 (standalone components), Tailwind 3.4, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering, `@ng-icons/lucide` for sidebar/topbar iconography. **Spartan-style component library** under `src/app/shared/ui/` — see "UI primitives" section below.
 - **Backend:** AWS Lambda (Node 22 ESM `.mjs`), API Gateway HTTP API, DynamoDB, Cognito Hosted UI + Custom Auth phone OTP (customers), Square API + webhook, SNS SMS, Secrets Manager
 - **Hosting:** Amplify for the SPA (npm + `ng build`, artifacts at `dist/ff-reservations/browser/`); custom domain `api.famosofuego.com` for the API. `amplify.yml` installs `npm@11.6.2` globally before `npm ci` so the lock-file version matches what wrote it (see memory: `amplify_corepack_npm_pin.md`).
 
 ## UI primitives — read before adding new UI
 
-Six Spartan-style primitives live under `src/app/shared/ui/`. Use them
+Seven Spartan-style primitive families live under `src/app/shared/ui/`. Use them
 instead of hand-rolling new Tailwind class strings. Each is a
 standalone Angular directive/component with `cva` variants +
 `tailwind-merge` for consumer-class overrides.
@@ -29,6 +29,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmDialog` | `<hlm-dialog>` (component) | sizes: `default \| full-on-mobile \| sheet` + `panelClass` override input | All modals. `default` for centered, `full-on-mobile` for long forms (frequent-clients create), `sheet` for slide-from-edge (topbar quick-actions, z-[300] above page modals). |
 | `HlmToggle` | `button[hlmToggle]` | `default \| outline \| warning` × `[active]` boolean | Toggle pills (filter chips, section/table selectors). Caller manages `[active]` state. |
 | `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
+| `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile portals through `HlmDialog` sheet; cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
 
 **Convention for TS helpers**: when a template's state-driven styling
 depends on a function, that function returns a `BadgeVariants['variant']`
@@ -56,6 +57,73 @@ brand palette via HSL CSS variables in `src/styles.scss`.
 Specs live next to each primitive (`src/app/shared/ui/<name>/<name>.spec.ts`)
 and lock in variant behavior + tailwind-merge semantics + (for HlmDialog)
 CDK focus-trap interop.
+
+### Shell layout — `HlmSidebar` family
+
+The authed staff/admin shell uses the Spartan **sidebar-sticky-header**
+block pattern. DOM structure (only renders when authenticated; `App.html`):
+
+```
+<div hlmSidebarWrapper class="flex-col" style="--header-height: 3.5rem">
+  <app-topbar>                         <!-- sticky h-14 header -->
+    <button hlmBtn hlmSidebarTrigger>  <!-- toggles sidebar via service -->
+    ...event chip + Quick + + New + Login...
+  </app-topbar>
+  <div class="flex flex-1">            <!-- row: sidebar + main -->
+    <router-outlet/>                   <!-- Shell renders below -->
+    <app-shell>                        <!-- display: flex; flex: 1; min-w: 0 -->
+      <app-sidebar>                    <!-- display: flex; flex-shrink: 0 -->
+        <hlm-sidebar>                  <!-- display: contents -->
+          <div sidebar-gap w-64>       <!-- layout-occupying; animates w-64↔w-0 -->
+          <aside sidebar-container>    <!-- fixed left:0; animates left:0↔-16rem -->
+            <hlm-sidebar-header>       <!-- FF monogram brand chip -->
+            <hlm-sidebar-content>      <!-- groups: Staff / Admin links -->
+            <hlm-sidebar-footer>       <!-- user chip + logout -->
+      <main hlmSidebarInset>           <!-- flex-1; reflows when gap collapses -->
+        <div class="flex flex-1 flex-col p-3 md:p-4">
+          <app-auth-health-banner/>
+          <router-outlet/>             <!-- feature pages render here -->
+```
+
+**The key architectural point**: the sidebar's layout reservation is a
+**gap div with real width**, not `padding-left` on the inset. When the
+gap div animates `w-64 → w-0`, the adjacent `<main hlmSidebarInset>`
+(which is `flex-1`) flex-grows into the freed space automatically. The
+visual sidebar is a separate fixed-positioned `<aside>` that animates
+`left: 0 → left: -16rem` in lockstep (200ms). This works in Safari and
+delivers a smooth slide animation. The earlier `transition-[padding-left]`
+attempt looked fine in Chrome but left content stuck at the old width in
+Safari until forced reflow — see memory `safari_display_contents_flex_bug.md`.
+
+**`HlmSidebarService` (app-wide singleton)** manages state:
+- `open` — desktop expanded vs collapsed, persisted via `ff-sidebar-state`
+  cookie (1-year max-age, SameSite=Lax)
+- `openMobile` — mobile sheet visibility, ephemeral
+- `isMobile` — matchMedia `(max-width: 767px)`; auto-updates on resize
+- `toggle()` mutates whichever surface matches the viewport
+- Auto-installs Cmd/Ctrl+B keyboard shortcut on first render
+
+`<hlm-sidebar>` and `<app-shell>` use `display: flex` (not
+`display: contents`) because **Safari has long-standing bugs where
+descendants under a contents-displayed element don't reliably pick up
+flex sizing from the grandparent**. The contents-display pattern works
+in Chrome but breaks Safari reflow on toggle. Use real flex items
+throughout the shell chain.
+
+**Brand chip uses `src/assets/FF_monogram.svg`** rendered through an
+`<img class="invert">` — the SVG ships with black fill and `invert`
+flips it to white on the dark `bg-sidebar-primary` tile. If you ever
+need to tweak the chip color theme, change the `--sidebar-primary` HSL
+in `styles.scss`, not the SVG.
+
+**DO NOT run `@spartan-ng/cli ui` generators.** They would (a) overwrite
+our hand-rolled `HlmButton` + `HlmInput` with Spartan's CSS-class-driven
+convention (`.spartan-button-variant-default` instead of inline Tailwind
+utilities), (b) add 5 unused primitive families (icon, separator, skeleton,
+tooltip, sheet), (c) ship source written for Tailwind 4 (e.g.
+`top-(--header-height)` arbitrary-value-with-var syntax that doesn't
+work in Tailwind 3). Build new primitives in the same hand-rolled cva +
+tailwind-merge style instead. See memory `spartan_cli_avoided.md`.
 
 ## Repo layout
 
@@ -231,7 +299,8 @@ Settings stored in `ff-settings` override env at runtime; some keys (Square IDs,
 ## Where to look first
 
 - Adding a new lambda route → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. **API Gateway routes are explicit — also `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public routes).**
-- Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards.
+- Adding a frontend feature → standalone component under `src/app/features/`, add to `src/app/app.routes.ts` with appropriate guards. Authed staff/admin routes render *inside* `<main hlmSidebarInset>` — your feature gets the full inset width minus `p-3 md:p-4` padding. Don't add your own page-level horizontal padding unless you need to override; the shell already does it.
+- Touching the shell (topbar / sidebar / `<main hlmSidebarInset>`) → see "Shell layout" subsection above for the gap-div + fixed-container pattern. The chain is `<app-root>` → wrapper → topbar + (row → shell → sidebar + main). Each level uses real `display: flex` (no `display: contents`) because Safari mishandles the contents pattern in flex grandparent chains.
 - Touching `reservations-new.ts` (the staff Hold & Reserve page) → it was originally ~2k lines; pure helpers were extracted into 5 sibling modules (the orchestration + UI lives in the main file):
   - **`reservations-new-utils.ts`** — phone normalization, date/time formatters, hour/minute clamping, `normalizeSectionMapColors`. Template-bound functions (`isThisWeek`, `formatEventDate`) are re-exposed on the component as 1-line aliases.
   - **`reservations-new-active-hold.ts`** — `ActiveHoldSession` interface + `localStorage` persistence (read/write/clear) + pure lookup helpers (`findActiveHoldLock`, `findActiveHoldLocks`, `extractTableIdFromHoldLock`). Lets staff resume a multi-table hold after navigation/refresh. The persisted shape carries `tableIds?: string[]` + `holds?: ActiveHoldEntry[]` alongside the scalar `tableId`/`holdId` primary; legacy single-table sessions written before multi-table still read fine (the loader synthesizes the array from the scalar).
