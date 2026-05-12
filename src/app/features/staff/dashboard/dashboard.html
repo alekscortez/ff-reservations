@@ -93,7 +93,7 @@
               </span>
               <button
                 type="button"
-                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                hlmBtn variant="outline-current" size="xs" class="rounded-full text-[11px] uppercase tracking-[0.1em]"
                 (click)="sendPaymentLinkSms(item.reservation)"
                 [disabled]="paymentLinkLoadingId === item.reservation.reservationId || !canGeneratePaymentLink(item.reservation)"
               >
@@ -101,7 +101,7 @@
               </button>
               <button
                 type="button"
-                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                hlmBtn variant="outline-current" size="xs" class="rounded-full text-[11px] uppercase tracking-[0.1em]"
                 (click)="openUrgentPayment(item)"
                 [disabled]="paymentLoading || !canTakePayment(item.reservation)"
               >
@@ -123,28 +123,28 @@
             <div class="flex flex-wrap gap-2">
               <button
                 type="button"
-                class="h-8 rounded-lg border border-current/30 bg-white px-2 text-[11px] font-semibold uppercase tracking-[0.1em]"
+                hlmBtn variant="outline-current" size="xs" class="h-8 text-[11px] uppercase tracking-[0.1em] border-current/30"
                 (click)="copyPaymentLink(item.reservation)"
               >
                 Copy
               </button>
               <button
                 type="button"
-                class="h-8 rounded-lg border border-current/30 bg-white px-2 text-[11px] font-semibold uppercase tracking-[0.1em]"
+                hlmBtn variant="outline-current" size="xs" class="h-8 text-[11px] uppercase tracking-[0.1em] border-current/30"
                 (click)="openSmsShare(item.reservation)"
               >
                 SMS
               </button>
               <button
                 type="button"
-                class="h-8 rounded-lg border border-current/30 bg-white px-2 text-[11px] font-semibold uppercase tracking-[0.1em]"
+                hlmBtn variant="outline-current" size="xs" class="h-8 text-[11px] uppercase tracking-[0.1em] border-current/30"
                 (click)="openWhatsAppShare(item.reservation)"
               >
                 WhatsApp
               </button>
               <button
                 type="button"
-                class="h-8 rounded-lg border border-current/30 bg-white px-2 text-[11px] font-semibold uppercase tracking-[0.1em]"
+                hlmBtn variant="outline-current" size="xs" class="h-8 text-[11px] uppercase tracking-[0.1em] border-current/30"
                 (click)="sharePaymentLink(item.reservation)"
               >
                 Share
