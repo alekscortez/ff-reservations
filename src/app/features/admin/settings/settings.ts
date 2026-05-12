@@ -3,10 +3,11 @@ import { Component, OnInit, inject } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AppSettings, SettingsService } from '../../../core/http/settings.service';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-admin-settings',
-  imports: [CommonModule, ReactiveFormsModule, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmInput],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
 })
