@@ -5,10 +5,11 @@ import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 
 @Component({
   selector: 'app-check-in',
-  imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton],
+  imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton, HlmBadge],
   templateUrl: './check-in.html',
   styleUrl: './check-in.scss',
 })
@@ -147,6 +148,10 @@ export class CheckIn implements OnDestroy {
     if (code === 'CHECKED_IN') return 'bg-success-100 text-success-800 border-success-300';
     if (code === 'ALREADY_USED') return 'bg-warning-100 text-warning-800 border-warning-300';
     return 'bg-danger-100 text-danger-800 border-danger-300';
+  }
+
+  scannerStatusVariant(): BadgeVariants['variant'] {
+    return this.scannerActive ? 'success' : 'secondary';
   }
 
   private onScannerValue(raw: string): void {
