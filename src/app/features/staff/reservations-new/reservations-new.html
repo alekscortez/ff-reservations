@@ -984,10 +984,10 @@
   <ng-container *ngIf="showReservationModal && selectedTable; else mobileHoldBar">
     <button
       type="button"
-      class="h-12 w-full rounded-full text-sm font-semibold disabled:opacity-60"
+      hlmBtn
+      class="h-12 w-full rounded-full"
       (click)="createdReservation ? finishReservationFlow() : confirmReservation()"
       [disabled]="reservationActionDisabled()"
-      [ngClass]="'bg-brand-900 text-white'"
     >
       {{ reservationActionLabel() }}
     </button>
