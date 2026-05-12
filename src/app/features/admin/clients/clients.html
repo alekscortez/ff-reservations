@@ -14,7 +14,7 @@
           type="text"
           [formControl]="filterQuery"
           placeholder="Name or phone"
-          class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
+          hlmInput
         />
       </label>
       <button
@@ -77,7 +77,7 @@
                 <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
                   <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
                     Name
-                    <input type="text" formControlName="name" class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm" />
+                    <input type="text" formControlName="name" hlmInput />
                   </label>
                   <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
                     Phone
@@ -85,12 +85,12 @@
                       <input
                         type="tel"
                         formControlName="phone"
-                        class="h-10 rounded-lg border border-brand-200 px-3 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
+                        hlmInput
                         inputmode="tel"
                         placeholder="+1..."
                       />
                       <select
-                        class="h-10 rounded-lg border border-brand-200 px-2 text-base text-brand-900 outline-none focus:border-brand-900 md:text-sm"
+                        hlmInput class="px-2"
                         [value]="editPhoneCountry"
                         (change)="editPhoneCountry = $any($event.target).value"
                       >
