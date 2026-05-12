@@ -2,6 +2,17 @@ import { Component, OnInit, computed, effect, inject, signal } from '@angular/co
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
+
 import { ClientsService } from '../../../core/http/clients.service';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
@@ -14,6 +25,16 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
 
 const PAGE_SIZE = 50;
 
@@ -26,6 +47,14 @@ const PAGE_SIZE = 50;
     HlmButton,
     HlmInput,
     HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
   ],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
@@ -43,31 +72,85 @@ export class Clients implements OnInit {
   readonly filterQuery = new FormControl('', { nonNullable: true });
   private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
 
-  readonly currentPage = signal(1);
-  readonly pageSize = signal(PAGE_SIZE);
+  readonly sorting = signal<SortingState>([{ id: 'lastEventDate', desc: true }]);
+  readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
 
-  readonly filtered = computed<CrmClient[]>(() => {
-    const q = (this.query() ?? '').trim().toLowerCase();
-    const all = this.items();
-    if (!q) return all;
-    return all.filter(
-      (c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q),
-    );
-  });
+  private readonly columns: ColumnDef<CrmClient>[] = [
+    { id: 'name', accessorKey: 'name', enableSorting: true, sortingFn: 'alphanumeric' },
+    { id: 'phone', accessorKey: 'phone', enableSorting: true, sortingFn: 'alphanumeric' },
+    {
+      id: 'totalSpend',
+      accessorFn: (c) => Number(c.totalSpend ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'totalReservations',
+      accessorFn: (c) => Number(c.totalReservations ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'lastEventDate',
+      accessorFn: (c) => c.lastEventDate ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    { id: 'lastTableId', accessorKey: 'lastTableId', enableSorting: true, sortingFn: 'alphanumeric' },
+    { id: 'updatedBy', accessorKey: 'updatedBy', enableSorting: true, sortingFn: 'alphanumeric' },
+    { id: 'actions', enableSorting: false },
+  ];
 
-  readonly totalFiltered = computed(() => this.filtered().length);
+  readonly table = createAngularTable<CrmClient>(() => ({
+    data: this.items(),
+    columns: this.columns,
+    state: {
+      sorting: this.sorting(),
+      globalFilter: this.query(),
+      pagination: this.pagination(),
+    },
+    onSortingChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(this.sorting()) : updater;
+      this.sorting.set(next);
+    },
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(this.pagination()) : updater;
+      this.pagination.set(next);
+    },
+    globalFilterFn: (row, _columnId, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const c = row.original;
+      return Boolean(
+        c.name?.toLowerCase().includes(q) || c.phone?.includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
 
-  readonly paginated = computed<CrmClient[]>(() => {
-    const list = this.filtered();
-    const start = (this.currentPage() - 1) * this.pageSize();
-    return list.slice(start, start + this.pageSize());
-  });
+  /** Filtered + sorted slice for the *current* page (mobile cards + desktop tbody). */
+  readonly currentRows = computed(() =>
+    this.table.getRowModel().rows.map((r) => r.original),
+  );
+  readonly totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+
+  /** 1-based mirror of `pagination().pageIndex` for `<hlm-numbered-pagination>`. */
+  readonly currentPage = computed(() => this.pagination().pageIndex + 1);
+  readonly pageSize = computed(() => this.pagination().pageSize);
 
   readonly pageStart = computed(() =>
-    this.totalFiltered() === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1,
+    this.totalFiltered() === 0
+      ? 0
+      : this.pagination().pageIndex * this.pagination().pageSize + 1,
   );
   readonly pageEnd = computed(() =>
-    Math.min(this.currentPage() * this.pageSize(), this.totalFiltered()),
+    Math.min(
+      (this.pagination().pageIndex + 1) * this.pagination().pageSize,
+      this.totalFiltered(),
+    ),
   );
 
   editForm = new FormGroup({
@@ -77,11 +160,9 @@ export class Clients implements OnInit {
 
   constructor() {
     effect(() => {
-      // Reset to page 1 whenever the search query changes. Reading
-      // `query()` registers the dependency; we only act when the value
-      // actually changes (signal equality handles dedupe).
+      // Reset to page 0 whenever the search query changes.
       this.query();
-      this.currentPage.set(1);
+      this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
     });
   }
 
@@ -102,6 +183,19 @@ export class Clients implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  /** Adapter used by sort-header components in the template. */
+  column(id: string) {
+    return this.table.getColumn(id);
   }
 
   formatMoney(value?: number): string {
