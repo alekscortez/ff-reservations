@@ -1,54 +1,89 @@
-<section class="page">
-  <header class="page-header">
-    <h1>Events</h1>
-    <p>Select an event date for reservations</p>
+<section class="flex w-full flex-col gap-4">
+  <header>
+    <h1 class="text-2xl font-semibold text-brand-900">Events</h1>
+    <p class="text-sm text-brand-600">Select an event date for reservations</p>
   </header>
 
-  <section class="card">
-    <div class="filters">
-      <label>
-        Filter by Date
-        <input type="date" [formControl]="filterDate" />
-      </label>
-      <label>
-        Filter by Name
-        <input type="text" [formControl]="filterName" placeholder="Saturday Night" />
-      </label>
-      <button
-        type="button"
-        (click)="filterDate.setValue(''); filterName.setValue('')"
-        [disabled]="loading"
-      >
-        Clear
-      </button>
-    </div>
-    <div *ngIf="loading" class="muted">Loading…</div>
-    <div *ngIf="!loading && filteredItems().length === 0" class="muted">No events found.</div>
-    <p class="error" *ngIf="error">{{ error }}</p>
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <input
+      type="text"
+      hlmInput
+      class="w-full sm:w-80"
+      [formControl]="filterQuery"
+      placeholder="Filter events by date, name, or status…"
+      aria-label="Filter events"
+    />
+  </div>
 
-    <table *ngIf="filteredItems().length > 0">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Name</th>
-          <th>Status</th>
-          <th>Min Deposit</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let e of filteredItems()">
-          <td>{{ e.eventDate }}</td>
-          <td>{{ e.eventName }}</td>
-          <td>{{ e.status }}</td>
-          <td>{{ e.minDeposit }}</td>
-          <td>
-            <button type="button" (click)="goToReservations(e.eventDate)">
-              Select
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+  <div *ngIf="loading" class="text-sm text-brand-500">Loading…</div>
+  <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">No events found.</div>
+  <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">No matches.</div>
+  <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>
+
+  <div class="hidden overflow-hidden rounded-md border border-brand-200 bg-white lg:block" *ngIf="totalFiltered() > 0">
+    <div hlmTableContainer>
+      <table hlmTable>
+        <thead hlmTHead>
+          <tr hlmTr class="hover:bg-transparent">
+            <th hlmTh>
+              <hlm-table-sort-header [column]="column('eventDate')!" label="Date" />
+            </th>
+            <th hlmTh>
+              <hlm-table-sort-header [column]="column('eventName')!" label="Name" />
+            </th>
+            <th hlmTh>
+              <hlm-table-sort-header [column]="column('status')!" label="Status" />
+            </th>
+            <th hlmTh class="text-right">
+              <hlm-table-sort-header [column]="column('minDeposit')!" label="Min Deposit" class="-mr-3 ml-auto flex" />
+            </th>
+            <th hlmTh class="text-right"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody hlmTBody>
+          <tr hlmTr *ngFor="let e of currentRows(); trackBy: trackByEventId">
+            <td hlmTd class="font-medium text-brand-900">{{ e.eventDate }}</td>
+            <td hlmTd class="text-brand-700">{{ e.eventName }}</td>
+            <td hlmTd class="text-brand-600">{{ e.status }}</td>
+            <td hlmTd class="text-right tabular-nums">${{ e.minDeposit }}</td>
+            <td hlmTd class="text-right">
+              <button hlmBtn size="sm" type="button" (click)="goToReservations(e.eventDate)">
+                Select
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid w-full gap-3 lg:hidden" *ngIf="totalFiltered() > 0">
+    <article class="rounded-2xl border border-brand-200 bg-white p-4 shadow-sm" *ngFor="let e of currentRows(); trackBy: trackByEventId">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-lg font-semibold text-brand-900">{{ e.eventDate }}</div>
+          <div class="mt-1 text-sm text-brand-700">{{ e.eventName }}</div>
+        </div>
+        <span class="text-xs font-semibold uppercase tracking-[0.15em] text-brand-500">{{ e.status }}</span>
+      </div>
+      <div class="mt-3 flex items-center justify-between text-sm text-brand-700">
+        <span class="text-brand-500">Min deposit</span>
+        <span class="font-semibold tabular-nums">${{ e.minDeposit }}</span>
+      </div>
+      <div class="mt-3 flex justify-end">
+        <button hlmBtn type="button" (click)="goToReservations(e.eventDate)">Select</button>
+      </div>
+    </article>
+  </div>
+
+  <hlm-numbered-pagination
+    *ngIf="totalFiltered() > pageSize()"
+    [currentPage]="currentPage()"
+    (currentPageChange)="onPageChange($event)"
+    [itemsPerPage]="pageSize()"
+    (itemsPerPageChange)="onPageSizeChange($event)"
+    [totalItems]="totalFiltered()"
+    [iconOnlyEdges]="true"
+    ariaLabel="Events pagination"
+  />
 </section>

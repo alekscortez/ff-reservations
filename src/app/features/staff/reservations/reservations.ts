@@ -1,6 +1,30 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
 import {
   CreateSquarePaymentLinkResponse,
   ReservationHistoryItem,
@@ -24,6 +48,26 @@ import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { HlmInput } from '../../../shared/ui/input';
+import {
+  HlmMenu,
+  HlmMenuCheckbox,
+  HlmMenuItem,
+  HlmMenuSeparator,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
+
+const PAGE_SIZE = 25;
 // (BadgeVariants imported for paymentStatusBadgeVariant in Phase 5c —
 // re-used here for the 3 modal-internal badge variants below.)
 
@@ -75,6 +119,7 @@ interface PaymentLinkSmsState {
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    NgIcon,
     PhoneDisplayPipe,
     PaymentMethodLabelPipe,
     SystemActorLabelPipe,
@@ -83,7 +128,22 @@ interface PaymentLinkSmsState {
     HlmButton,
     HlmBadge,
     HlmInput,
+    HlmMenu,
+    HlmMenuCheckbox,
+    HlmMenuItem,
+    HlmMenuSeparator,
+    HlmMenuTrigger,
+    HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
   ],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './reservations.html',
   styleUrl: './reservations.scss',
 })
@@ -95,9 +155,130 @@ export class Reservations implements OnInit, OnDestroy {
   private squareWebPayments = inject(SquareWebPaymentsService);
 
   filterDate = new FormControl('', { nonNullable: true });
-  items: ReservationItem[] = [];
+  filterQuery = new FormControl('', { nonNullable: true });
+  readonly items = signal<ReservationItem[]>([]);
   loading = false;
   error: string | null = null;
+
+  private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
+  readonly sorting = signal<SortingState>([{ id: 'tableId', desc: false }]);
+  readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
+  readonly columnVisibility = signal<VisibilityState>({});
+
+  readonly hidableColumnIds: ReadonlyArray<string> = [
+    'tableId',
+    'paymentStatus',
+    'remaining',
+    'deadline',
+    'updated',
+  ];
+
+  private readonly columnLabels: Record<string, string> = {
+    tableId: 'Reservation',
+    paymentStatus: 'Payment',
+    remaining: 'Remaining',
+    deadline: 'Deadline',
+    updated: 'Updated',
+  };
+
+  private readonly tableColumns: ColumnDef<ReservationItem>[] = [
+    {
+      id: 'tableId',
+      accessorFn: (r) => `${r.tableId || ''} ${r.customerName || ''}`.toLowerCase(),
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'paymentStatus',
+      accessorFn: (r) => `${r.status} ${r.paymentStatus ?? ''}`,
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'remaining',
+      accessorFn: (r) => {
+        if (r.status === 'CANCELLED') return 0;
+        const due = Number(r.amountDue ?? 0);
+        const paid = Number(r.depositAmount ?? 0);
+        return Math.max(0, Number((due - paid).toFixed(2)));
+      },
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'deadline',
+      accessorFn: (r) => r.paymentDeadlineAt ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'updated',
+      accessorFn: (r) => Number(r.updatedAt ?? r.createdAt ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    { id: 'actions', enableSorting: false },
+  ];
+
+  readonly table = createAngularTable<ReservationItem>(() => ({
+    data: this.items(),
+    columns: this.tableColumns,
+    state: {
+      sorting: this.sorting(),
+      globalFilter: this.query(),
+      pagination: this.pagination(),
+      columnVisibility: this.columnVisibility(),
+    },
+    onSortingChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(this.sorting()) : updater;
+      this.sorting.set(next);
+    },
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(this.pagination()) : updater;
+      this.pagination.set(next);
+    },
+    onColumnVisibilityChange: (updater) => {
+      const next =
+        typeof updater === 'function' ? updater(this.columnVisibility()) : updater;
+      this.columnVisibility.set(next);
+    },
+    globalFilterFn: (row, _columnId, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const r = row.original;
+      return Boolean(
+        (r.tableId || '').toLowerCase().includes(q) ||
+          (r.customerName || '').toLowerCase().includes(q) ||
+          (r.phone || '').includes(q) ||
+          formatTableLabelLower(r).includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly currentRows = computed(() =>
+    this.table.getRowModel().rows.map((r) => r.original),
+  );
+  readonly totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+  readonly currentPage = computed(() => this.pagination().pageIndex + 1);
+  readonly pageSize = computed(() => this.pagination().pageSize);
+  readonly pageStart = computed(() =>
+    this.totalFiltered() === 0
+      ? 0
+      : this.pagination().pageIndex * this.pagination().pageSize + 1,
+  );
+  readonly pageEnd = computed(() =>
+    Math.min(
+      (this.pagination().pageIndex + 1) * this.pagination().pageSize,
+      this.totalFiltered(),
+    ),
+  );
+  readonly visibleColumnCount = computed(
+    () => this.hidableColumnIds.filter((id) => this.isColumnVisible(id)).length + 1,
+  );
   events: EventItem[] = [];
   eventsLoading = false;
   eventsError: string | null = null;
@@ -143,6 +324,13 @@ export class Reservations implements OnInit, OnDestroy {
     receiptNumber: new FormControl('', { nonNullable: true }),
     note: new FormControl('', { nonNullable: true }),
   });
+
+  constructor() {
+    effect(() => {
+      this.query();
+      this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+  }
 
   ngOnInit(): void {
     this.loadContextAndEvents();
@@ -269,20 +457,22 @@ export class Reservations implements OnInit, OnDestroy {
   load(): void {
     const date = this.filterDate.value?.trim();
     if (!date) {
-      this.items = [];
+      this.items.set([]);
       return;
     }
     this.loading = true;
     this.error = null;
     this.reservationsApi.list(date).subscribe({
       next: (items) => {
-        this.items = [...items].sort((a, b) =>
+        const sorted = [...items].sort((a, b) =>
           (a.tableId || '').localeCompare(b.tableId || '', undefined, {
             numeric: true,
             sensitivity: 'base',
           })
         );
-        this.hydrateStoredPaymentLinks(this.items);
+        this.items.set(sorted);
+        this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
+        this.hydrateStoredPaymentLinks(sorted);
         this.loading = false;
       },
       error: (err) => {
@@ -334,19 +524,22 @@ export class Reservations implements OnInit, OnDestroy {
       )
       .subscribe({
       next: () => {
-        this.items = this.items.map((x) =>
-          x.reservationId === item.reservationId
-            ? {
-                ...x,
-                status: 'CANCELLED',
-                cancelReason: reason.trim(),
-                ...(resolutionType === 'REFUND'
-                  ? { paymentStatus: 'REFUNDED' as const }
-                  : {}),
-              }
-            : x
+        this.items.update((list) =>
+          list.map((x) =>
+            x.reservationId === item.reservationId
+              ? {
+                  ...x,
+                  status: 'CANCELLED',
+                  cancelReason: reason.trim(),
+                  ...(resolutionType === 'REFUND'
+                    ? { paymentStatus: 'REFUNDED' as const }
+                    : {}),
+                }
+              : x,
+          ),
         );
-        const updated = this.items.find((x) => x.reservationId === item.reservationId) ?? null;
+        const updated =
+          this.items().find((x) => x.reservationId === item.reservationId) ?? null;
         if (updated && this.detailItem?.reservationId === item.reservationId) {
           this.detailItem = updated;
         }
@@ -1371,8 +1564,10 @@ export class Reservations implements OnInit, OnDestroy {
         .subscribe({
           next: (creditRes) => {
             const afterCredit = creditRes.item;
-            this.items = this.items.map((x) =>
-              x.reservationId === afterCredit.reservationId ? afterCredit : x
+            this.items.update((list) =>
+              list.map((x) =>
+                x.reservationId === afterCredit.reservationId ? afterCredit : x,
+              ),
             );
             const remaining = this.remainingAmount(afterCredit);
             if (remaining <= 0) {
@@ -1438,8 +1633,10 @@ export class Reservations implements OnInit, OnDestroy {
               .subscribe({
                 next: (finalRes) => {
                   const updated = finalRes.item;
-                  this.items = this.items.map((x) =>
-                    x.reservationId === updated.reservationId ? updated : x
+                  this.items.update((list) =>
+                    list.map((x) =>
+                      x.reservationId === updated.reservationId ? updated : x,
+                    ),
                   );
                   this.loading = false;
                   this.closePayment();
@@ -1473,8 +1670,10 @@ export class Reservations implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           const updated = res.item;
-          this.items = this.items.map((x) =>
-            x.reservationId === updated.reservationId ? updated : x
+          this.items.update((list) =>
+            list.map((x) =>
+              x.reservationId === updated.reservationId ? updated : x,
+            ),
           );
           this.loading = false;
           this.closePayment();
@@ -1614,8 +1813,10 @@ export class Reservations implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           const updated = res.item;
-          this.items = this.items.map((x) =>
-            x.reservationId === updated.reservationId ? updated : x
+          this.items.update((list) =>
+            list.map((x) =>
+              x.reservationId === updated.reservationId ? updated : x,
+            ),
           );
           this.loading = false;
           this.closePayment();
@@ -1823,5 +2024,33 @@ export class Reservations implements OnInit, OnDestroy {
           err?.error?.message || err?.message || 'Failed to load reservation credits';
       },
     });
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  isColumnVisible(id: string): boolean {
+    return this.columnVisibility()[id] !== false;
+  }
+
+  toggleColumnVisibility(id: string): void {
+    this.columnVisibility.update((s) => ({ ...s, [id]: !this.isColumnVisible(id) }));
+  }
+
+  columnLabel(id: string): string {
+    return this.columnLabels[id] ?? id;
+  }
+
+  column(id: string) {
+    return this.table.getColumn(id);
+  }
+
+  trackByReservationId(_: number, item: ReservationItem): string {
+    return item.reservationId;
   }
 }

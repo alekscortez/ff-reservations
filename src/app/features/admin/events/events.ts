@@ -1,6 +1,27 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideEllipsis } from '@ng-icons/lucide';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
 import { EventsService } from '../../../core/http/events.service';
 import { TablesService } from '../../../core/http/tables.service';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
@@ -11,10 +32,51 @@ import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
+import {
+  HlmMenu,
+  HlmMenuItem,
+  HlmMenuSeparator,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
+
+const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-events',
-  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton, HlmInput, HlmToggle],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    NgIcon,
+    HlmDialog,
+    HlmButton,
+    HlmInput,
+    HlmToggle,
+    HlmMenu,
+    HlmMenuItem,
+    HlmMenuSeparator,
+    HlmMenuTrigger,
+    HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
+  ],
+  providers: [provideIcons({ lucideEllipsis })],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
@@ -23,7 +85,7 @@ export class Events implements OnInit, OnDestroy {
   private tablesApi = inject(TablesService);
   private frequentApi = inject(FrequentClientsService);
 
-  items: EventItem[] = [];
+  readonly items = signal<EventItem[]>([]);
   loading = false;
   error: string | null = null;
   conflictDate: string | null = null;
@@ -44,8 +106,72 @@ export class Events implements OnInit, OnDestroy {
     minDeposit: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
   });
 
-  filterDate = new FormControl('', { nonNullable: true });
-  filterName = new FormControl('', { nonNullable: true });
+  filterQuery = new FormControl('', { nonNullable: true });
+
+  private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
+  readonly sorting = signal<SortingState>([{ id: 'eventDate', desc: false }]);
+  readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
+
+  private readonly tableColumns: ColumnDef<EventItem>[] = [
+    {
+      id: 'eventDate',
+      accessorFn: (e) => e.eventDate ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'eventName',
+      accessorFn: (e) => e.eventName ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'status',
+      accessorFn: (e) => e.status ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    { id: 'actions', enableSorting: false },
+  ];
+
+  readonly table = createAngularTable<EventItem>(() => ({
+    data: this.items(),
+    columns: this.tableColumns,
+    state: {
+      sorting: this.sorting(),
+      globalFilter: this.query(),
+      pagination: this.pagination(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.sorting()) : u;
+      this.sorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.pagination()) : u;
+      this.pagination.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const e = row.original;
+      return Boolean(
+        (e.eventName || '').toLowerCase().includes(q) ||
+          (e.eventDate || '').toLowerCase().includes(q) ||
+          (e.status || '').toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly currentRows = computed(() =>
+    this.table.getRowModel().rows.map((r) => r.original),
+  );
+  readonly totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+  readonly currentPage = computed(() => this.pagination().pageIndex + 1);
+  readonly pageSize = computed(() => this.pagination().pageSize);
 
   createSectionPricing = new FormGroup({
     A: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
@@ -70,10 +196,33 @@ export class Events implements OnInit, OnDestroy {
     E: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
   });
 
+  constructor() {
+    effect(() => {
+      this.query();
+      this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+  }
+
   ngOnInit(): void {
     this.loadEvents();
     this.loadTemplate();
     this.loadFrequentClients();
+  }
+
+  onPageChange(page: number): void {
+    this.pagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  column(id: string) {
+    return this.table.getColumn(id);
+  }
+
+  trackByEventId(_: number, item: EventItem): string {
+    return item.eventId;
   }
 
   ngOnDestroy(): void {
@@ -86,7 +235,10 @@ export class Events implements OnInit, OnDestroy {
     this.conflictDate = null;
     this.eventsApi.listEvents().subscribe({
       next: (items) => {
-        this.items = items.sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
+        this.items.set(
+          [...items].sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
+        );
+        this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.loading = false;
       },
       error: (err) => {
@@ -146,8 +298,8 @@ export class Events implements OnInit, OnDestroy {
 
     this.eventsApi.createEvent(payload).subscribe({
       next: (item) => {
-        this.items = [item, ...this.items].sort((a, b) =>
-          (a.eventDate || '').localeCompare(b.eventDate || '')
+        this.items.update((list) =>
+          [item, ...list].sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
         );
         this.form.reset({ eventName: '', eventDate: '', minDeposit: 0 });
         this.createDisabled.clear();
@@ -220,9 +372,11 @@ export class Events implements OnInit, OnDestroy {
 
     this.eventsApi.updateEvent(this.editingId, patch).subscribe({
       next: (item) => {
-        this.items = this.items
-          .map((x) => (x.eventId === item.eventId ? item : x))
-          .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || ''));
+        this.items.update((list) =>
+          list
+            .map((x) => (x.eventId === item.eventId ? item : x))
+            .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
+        );
         this.editingId = null;
         this.loading = false;
       },
@@ -245,23 +399,13 @@ export class Events implements OnInit, OnDestroy {
     this.conflictDate = null;
     this.eventsApi.deleteEvent(item.eventId).subscribe({
       next: () => {
-        this.items = this.items.filter((x) => x.eventId !== item.eventId);
+        this.items.update((list) => list.filter((x) => x.eventId !== item.eventId));
         this.loading = false;
       },
       error: (err) => {
         this.error = err?.error?.message || err?.message || 'Failed to delete event';
         this.loading = false;
       },
-    });
-  }
-
-  filteredItems(): EventItem[] {
-    const date = this.filterDate.value?.trim();
-    const name = this.filterName.value?.trim().toLowerCase();
-    return this.items.filter((x) => {
-      const matchDate = date ? x.eventDate === date : true;
-      const matchName = name ? (x.eventName || '').toLowerCase().includes(name) : true;
-      return matchDate && matchName;
     });
   }
 

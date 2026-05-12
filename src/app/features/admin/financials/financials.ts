@@ -1,8 +1,30 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of, Subscription } from 'rxjs';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronDown } from '@ng-icons/lucide';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
 import { EventsService } from '../../../core/http/events.service';
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { EventItem } from '../../../shared/models/event.model';
@@ -13,6 +35,25 @@ import {
 } from '../../../shared/models/reservation.model';
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmInput } from '../../../shared/ui/input';
+import {
+  HlmMenu,
+  HlmMenuCheckbox,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
+
+const PAGE_SIZE = 25;
 
 interface FinancialRow {
   eventId: string;
@@ -96,7 +137,28 @@ interface PaymentLedgerRow {
 
 @Component({
   selector: 'app-financials',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, TableLabelPipe, HlmButton],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    RouterLink,
+    NgIcon,
+    TableLabelPipe,
+    HlmButton,
+    HlmInput,
+    HlmMenu,
+    HlmMenuCheckbox,
+    HlmMenuTrigger,
+    HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
+  ],
+  providers: [provideIcons({ lucideChevronDown })],
   templateUrl: './financials.html',
   styleUrl: './financials.scss',
 })
@@ -109,14 +171,357 @@ export class Financials implements OnInit, OnDestroy {
   events: EventItem[] = [];
   filteredEvents: EventItem[] = [];
   rows: FinancialRow[] = [];
-  receivables: FinancialRow[] = [];
-  ledgerRows: PaymentLedgerRow[] = [];
-  eventSummaries: EventFinancialSummary[] = [];
+  readonly receivables = signal<FinancialRow[]>([]);
+  readonly ledgerRows = signal<PaymentLedgerRow[]>([]);
+  readonly eventSummaries = signal<EventFinancialSummary[]>([]);
   methodTotals: MethodTotals = { cash: 0, square: 0 };
 
   rangeFrom = new FormControl('', { nonNullable: true });
   rangeTo = new FormControl('', { nonNullable: true });
   eventStatus = new FormControl<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL', { nonNullable: true });
+
+  summariesFilter = new FormControl('', { nonNullable: true });
+  receivablesFilter = new FormControl('', { nonNullable: true });
+  ledgerFilter = new FormControl('', { nonNullable: true });
+
+  private readonly summariesQuery = toSignal(this.summariesFilter.valueChanges, {
+    initialValue: '',
+  });
+  private readonly receivablesQuery = toSignal(this.receivablesFilter.valueChanges, {
+    initialValue: '',
+  });
+  private readonly ledgerQuery = toSignal(this.ledgerFilter.valueChanges, {
+    initialValue: '',
+  });
+
+  readonly summariesSorting = signal<SortingState>([{ id: 'eventDate', desc: true }]);
+  readonly summariesPagination = signal<PaginationState>({
+    pageIndex: 0,
+    pageSize: PAGE_SIZE,
+  });
+  readonly receivablesSorting = signal<SortingState>([{ id: 'deadline', desc: false }]);
+  readonly receivablesPagination = signal<PaginationState>({
+    pageIndex: 0,
+    pageSize: PAGE_SIZE,
+  });
+  readonly ledgerSorting = signal<SortingState>([{ id: 'createdAt', desc: true }]);
+  readonly ledgerPagination = signal<PaginationState>({
+    pageIndex: 0,
+    pageSize: PAGE_SIZE,
+  });
+  readonly ledgerVisibility = signal<VisibilityState>({});
+
+  readonly ledgerHidableColumnIds: ReadonlyArray<string> = [
+    'createdAt',
+    'event',
+    'customer',
+    'amount',
+    'method',
+    'source',
+    'providerPaymentId',
+    'orderId',
+    'receipt',
+    'actor',
+  ];
+
+  private readonly ledgerColumnLabels: Record<string, string> = {
+    createdAt: 'Paid At',
+    event: 'Event',
+    customer: 'Customer',
+    amount: 'Amount',
+    method: 'Method',
+    source: 'Source',
+    providerPaymentId: 'Square Txn ID',
+    orderId: 'Order ID',
+    receipt: 'Receipt',
+    actor: 'By',
+  };
+
+  private readonly summariesColumns: ColumnDef<EventFinancialSummary>[] = [
+    {
+      id: 'eventDate',
+      accessorFn: (r) => r.eventDate,
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    { id: 'status', accessorKey: 'status', enableSorting: true, sortingFn: 'alphanumeric' },
+    {
+      id: 'collected',
+      accessorFn: (r) => Number(r.collected ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'outstanding',
+      accessorFn: (r) => Number(r.outstanding ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'overdue',
+      accessorFn: (r) => Number(r.overdue ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'confirmed',
+      accessorFn: (r) => Number(r.confirmed ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+  ];
+
+  private readonly receivablesColumns: ColumnDef<FinancialRow>[] = [
+    {
+      id: 'event',
+      accessorFn: (r) => `${r.eventDate} ${r.eventName ?? ''}`,
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'customer',
+      accessorFn: (r) => r.customerName ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'tableId',
+      accessorFn: (r) => r.tableId ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'status',
+      accessorFn: (r) => (r.isOverdue ? 'OVERDUE' : r.isDueSoon ? 'DUE_SOON' : r.paymentStatus ?? ''),
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'balance',
+      accessorFn: (r) => Number(r.balance ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'deadline',
+      accessorFn: (r) => r.deadlineMs ?? 0,
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+  ];
+
+  private readonly ledgerColumns: ColumnDef<PaymentLedgerRow>[] = [
+    {
+      id: 'createdAt',
+      accessorFn: (r) => Number(r.createdAt ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'event',
+      accessorFn: (r) => `${r.eventDate} ${r.eventName ?? ''}`,
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'customer',
+      accessorFn: (r) => r.customerName ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'amount',
+      accessorFn: (r) => Number(r.amount ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'method',
+      accessorFn: (r) => r.method ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'source',
+      accessorFn: (r) => r.source ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'providerPaymentId',
+      accessorFn: (r) => r.providerPaymentId ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'orderId',
+      accessorFn: (r) => r.orderId ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    { id: 'receipt', enableSorting: false },
+    {
+      id: 'actor',
+      accessorFn: (r) => `${r.source ?? ''} ${r.createdBy ?? ''}`,
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+  ];
+
+  readonly summariesTable = createAngularTable<EventFinancialSummary>(() => ({
+    data: this.eventSummaries(),
+    columns: this.summariesColumns,
+    state: {
+      sorting: this.summariesSorting(),
+      globalFilter: this.summariesQuery(),
+      pagination: this.summariesPagination(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.summariesSorting()) : u;
+      this.summariesSorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.summariesPagination()) : u;
+      this.summariesPagination.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const r = row.original;
+      return Boolean(
+        (r.eventName || '').toLowerCase().includes(q) ||
+          (r.eventDate || '').toLowerCase().includes(q) ||
+          (r.status || '').toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly receivablesTable = createAngularTable<FinancialRow>(() => ({
+    data: this.receivables(),
+    columns: this.receivablesColumns,
+    state: {
+      sorting: this.receivablesSorting(),
+      globalFilter: this.receivablesQuery(),
+      pagination: this.receivablesPagination(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.receivablesSorting()) : u;
+      this.receivablesSorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.receivablesPagination()) : u;
+      this.receivablesPagination.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const r = row.original;
+      return Boolean(
+        (r.customerName || '').toLowerCase().includes(q) ||
+          (r.phone || '').includes(q) ||
+          (r.eventName || '').toLowerCase().includes(q) ||
+          (r.eventDate || '').toLowerCase().includes(q) ||
+          (r.tableId || '').toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly ledgerTable = createAngularTable<PaymentLedgerRow>(() => ({
+    data: this.ledgerRows(),
+    columns: this.ledgerColumns,
+    state: {
+      sorting: this.ledgerSorting(),
+      globalFilter: this.ledgerQuery(),
+      pagination: this.ledgerPagination(),
+      columnVisibility: this.ledgerVisibility(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.ledgerSorting()) : u;
+      this.ledgerSorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.ledgerPagination()) : u;
+      this.ledgerPagination.set(next);
+    },
+    onColumnVisibilityChange: (u) => {
+      const next = typeof u === 'function' ? u(this.ledgerVisibility()) : u;
+      this.ledgerVisibility.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const r = row.original;
+      return Boolean(
+        (r.customerName || '').toLowerCase().includes(q) ||
+          (r.eventName || '').toLowerCase().includes(q) ||
+          (r.eventDate || '').toLowerCase().includes(q) ||
+          (r.tableId || '').toLowerCase().includes(q) ||
+          (r.providerPaymentId || '').toLowerCase().includes(q) ||
+          (r.orderId || '').toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly summariesCurrentRows = computed(() =>
+    this.summariesTable.getRowModel().rows.map((r) => r.original),
+  );
+  readonly summariesTotalFiltered = computed(
+    () => this.summariesTable.getFilteredRowModel().rows.length,
+  );
+  readonly summariesCurrentPage = computed(() => this.summariesPagination().pageIndex + 1);
+  readonly summariesPageSize = computed(() => this.summariesPagination().pageSize);
+
+  readonly receivablesCurrentRows = computed(() =>
+    this.receivablesTable.getRowModel().rows.map((r) => r.original),
+  );
+  readonly receivablesTotalFiltered = computed(
+    () => this.receivablesTable.getFilteredRowModel().rows.length,
+  );
+  readonly receivablesCurrentPage = computed(
+    () => this.receivablesPagination().pageIndex + 1,
+  );
+  readonly receivablesPageSize = computed(() => this.receivablesPagination().pageSize);
+
+  readonly ledgerCurrentRows = computed(() =>
+    this.ledgerTable.getRowModel().rows.map((r) => r.original),
+  );
+  readonly ledgerTotalFiltered = computed(
+    () => this.ledgerTable.getFilteredRowModel().rows.length,
+  );
+  readonly ledgerCurrentPage = computed(() => this.ledgerPagination().pageIndex + 1);
+  readonly ledgerPageSize = computed(() => this.ledgerPagination().pageSize);
+
+  readonly ledgerVisibleColumnCount = computed(
+    () =>
+      this.ledgerHidableColumnIds.filter((id) => this.isLedgerColumnVisible(id)).length,
+  );
+
+  constructor() {
+    effect(() => {
+      this.summariesQuery();
+      this.summariesPagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+    effect(() => {
+      this.receivablesQuery();
+      this.receivablesPagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+    effect(() => {
+      this.ledgerQuery();
+      this.ledgerPagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+  }
 
   overview: OverviewKpis = {
     eventsInRange: 0,
@@ -372,11 +777,15 @@ export class Financials implements OnInit, OnDestroy {
     this.snapshotSub = this.loadReservationsForEvents(this.filteredEvents).subscribe({
       next: (snapshots) => {
         this.rows = this.buildRows(snapshots);
-        this.receivables = this.buildReceivables(this.rows);
-        this.ledgerRows = this.buildPaymentLedger(snapshots);
-        this.eventSummaries = this.buildEventSummaries(this.filteredEvents, this.rows, this.receivables);
-        this.overview = this.buildOverview(this.filteredEvents, this.rows, this.receivables);
+        const receivables = this.buildReceivables(this.rows);
+        this.receivables.set(receivables);
+        this.ledgerRows.set(this.buildPaymentLedger(snapshots));
+        this.eventSummaries.set(this.buildEventSummaries(this.filteredEvents, this.rows, receivables));
+        this.overview = this.buildOverview(this.filteredEvents, this.rows, receivables);
         this.methodTotals = this.buildMethodTotals(snapshots);
+        this.summariesPagination.update((s) => ({ ...s, pageIndex: 0 }));
+        this.receivablesPagination.update((s) => ({ ...s, pageIndex: 0 }));
+        this.ledgerPagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.loading = false;
       },
       error: (err) => {
@@ -723,9 +1132,9 @@ export class Financials implements OnInit, OnDestroy {
 
   private clearReport(): void {
     this.rows = [];
-    this.receivables = [];
-    this.ledgerRows = [];
-    this.eventSummaries = [];
+    this.receivables.set([]);
+    this.ledgerRows.set([]);
+    this.eventSummaries.set([]);
     this.methodTotals = { cash: 0, square: 0 };
     this.overview = {
       eventsInRange: 0,
@@ -782,5 +1191,68 @@ export class Financials implements OnInit, OnDestroy {
 
   private sum(values: number[]): number {
     return values.reduce((acc, n) => acc + Number(n || 0), 0);
+  }
+
+  onSummariesPageChange(page: number): void {
+    this.summariesPagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onSummariesPageSizeChange(size: number): void {
+    this.summariesPagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  onReceivablesPageChange(page: number): void {
+    this.receivablesPagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onReceivablesPageSizeChange(size: number): void {
+    this.receivablesPagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  onLedgerPageChange(page: number): void {
+    this.ledgerPagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onLedgerPageSizeChange(size: number): void {
+    this.ledgerPagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  isLedgerColumnVisible(id: string): boolean {
+    return this.ledgerVisibility()[id] !== false;
+  }
+
+  toggleLedgerColumnVisibility(id: string): void {
+    this.ledgerVisibility.update((s) => ({
+      ...s,
+      [id]: !this.isLedgerColumnVisible(id),
+    }));
+  }
+
+  ledgerColumnLabel(id: string): string {
+    return this.ledgerColumnLabels[id] ?? id;
+  }
+
+  summariesColumn(id: string) {
+    return this.summariesTable.getColumn(id);
+  }
+
+  receivablesColumn(id: string) {
+    return this.receivablesTable.getColumn(id);
+  }
+
+  ledgerColumn(id: string) {
+    return this.ledgerTable.getColumn(id);
+  }
+
+  trackBySummaryDate(_: number, row: EventFinancialSummary): string {
+    return row.eventDate;
+  }
+
+  trackByReceivable(_: number, row: FinancialRow): string {
+    return row.reservationId;
+  }
+
+  trackByPaymentId(_: number, row: PaymentLedgerRow): string {
+    return row.paymentId;
   }
 }

@@ -1,21 +1,82 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
 import { AdminUser, UsersService } from '../../../core/http/users.service';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { HlmInput } from '../../../shared/ui/input';
+import {
+  HlmMenu,
+  HlmMenuCheckbox,
+  HlmMenuItem,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
+
+const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmBadge, HlmInput],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    NgIcon,
+    HlmButton,
+    HlmBadge,
+    HlmInput,
+    HlmMenu,
+    HlmMenuCheckbox,
+    HlmMenuItem,
+    HlmMenuTrigger,
+    HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
+  ],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './users.html',
   styleUrl: './users.scss',
 })
 export class Users implements OnInit {
   private usersApi = inject(UsersService);
 
-  items: AdminUser[] = [];
+  readonly items = signal<AdminUser[]>([]);
   loading = false;
   loadingMore = false;
   createLoading = false;
@@ -31,6 +92,128 @@ export class Users implements OnInit {
     role: new FormControl<'Admin' | 'Staff'>('Staff', { nonNullable: true }),
   });
 
+  private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
+  readonly sorting = signal<SortingState>([{ id: 'role', desc: false }]);
+  readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
+  readonly columnVisibility = signal<VisibilityState>({});
+
+  readonly hidableColumnIds: ReadonlyArray<string> = [
+    'name',
+    'email',
+    'role',
+    'status',
+    'updated',
+  ];
+
+  private readonly columnLabels: Record<string, string> = {
+    name: 'Name',
+    email: 'Email',
+    role: 'Role',
+    status: 'Status',
+    updated: 'Updated',
+  };
+
+  private readonly tableColumns: ColumnDef<AdminUser>[] = [
+    {
+      id: 'name',
+      accessorFn: (u) => u.name ?? u.username ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'email',
+      accessorFn: (u) => u.email ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'role',
+      accessorFn: (u) => u.role ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'status',
+      accessorFn: (u) => (u.enabled ? 'enabled' : 'disabled'),
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'updated',
+      accessorFn: (u) => Number(u.updatedAt ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    { id: 'actions', enableSorting: false },
+  ];
+
+  readonly table = createAngularTable<AdminUser>(() => ({
+    data: this.items(),
+    columns: this.tableColumns,
+    state: {
+      sorting: this.sorting(),
+      globalFilter: this.query(),
+      pagination: this.pagination(),
+      columnVisibility: this.columnVisibility(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.sorting()) : u;
+      this.sorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.pagination()) : u;
+      this.pagination.set(next);
+    },
+    onColumnVisibilityChange: (u) => {
+      const next = typeof u === 'function' ? u(this.columnVisibility()) : u;
+      this.columnVisibility.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const u = row.original;
+      return Boolean(
+        (u.name || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q) ||
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.role || '').toLowerCase().includes(q) ||
+          (u.status || '').toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly currentRows = computed(() =>
+    this.table.getRowModel().rows.map((r) => r.original),
+  );
+  readonly totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+  readonly currentPage = computed(() => this.pagination().pageIndex + 1);
+  readonly pageSize = computed(() => this.pagination().pageSize);
+  readonly pageStart = computed(() =>
+    this.totalFiltered() === 0
+      ? 0
+      : this.pagination().pageIndex * this.pagination().pageSize + 1,
+  );
+  readonly pageEnd = computed(() =>
+    Math.min(
+      (this.pagination().pageIndex + 1) * this.pagination().pageSize,
+      this.totalFiltered(),
+    ),
+  );
+  readonly visibleColumnCount = computed(
+    () => this.hidableColumnIds.filter((id) => this.isColumnVisible(id)).length + 1,
+  );
+
+  constructor() {
+    effect(() => {
+      this.query();
+      this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+  }
+
   ngOnInit(): void {
     this.load();
   }
@@ -41,8 +224,9 @@ export class Users implements OnInit {
     this.notice = null;
     this.usersApi.list(50).subscribe({
       next: (res) => {
-        this.items = this.sortUsers(res.items ?? []);
+        this.items.set(this.sortUsers(res.items ?? []));
         this.nextToken = res.nextToken ?? null;
+        this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.loading = false;
       },
       error: (err) => {
@@ -58,12 +242,14 @@ export class Users implements OnInit {
     this.error = null;
     this.usersApi.list(50, this.nextToken).subscribe({
       next: (res) => {
-        const merged = [...this.items, ...(res.items ?? [])];
-        this.items = this.sortUsers(
-          merged.filter(
-            (item, index, arr) =>
-              index === arr.findIndex((other) => other.username === item.username)
-          )
+        const merged = [...this.items(), ...(res.items ?? [])];
+        this.items.set(
+          this.sortUsers(
+            merged.filter(
+              (item, index, arr) =>
+                index === arr.findIndex((other) => other.username === item.username),
+            ),
+          ),
         );
         this.nextToken = res.nextToken ?? null;
         this.loadingMore = false;
@@ -91,7 +277,7 @@ export class Users implements OnInit {
 
     this.usersApi.create(payload).subscribe({
       next: (item) => {
-        this.items = this.sortUsers([item, ...this.items]);
+        this.items.set(this.sortUsers([item, ...this.items()]));
         this.createLoading = false;
         this.createForm.reset({
           name: '',
@@ -179,23 +365,28 @@ export class Users implements OnInit {
     });
   }
 
-  filteredItems(): AdminUser[] {
-    const q = this.filterQuery.value.trim().toLowerCase();
-    if (!q) return this.items;
-    return this.items.filter((item) => {
-      const name = String(item.name ?? '').toLowerCase();
-      const email = String(item.email ?? '').toLowerCase();
-      const username = String(item.username ?? '').toLowerCase();
-      const role = String(item.role ?? '').toLowerCase();
-      const status = String(item.status ?? '').toLowerCase();
-      return (
-        name.includes(q) ||
-        email.includes(q) ||
-        username.includes(q) ||
-        role.includes(q) ||
-        status.includes(q)
-      );
-    });
+  onPageChange(page: number): void {
+    this.pagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  isColumnVisible(id: string): boolean {
+    return this.columnVisibility()[id] !== false;
+  }
+
+  toggleColumnVisibility(id: string): void {
+    this.columnVisibility.update((s) => ({ ...s, [id]: !this.isColumnVisible(id) }));
+  }
+
+  columnLabel(id: string): string {
+    return this.columnLabels[id] ?? id;
+  }
+
+  column(id: string) {
+    return this.table.getColumn(id);
   }
 
   roleBadgeVariant(role: string | null | undefined): BadgeVariants['variant'] {
@@ -242,11 +433,13 @@ export class Users implements OnInit {
   private replaceItem(updated: AdminUser): void {
     const username = String(updated.username ?? '').trim();
     if (!username) return;
-    this.items = this.sortUsers(
-      this.items.map((item) => {
-        if (item.username !== username) return item;
-        return updated;
-      })
+    this.items.set(
+      this.sortUsers(
+        this.items().map((item) => {
+          if (item.username !== username) return item;
+          return updated;
+        }),
+      ),
     );
   }
 

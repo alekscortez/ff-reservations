@@ -1,7 +1,28 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideChevronDown, lucideEllipsis } from '@ng-icons/lucide';
+import {
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+  createAngularTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+} from '@tanstack/angular-table';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
 import { TablesService } from '../../../core/http/tables.service';
 import {
@@ -21,10 +42,54 @@ import { HlmButton } from '../../../shared/ui/button';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
+import {
+  HlmMenu,
+  HlmMenuCheckbox,
+  HlmMenuItem,
+  HlmMenuSeparator,
+  HlmMenuTrigger,
+} from '../../../shared/ui/dropdown-menu';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+import {
+  HlmTable,
+  HlmTBody,
+  HlmTHead,
+  HlmTableContainer,
+  HlmTableSortHeader,
+  HlmTd,
+  HlmTh,
+  HlmTr,
+} from '../../../shared/ui/table';
+
+const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-frequent-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog, HlmInput, HlmToggle],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    NgIcon,
+    PhoneDisplayPipe,
+    HlmButton,
+    HlmDialog,
+    HlmInput,
+    HlmToggle,
+    HlmMenu,
+    HlmMenuCheckbox,
+    HlmMenuItem,
+    HlmMenuSeparator,
+    HlmMenuTrigger,
+    HlmNumberedPagination,
+    HlmTable,
+    HlmTBody,
+    HlmTHead,
+    HlmTableContainer,
+    HlmTableSortHeader,
+    HlmTd,
+    HlmTh,
+    HlmTr,
+  ],
+  providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })
@@ -34,7 +99,7 @@ export class FrequentClients implements OnInit {
   private settingsApi = inject(SettingsService);
   private destroyRef = inject(DestroyRef);
 
-  items: FrequentClient[] = [];
+  readonly items = signal<FrequentClient[]>([]);
   loading = false;
   error: string | null = null;
   editingId: string | null = null;
@@ -71,6 +136,123 @@ export class FrequentClients implements OnInit {
     status: new FormControl<'ACTIVE' | 'DISABLED'>('ACTIVE', { nonNullable: true }),
   });
 
+  private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
+  readonly sorting = signal<SortingState>([{ id: 'name', desc: false }]);
+  readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
+  readonly columnVisibility = signal<VisibilityState>({});
+
+  readonly hidableColumnIds: ReadonlyArray<string> = [
+    'name',
+    'phone',
+    'tables',
+    'status',
+    'notes',
+  ];
+
+  private readonly columnLabels: Record<string, string> = {
+    name: 'Name',
+    phone: 'Phone',
+    tables: 'Reserved Tables',
+    status: 'Status',
+    notes: 'Notes',
+  };
+
+  private readonly tableColumns: ColumnDef<FrequentClient>[] = [
+    {
+      id: 'name',
+      accessorFn: (c) => c.name ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'phone',
+      accessorFn: (c) => c.phone ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'tables',
+      accessorFn: (c) => this.formatTables(c),
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'status',
+      accessorFn: (c) => c.status ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    {
+      id: 'notes',
+      accessorFn: (c) => c.notes ?? '',
+      enableSorting: true,
+      sortingFn: 'alphanumeric',
+    },
+    { id: 'actions', enableSorting: false },
+  ];
+
+  readonly table = createAngularTable<FrequentClient>(() => ({
+    data: this.items(),
+    columns: this.tableColumns,
+    state: {
+      sorting: this.sorting(),
+      globalFilter: this.query(),
+      pagination: this.pagination(),
+      columnVisibility: this.columnVisibility(),
+    },
+    onSortingChange: (u) => {
+      const next = typeof u === 'function' ? u(this.sorting()) : u;
+      this.sorting.set(next);
+    },
+    onPaginationChange: (u) => {
+      const next = typeof u === 'function' ? u(this.pagination()) : u;
+      this.pagination.set(next);
+    },
+    onColumnVisibilityChange: (u) => {
+      const next = typeof u === 'function' ? u(this.columnVisibility()) : u;
+      this.columnVisibility.set(next);
+    },
+    globalFilterFn: (row, _id, filterValue: string) => {
+      const q = String(filterValue ?? '').trim().toLowerCase();
+      if (!q) return true;
+      const c = row.original;
+      return Boolean(
+        (c.name ?? '').toLowerCase().includes(q) ||
+          String(c.phone ?? '').toLowerCase().includes(q) ||
+          this.formatTables(c).toLowerCase().includes(q),
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  }));
+
+  readonly currentRows = computed(() =>
+    this.table.getRowModel().rows.map((r) => r.original),
+  );
+  readonly totalFiltered = computed(() => this.table.getFilteredRowModel().rows.length);
+  readonly currentPage = computed(() => this.pagination().pageIndex + 1);
+  readonly pageSize = computed(() => this.pagination().pageSize);
+  readonly pageStart = computed(() =>
+    this.totalFiltered() === 0
+      ? 0
+      : this.pagination().pageIndex * this.pagination().pageSize + 1,
+  );
+  readonly pageEnd = computed(() =>
+    Math.min(
+      (this.pagination().pageIndex + 1) * this.pagination().pageSize,
+      this.totalFiltered(),
+    ),
+  );
+
+  constructor() {
+    effect(() => {
+      this.query();
+      this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
+    });
+  }
+
   ngOnInit(): void {
     this.load();
     this.loadTemplate();
@@ -82,7 +264,8 @@ export class FrequentClients implements OnInit {
     this.error = null;
     this.clientsApi.list().subscribe({
       next: (items) => {
-        this.items = items;
+        this.items.set(items);
+        this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.loading = false;
       },
       error: (err) => {
@@ -92,15 +275,32 @@ export class FrequentClients implements OnInit {
     });
   }
 
-  filteredItems(): FrequentClient[] {
-    const q = this.filterQuery.value.trim().toLowerCase();
-    if (!q) return this.items;
-    return this.items.filter((c) => {
-      const name = (c.name ?? '').toLowerCase();
-      const phone = String(c.phone ?? '').toLowerCase();
-      const tables = this.formatTables(c).toLowerCase();
-      return name.includes(q) || phone.includes(q) || tables.includes(q);
-    });
+  onPageChange(page: number): void {
+    this.pagination.update((s) => ({ ...s, pageIndex: Math.max(0, page - 1) }));
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pagination.update((s) => ({ ...s, pageSize: size, pageIndex: 0 }));
+  }
+
+  isColumnVisible(id: string): boolean {
+    return this.columnVisibility()[id] !== false;
+  }
+
+  toggleColumnVisibility(id: string): void {
+    this.columnVisibility.update((s) => ({ ...s, [id]: !this.isColumnVisible(id) }));
+  }
+
+  columnLabel(id: string): string {
+    return this.columnLabels[id] ?? id;
+  }
+
+  column(id: string) {
+    return this.table.getColumn(id);
+  }
+
+  trackByClientId(_: number, item: FrequentClient): string {
+    return item.clientId;
   }
 
   loadTemplate(): void {
@@ -186,7 +386,7 @@ export class FrequentClients implements OnInit {
       })
       .subscribe({
         next: (item) => {
-          this.items = [item, ...this.items];
+          this.items.update((list) => [item, ...list]);
           this.form.reset({ name: '', phone: '', defaultTableIds: '', notes: '' });
           this.createPhoneCountry = 'US';
           this.createSelectedTables.clear();
@@ -304,7 +504,9 @@ export class FrequentClients implements OnInit {
     };
     this.clientsApi.update(this.editingId, patch).subscribe({
       next: (item) => {
-        this.items = this.items.map((x) => (x.clientId === item.clientId ? item : x));
+        this.items.update((list) =>
+          list.map((x) => (x.clientId === item.clientId ? item : x)),
+        );
         this.editingId = null;
         this.load();
         this.loading = false;
@@ -323,7 +525,7 @@ export class FrequentClients implements OnInit {
     this.error = null;
     this.clientsApi.delete(item.clientId).subscribe({
       next: () => {
-        this.items = this.items.filter((x) => x.clientId !== item.clientId);
+        this.items.update((list) => list.filter((x) => x.clientId !== item.clientId));
         this.loading = false;
       },
       error: (err) => {
