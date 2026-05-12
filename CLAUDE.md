@@ -79,7 +79,7 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 - Groups: `Admin`, `Staff` (managed). Users without a group fall through to the `unauthorized` page.
 - Frontend role guards live in `src/app/core/guards/` (`auth.guard.ts`, `role.guard.ts`, `admin.guard.ts`).
 - **Customer auth** (mobile app, separate from staff): Cognito Custom Auth phone-OTP via `backend/cognito-customer-auth/` triggers. Public mediator routes `POST /auth/customer/start` + `POST /auth/customer/verify` (in `routes-customer-auth.mjs`) wrap the synthetic-email convention so the client only handles plain phone + OTP. Customer-only routes live under `/me/*` (in `routes-me.mjs`) and use `requireCustomerOwnership(event)` (in `index.mjs:262-269`) to extract the Cognito `sub` and re-check resource ownership. Audience is enforced separately at API Gateway via the customer authorizer.
-- **Token TTLs** (staff client `1kdkvis45qo915plp7lvj03u16`, set 2026-05-11): access 8h, ID 8h, refresh 30d. Silent renew via refresh token is enabled in `auth.config.ts`. Customer client (`21n3rd1sp4o9ka4l7tld45f0ka`) unchanged at Cognito defaults.
+- **Token TTLs** (staff client `1kdkvis45qo915plp7lvj03u16`, set 2026-05-11): access 8h, ID 8h, refresh 30d. Silent renew via refresh token is enabled in `auth.config.ts`. **OIDC state is persisted in localStorage** via `{ provide: AbstractSecurityStorage, useClass: DefaultLocalStorageService }` in `app.config.ts` — the library's default is sessionStorage, which silently nuked the refresh token on every browser restart and made the 30-day TTL meaningless. Customer client (`21n3rd1sp4o9ka4l7tld45f0ka`) unchanged at Cognito defaults.
 
 ## Concurrency / data integrity
 
