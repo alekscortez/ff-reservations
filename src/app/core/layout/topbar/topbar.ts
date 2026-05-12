@@ -10,10 +10,11 @@ import { EventItem } from '../../../shared/models/event.model';
 import { ReservationItem } from '../../../shared/models/reservation.model';
 import { localIsoInTimeZoneToEpochMs } from '../../../shared/datetime';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmDialog } from '../../../shared/ui/dialog';
 
 @Component({
   selector: 'app-topbar',
-  imports: [CommonModule, RouterLink, HlmButton],
+  imports: [CommonModule, RouterLink, HlmButton, HlmDialog],
   templateUrl: './topbar.html',
   styleUrl: './topbar.scss',
 })

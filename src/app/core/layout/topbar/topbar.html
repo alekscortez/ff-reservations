@@ -66,13 +66,7 @@
   </div>
 </header>
 
-<!-- z-index must beat reservations-new's mobile CTA bar (z-[220]) and any
-     page modal (z-[200]); otherwise this overlay opens but the CTA bar
-     covers the bottom-anchored sheet on mobile and absorbs its taps. -->
-<div class="fixed inset-0 z-[290]" *ngIf="isQuickActionsOpen" (click)="closeQuickActions()"></div>
-
-<div class="fixed inset-0 z-[300] flex items-end justify-center p-0 sm:items-start sm:justify-end sm:p-4 sm:pt-[68px]" *ngIf="isQuickActionsOpen">
-  <section class="w-full rounded-t-2xl border border-brand-100 bg-white p-4 shadow-2xl sm:w-[360px] sm:rounded-2xl">
+<hlm-dialog *ngIf="isQuickActionsOpen" (close)="closeQuickActions()" size="sheet">
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold text-brand-900">Quick Actions</h3>
       <button
@@ -122,5 +116,4 @@
         </span>
       </a>
     </div>
-  </section>
-</div>
+</hlm-dialog>
