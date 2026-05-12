@@ -16,7 +16,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## UI primitives — read before adding new UI
 
-Seven Spartan-style primitive families live under `src/app/shared/ui/`. Use them
+Eight Spartan-style primitive families live under `src/app/shared/ui/`. Use them
 instead of hand-rolling new Tailwind class strings. Each is a
 standalone Angular directive/component with `cva` variants +
 `tailwind-merge` for consumer-class overrides.
@@ -30,6 +30,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmToggle` | `button[hlmToggle]` | `default \| outline \| warning` × `[active]` boolean | Toggle pills (filter chips, section/table selectors). Caller manages `[active]` state. |
 | `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
 | `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile slide-over via own fixed `<aside>` + backdrop (NOT HlmDialog); cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
+| `HlmPagination` (compound family — see "Pagination" below) | `<hlm-numbered-pagination>` high-level wrapper, or compose from `nav[hlmPagination]` + `ul[hlmPaginationContent]` + `li[hlmPaginationItem]` + `button[hlmPaginationLink]` + `<hlm-pagination-previous>` / `<hlm-pagination-next>` / `<hlm-pagination-ellipsis>` | Two-way `[(currentPage)]` + `[(itemsPerPage)]` model signals + `[totalItems]` input. Sliding window with ellipses (default `maxSize=7`). Event-only — no RouterLink integration | Any long client-side list that doesn't fit on one screen. Currently used by the admin Clients page (1,400+ rows, 50 per page). |
 
 **Convention for TS helpers**: when a template's state-driven styling
 depends on a function, that function returns a `BadgeVariants['variant']`
@@ -137,6 +138,59 @@ tooltip, sheet), (c) ship source written for Tailwind 4 (e.g.
 `top-(--header-height)` arbitrary-value-with-var syntax that doesn't
 work in Tailwind 3). Build new primitives in the same hand-rolled cva +
 tailwind-merge style instead. See memory `spartan_cli_avoided.md`.
+
+### Pagination — `HlmPagination` family
+
+Compound primitive under `src/app/shared/ui/pagination/`. Adapted from
+Spartan's `@spartan-ng/helm/pagination` source, simplified to event-only
+(no RouterLink integration) since none of our paginated pages sync to
+URL query params.
+
+```
+<hlm-numbered-pagination
+  [(currentPage)]="currentPage"
+  [(itemsPerPage)]="pageSize"
+  [totalItems]="filtered().length"
+  [iconOnlyEdges]="true"
+  ariaLabel="Clients pagination" />
+```
+
+`currentPage` + `itemsPerPage` are `model()` signals — pass a
+`WritableSignal<number>` and Angular's two-way binding hooks both
+ways automatically. Page-array math (sliding window of N pages
+around current, with `...` on either side) lives in
+`createPageArray` + `outOfBoundCorrection` and is exported for unit
+tests. Default `maxSize=7`, so a 28-page list renders as
+`< 1 … 13 14 15 … 28 >` and the active page is always centered when
+possible.
+
+**Currently used by the admin Clients page** (`src/app/features/admin/clients/`)
+to render 1,400+ CRM rows 50 per page. The pattern there is the
+recommended one for any long client-side list:
+
+1. Load all rows once (cheap — `GET /clients` is a single Query, ~280 KB).
+2. Store in a signal: `items = signal<CrmClient[]>([])`.
+3. Bind the search input via `toSignal(formControl.valueChanges)` so
+   the filtered slice is a `computed()` — NOT a `*ngFor`-called
+   method (see memory `feedback_ngfor_no_template_methods.md`).
+4. `paginated = computed(() => filtered().slice(start, end))` — also
+   a signal, not a method.
+5. `effect(() => { this.query(); this.currentPage.set(1); })` to
+   reset to page 1 when the search query changes.
+
+Server-side pagination wasn't worth it for the current scale: the
+DDB Query returns the whole set in one round-trip, sorted by
+`lastReservationAt` desc; client-side filter is instant; the only
+real pain was rendering 1,400+ DOM nodes + the template-method
+anti-pattern recomputing the filter every CD cycle. If the table
+ever crosses ~10k rows we'd revisit (add `LastEvaluatedKey` cursoring
+to `listCrmClients` + a `Limit` query param to `GET /clients`).
+
+Low-level pieces are exported too if a caller needs a custom layout
+(`HlmPagination`, `HlmPaginationContent`, `HlmPaginationItem`,
+`HlmPaginationLink`, `HlmPaginationPrevious`, `HlmPaginationNext`,
+`HlmPaginationEllipsis`) — see the high-level wrapper's template for
+how they compose.
 
 ## Repo layout
 
