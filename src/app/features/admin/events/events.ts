@@ -7,10 +7,11 @@ import { FrequentClientsService } from '../../../core/http/frequent-clients.serv
 import { CreateEventPayload, EventItem } from '../../../shared/models/event.model';
 import { TableInfo } from '../../../shared/models/table.model';
 import { FrequentClient } from '../../../shared/models/frequent-client.model';
+import { HlmDialog } from '../../../shared/ui/dialog';
 
 @Component({
   selector: 'app-events',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, HlmDialog],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
