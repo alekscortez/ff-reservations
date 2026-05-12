@@ -108,6 +108,28 @@ describe("buildPhoneSearchCandidates", () => {
     assert.ok(candidates.includes("522025550123"));
   });
 
+  it("adds 1{digits} and 52{digits} variants for partial 4-9 digit prefixes", () => {
+    // Without this the staff form finds nothing when typing a partial phone
+    // because all CRM rows are keyed PHONE#1XXXXXXXXXX (begins_with("956")
+    // doesn't match begins_with("1956")).
+    const c4 = buildPhoneSearchCandidates("9566");
+    assert.ok(c4.includes("9566"));
+    assert.ok(c4.includes("19566"));
+    assert.ok(c4.includes("529566"));
+
+    const c7 = buildPhoneSearchCandidates("9566014");
+    assert.ok(c7.includes("9566014"));
+    assert.ok(c7.includes("19566014"));
+    assert.ok(c7.includes("529566014"));
+  });
+
+  it("does not pad < 4 digit input (avoids overly-broad scans)", () => {
+    const c3 = buildPhoneSearchCandidates("956");
+    assert.ok(c3.includes("956"));
+    assert.ok(!c3.includes("1956"));
+    assert.ok(!c3.includes("52956"));
+  });
+
   it("returns empty for empty input", () => {
     assert.deepEqual(buildPhoneSearchCandidates(""), []);
     assert.deepEqual(buildPhoneSearchCandidates(null), []);

@@ -150,7 +150,12 @@ export function buildPhoneSearchCandidates(phone, countryHint = "US") {
   const normalizedDigits = normalizePhone(raw, countryHint);
   if (normalizedDigits) set.add(normalizedDigits);
 
-  if (digits.length === 10) {
+  // For partial-prefix searches (4-9 digits) and full national 10-digit input,
+  // also try the +1 (US/CA) and +52 (MX) country-code-prefixed forms — that's
+  // how rows are stored in DDB (PHONE#1XXXXXXXXXX or PHONE#52XXXXXXXXXX).
+  // Without this, typing "956" finds nothing because we only query for
+  // begins_with(PHONE#956) when the actual SK starts with PHONE#1956.
+  if (digits.length >= 4 && digits.length <= 10) {
     set.add(`1${digits}`);
     set.add(`52${digits}`);
   }
