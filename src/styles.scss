@@ -44,6 +44,22 @@
     --ring: 0 0% 4%;
 
     --radius: 0.5rem;
+
+    /*
+     * Sidebar tokens — separate so the sidebar can have a slightly different
+     * surface than the page (Spartan's sidebar-sticky-header pattern keeps
+     * --sidebar = --background here; if we want a tinted sidebar later, flip
+     * --sidebar to e.g. brand-50). Sidebar items use --sidebar-accent for hover
+     * + active states.
+     */
+    --sidebar: 0 0% 100%; /* #fff (same as --background) */
+    --sidebar-foreground: 0 0% 4%; /* brand-900 */
+    --sidebar-primary: 0 0% 4%;
+    --sidebar-primary-foreground: 0 0% 97%;
+    --sidebar-accent: 0 0% 93%; /* brand-100 — hover/active */
+    --sidebar-accent-foreground: 0 0% 4%;
+    --sidebar-border: 0 0% 91%; /* brand-100 */
+    --sidebar-ring: 0 0% 4%;
   }
 }
 
