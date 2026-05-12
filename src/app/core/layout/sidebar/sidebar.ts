@@ -5,7 +5,6 @@ import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarDays,
   lucideCircleUser,
-  lucideFlame,
   lucideLayoutDashboard,
   lucideLogOut,
   lucidePartyPopper,
@@ -54,7 +53,6 @@ import {
     provideIcons({
       lucideCalendarDays,
       lucideCircleUser,
-      lucideFlame,
       lucideLayoutDashboard,
       lucideLogOut,
       lucidePartyPopper,
