@@ -28,7 +28,7 @@ export class HlmSidebarInset {
       this.el.nativeElement.setAttribute(
         'class',
         twMerge(
-          'relative flex min-h-svh flex-1 flex-col bg-background transition-[padding-left] duration-200 ease-linear md:pl-64 group-data-[state=collapsed]/sidebar-wrapper:md:pl-0',
+          'relative flex flex-1 flex-col bg-background transition-[padding-left] duration-200 ease-linear md:pl-64 group-data-[state=collapsed]/sidebar-wrapper:md:pl-0',
           this.consumerClasses,
         ),
       );
