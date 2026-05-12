@@ -38,11 +38,12 @@
           {{ r.reservation.paymentStatus }} · Paid ${{ r.reservation.paid | number:'1.2-2' }}
         </p>
         <a
+          hlmBtn variant="outline" size="sm"
           *ngIf="r.square.receiptUrl"
           [href]="r.square.receiptUrl || ''"
           target="_blank"
           rel="noopener"
-          class="mt-2 inline-flex rounded-lg border border-success-300 px-3 py-1.5 text-xs font-semibold text-success-800"
+          class="mt-2 border-success-300 text-success-800"
         >
           View receipt
         </a>
@@ -50,8 +51,8 @@
 
       <div class="mt-4 flex justify-center gap-2" *ngIf="!result">
         <button
+          hlmBtn variant="outline" size="sm"
           type="button"
-          class="h-10 rounded-lg border border-brand-200 px-3 text-xs font-semibold text-brand-800 disabled:opacity-50"
           (click)="refresh()"
           [disabled]="loading || preparing || processing"
         >
