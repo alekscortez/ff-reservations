@@ -10,9 +10,52 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## Stack
 
-- **Frontend:** Angular 21 (standalone components), Tailwind, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering
+- **Frontend:** Angular 21 (standalone components), Tailwind 3.4, `angular-auth-oidc-client` v21, ZXing for QR scan, `qrcode` for pass rendering. **Spartan-style component library** under `src/app/shared/ui/` — see "UI primitives" section below.
 - **Backend:** AWS Lambda (Node 22 ESM `.mjs`), API Gateway HTTP API, DynamoDB, Cognito Hosted UI + Custom Auth phone OTP (customers), Square API + webhook, SNS SMS, Secrets Manager
-- **Hosting:** Amplify for the SPA (npm + `ng build`, artifacts at `dist/ff-reservations/browser/`); custom domain `api.famosofuego.com` for the API
+- **Hosting:** Amplify for the SPA (npm + `ng build`, artifacts at `dist/ff-reservations/browser/`); custom domain `api.famosofuego.com` for the API. `amplify.yml` installs `npm@11.6.2` globally before `npm ci` so the lock-file version matches what wrote it (see memory: `amplify_corepack_npm_pin.md`).
+
+## UI primitives — read before adding new UI
+
+Six Spartan-style primitives live under `src/app/shared/ui/`. Use them
+instead of hand-rolling new Tailwind class strings. Each is a
+standalone Angular directive/component with `cva` variants +
+`tailwind-merge` for consumer-class overrides.
+
+| Primitive | Selector | Variants / sizes | When to use |
+|---|---|---|---|
+| `HlmButton` | `button[hlmBtn]`, `a[hlmBtn]` | `default \| outline \| outline-current \| secondary \| ghost \| destructive \| link` × `default \| xs \| sm \| lg \| icon \| icon-xs \| icon-sm \| icon-lg` | All action buttons. `outline-current` for inline buttons that need to inherit a parent's text color (dashboard urgency cards). |
+| `HlmBadge` | `[hlmBadge]` (on `<span>`) | `default \| secondary \| outline \| destructive \| success \| warning \| danger` × `default \| sm \| xs` | Status pills. Use `outline` for badges inside colored cards (border-current inheritance). |
+| `HlmInput` | `input[hlmInput]`, `select[hlmInput]`, `textarea[hlmInput]` | sizes: `default \| sm \| lg` | All form text inputs + selects + textareas. NOT checkboxes/radios (HlmInput selectors don't match `<input type="checkbox">`). |
+| `HlmDialog` | `<hlm-dialog>` (component) | sizes: `default \| full-on-mobile \| sheet` + `panelClass` override input | All modals. `default` for centered, `full-on-mobile` for long forms (frequent-clients create), `sheet` for slide-from-edge (topbar quick-actions, z-[300] above page modals). |
+| `HlmToggle` | `button[hlmToggle]` | `default \| outline \| warning` × `[active]` boolean | Toggle pills (filter chips, section/table selectors). Caller manages `[active]` state. |
+| `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
+
+**Convention for TS helpers**: when a template's state-driven styling
+depends on a function, that function returns a `BadgeVariants['variant']`
+literal (e.g. `'success' | 'danger' | 'secondary'`) — NOT a Tailwind
+class string. See `reservations.ts:paymentStatusBadgeVariant` and
+`dashboard.ts:checkInStateBadgeVariant` for the pattern.
+
+**Consumer-class merge rule**: any extra Tailwind classes passed via
+`class="..."` (on directives) or `[class]="..."` (on components) merge
+with the variant's defaults via tailwind-merge. Conflicting Tailwind
+utilities (e.g. `rounded-full` vs `rounded-lg`, `max-w-md` vs
+`max-w-2xl`) resolve with the consumer's class winning. The static
+`class` attribute is captured on first render — dynamic `[ngClass]`
+applied AFTER mount races with the directive's effect and may produce
+unpredictable results. Prefer `[active]`-style state inputs or
+`[class.foo]` bindings over `[ngClass]`.
+
+**Palette**: `brand` (10-shade grayscale), `warm` (orange, formerly
+named `accent`), `success`/`danger`/`warning` (each with 50/100/200/
+300/400/500/700/800 — extended in Phase 6d after discovering several
+shades were referenced but never defined). The shadcn semantic colors
+(`bg-primary`, `text-foreground`, `border-input`, etc.) resolve to the
+brand palette via HSL CSS variables in `src/styles.scss`.
+
+Specs live next to each primitive (`src/app/shared/ui/<name>/<name>.spec.ts`)
+and lock in variant behavior + tailwind-merge semantics + (for HlmDialog)
+CDK focus-trap interop.
 
 ## Repo layout
 
