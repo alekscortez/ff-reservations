@@ -83,10 +83,11 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap, HlmDialog, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap, HlmDialog, HlmButton, HlmInput],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })
