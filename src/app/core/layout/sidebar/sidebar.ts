@@ -2,10 +2,11 @@ import { Component, Renderer2, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { AuthService } from '../../auth/auth.service';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-sidebar',
-  imports: [CommonModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink, RouterLinkActive, HlmButton],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.scss',
 })
