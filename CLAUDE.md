@@ -29,7 +29,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmDialog` | `<hlm-dialog>` (component) | sizes: `default \| full-on-mobile \| sheet` + `panelClass` override input | All modals. `default` for centered, `full-on-mobile` for long forms (frequent-clients create), `sheet` for slide-from-edge (topbar quick-actions, z-[300] above page modals). |
 | `HlmToggle` | `button[hlmToggle]` | `default \| outline \| warning` × `[active]` boolean | Toggle pills (filter chips, section/table selectors). Caller manages `[active]` state. |
 | `HlmAlert` | `<hlm-alert>` (component) | `info \| success \| warning \| destructive` | Inline tinted alert boxes (rounded-lg border bg-*-50 text-*-700). For just colored text (no border/bg), keep `<p class="text-danger-700">` hand-rolled. |
-| `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile portals through `HlmDialog` sheet; cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
+| `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile slide-over via own fixed `<aside>` + backdrop (NOT HlmDialog); cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
 
 **Convention for TS helpers**: when a template's state-driven styling
 depends on a function, that function returns a `BadgeVariants['variant']`
@@ -102,6 +102,19 @@ Safari until forced reflow — see memory `safari_display_contents_flex_bug.md`.
 - `isMobile` — matchMedia `(max-width: 767px)`; auto-updates on resize
 - `toggle()` mutates whichever surface matches the viewport
 - Auto-installs Cmd/Ctrl+B keyboard shortcut on first render
+
+**Mobile sidebar does NOT route through `HlmDialog`.** It renders as
+its own fixed-positioned `<aside class="fixed inset-y-0 left-0 z-[300]
+w-64 rounded-r-2xl bg-sidebar shadow-2xl">` plus a sibling
+`fixed inset-0 z-[290] bg-black/50` backdrop. Reason: HlmDialog's
+`sheet` size variant uses `flex items-end justify-center` for centered
+bottom-sheet alignment, and `left-0` / `top-0` panelClass overrides
+don't apply to flex children — the sidebar ended up centered with a
+gap on the left. Bypassing the dialog wrapper and positioning directly
+is the simplest fix. The body overflow lock + cdkTrapFocus +
+keydown.escape that HlmDialog normally provides are re-implemented
+inline in `HlmSidebar` (effect-driven lock, A11yModule directives on
+the aside).
 
 `<hlm-sidebar>` and `<app-shell>` use `display: flex` (not
 `display: contents`) because **Safari has long-standing bugs where
