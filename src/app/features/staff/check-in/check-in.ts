@@ -4,10 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-check-in',
-  imports: [CommonModule, FormsModule, TableLabelPipe],
+  imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton],
   templateUrl: './check-in.html',
   styleUrl: './check-in.scss',
 })
