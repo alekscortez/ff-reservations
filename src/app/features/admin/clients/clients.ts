@@ -11,10 +11,11 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmInput],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
