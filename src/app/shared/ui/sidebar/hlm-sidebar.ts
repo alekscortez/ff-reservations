@@ -60,7 +60,7 @@ import { HlmSidebarService } from './hlm-sidebar.service';
              land at left:0 regardless of any parent's flex alignment. -->
         <aside
           data-slot="sidebar-mobile"
-          class="fixed inset-y-0 left-0 z-[300] flex h-svh w-64 flex-col bg-sidebar text-sidebar-foreground shadow-2xl"
+          class="fixed inset-y-0 left-0 z-[300] flex h-svh w-64 flex-col rounded-r-2xl bg-sidebar text-sidebar-foreground shadow-2xl"
           cdkTrapFocus
           cdkTrapFocusAutoCapture
           role="dialog"
