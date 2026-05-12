@@ -23,6 +23,7 @@ import {
   TableLabelPipe,
 } from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
+import { HlmDialog } from '../../../shared/ui/dialog';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
 interface TableKpis {
@@ -105,6 +106,7 @@ interface PaymentLinkSmsState {
     PaymentMethodLabelPipe,
     SystemActorLabelPipe,
     TableLabelPipe,
+    HlmDialog,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
