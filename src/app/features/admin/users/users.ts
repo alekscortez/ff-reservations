@@ -4,10 +4,11 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { AdminUser, UsersService } from '../../../core/http/users.service';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmBadge],
+  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmBadge, HlmInput],
   templateUrl: './users.html',
   styleUrl: './users.scss',
 })
