@@ -55,7 +55,8 @@ describe('HlmTable directive family', () => {
     expect(root.querySelector('th[hlmTh]')!.className).toContain('font-medium');
     expect(root.querySelector('th[hlmTh]')!.className).not.toContain('uppercase');
     expect(root.querySelector('td[hlmTd]')!.className).toContain('p-4');
-    expect(root.querySelector('tr[hlmTr]')!.className).toContain('hover:bg-brand-50/40');
+    expect(root.querySelector('tr[hlmTr]')!.className).toContain('hover:bg-brand-100/50');
+    expect(root.querySelector('tr[hlmTr]')!.className).toContain('transition-colors');
   });
 
   it('preserves consumer-provided classes (tailwind-merge)', () => {
