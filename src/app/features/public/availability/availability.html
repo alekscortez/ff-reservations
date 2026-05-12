@@ -32,20 +32,10 @@
   <section class="mt-4 rounded-2xl border border-brand-100 bg-white p-3 shadow-sm md:p-4" *ngIf="data as d">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
-        <button
-          type="button"
-          class="rounded-full px-3 py-1 text-xs font-semibold"
-          [ngClass]="isViewMode('MAP') ? 'bg-brand-900 text-white' : 'text-brand-700'"
-          (click)="setViewMode('MAP')"
-        >
+        <button hlmToggle [active]="isViewMode('MAP')" type="button" (click)="setViewMode('MAP')">
           Map
         </button>
-        <button
-          type="button"
-          class="rounded-full px-3 py-1 text-xs font-semibold"
-          [ngClass]="isViewMode('LIST') ? 'bg-brand-900 text-white' : 'text-brand-700'"
-          (click)="setViewMode('LIST')"
-        >
+        <button hlmToggle [active]="isViewMode('LIST')" type="button" (click)="setViewMode('LIST')">
           List
         </button>
       </div>
