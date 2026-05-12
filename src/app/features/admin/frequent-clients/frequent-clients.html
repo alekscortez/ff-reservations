@@ -79,18 +79,6 @@
             Name
             <input type="text" formControlName="name" hlmInput class="min-w-0" />
           </label>
-          <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
-            Reserved Tables
-            <div class="flex flex-wrap items-center gap-2">
-              <span
-                class="cursor-pointer rounded-full border border-brand-200 px-2 py-1 text-xs text-brand-700"
-                *ngFor="let t of editSelectedTables"
-                (click)="removeEditTable(t)"
-              >
-                {{ t }}
-              </span>
-            </div>
-          </label>
         </div>
 
         <div class="rounded-xl border border-brand-100 bg-white p-3">

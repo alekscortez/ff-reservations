@@ -572,12 +572,6 @@ export class Financials implements OnInit, OnDestroy {
     this.loadReportForCurrentFilters();
   }
 
-  resetFilters(): void {
-    this.setDefaultRange();
-    this.eventStatus.setValue('ALL');
-    this.loadReportForCurrentFilters();
-  }
-
   exportCsv(): void {
     if (this.rows.length === 0) return;
 

@@ -14,53 +14,29 @@
       </button>
     </div>
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_180px_auto_auto] lg:items-end">
+    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_180px_auto] lg:items-end">
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        From Date
-        <input
-          type="date"
-          [formControl]="rangeFrom"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
+        From
+        <input type="date" hlmInput [formControl]="rangeFrom" />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        To Date
-        <input
-          type="date"
-          [formControl]="rangeTo"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        />
+        To
+        <input type="date" hlmInput [formControl]="rangeTo" />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Event Status
-        <select
-          [formControl]="eventStatus"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
-        >
+        <select hlmInput [formControl]="eventStatus">
           <option value="ALL">All</option>
           <option value="ACTIVE">Active</option>
           <option value="INACTIVE">Inactive</option>
         </select>
       </label>
-      <button
-        type="button"
-        hlmBtn size="lg"
-        (click)="applyFilters()"
-      >
-        Apply
-      </button>
-      <button
-        type="button"
-        hlmBtn variant="outline" size="lg"
-        (click)="resetFilters()"
-      >
-        Reset
-      </button>
+      <button hlmBtn type="button" (click)="applyFilters()">Apply</button>
     </div>
 
-    <div class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-700">
-      {{ filteredEvents.length }} event(s) in report range
-    </div>
+    <p class="mt-3 text-xs text-brand-500">
+      {{ filteredEvents.length }} event(s) in range
+    </p>
 
     <p class="mt-3 text-sm text-danger-700" *ngIf="error">{{ error }}</p>
     <div *ngIf="warnings.length > 0" class="mt-3 rounded-lg border border-warm-200 bg-warm-50 px-3 py-2 text-sm text-warm-700">

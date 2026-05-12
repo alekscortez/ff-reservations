@@ -27,21 +27,6 @@
         <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">Close</button>
       </div>
 
-      <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
-          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Status</p>
-          <p class="text-sm font-semibold text-brand-900">{{ editForm.controls.status.value }}</p>
-        </article>
-        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
-          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Disabled Tables</p>
-          <p class="text-sm font-semibold text-brand-900">{{ editDisabled.size }}</p>
-        </article>
-        <article class="rounded-xl border border-brand-100 bg-white px-3 py-2">
-          <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Clients Not Coming</p>
-          <p class="text-sm font-semibold text-brand-900">{{ editDisabledClients.size }}</p>
-        </article>
-      </div>
-
       <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="mt-4 grid gap-4">
         <details class="rounded-xl border border-brand-100 bg-white p-3" open>
           <summary class="cursor-pointer text-sm font-semibold text-brand-900">Basics</summary>
