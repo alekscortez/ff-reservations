@@ -6,10 +6,11 @@ import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
+import { HlmAlert } from '../../../shared/ui/alert';
 
 @Component({
   selector: 'app-check-in',
-  imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton, HlmBadge],
+  imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton, HlmBadge, HlmAlert],
   templateUrl: './check-in.html',
   styleUrl: './check-in.scss',
 })

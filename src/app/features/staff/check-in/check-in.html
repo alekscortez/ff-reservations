@@ -79,10 +79,6 @@
     </div>
   </article>
 
-  <p class="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700" *ngIf="error">
-    {{ error }}
-  </p>
-  <p class="rounded-lg border border-success-200 bg-success-50 px-3 py-2 text-sm text-success-700" *ngIf="notice">
-    {{ notice }}
-  </p>
+  <hlm-alert variant="destructive" *ngIf="error">{{ error }}</hlm-alert>
+  <hlm-alert variant="success" *ngIf="notice">{{ notice }}</hlm-alert>
 </section>
