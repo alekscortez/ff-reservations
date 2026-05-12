@@ -10,10 +10,11 @@ import {
   normalizePhoneToE164,
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
