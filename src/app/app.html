@@ -1,4 +1,14 @@
-<app-topbar *ngIf="isAuthenticated$ | async"></app-topbar>
-<main class="app-main" [class.app-main--with-topbar]="isAuthenticated$ | async">
-  <router-outlet></router-outlet>
-</main>
+<ng-container *ngIf="isAuthenticated$ | async; else publicShell">
+  <div hlmSidebarWrapper class="flex-col" style="--header-height: 3.5rem">
+    <app-topbar></app-topbar>
+    <div class="flex flex-1">
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+</ng-container>
+
+<ng-template #publicShell>
+  <main class="app-main">
+    <router-outlet></router-outlet>
+  </main>
+</ng-template>
