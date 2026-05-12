@@ -25,6 +25,7 @@ import {
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
 interface TableKpis {
@@ -109,6 +110,7 @@ interface PaymentLinkSmsState {
     TableLabelPipe,
     HlmDialog,
     HlmButton,
+    HlmBadge,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -793,13 +795,13 @@ export class Dashboard implements OnInit, OnDestroy {
     return 'Unknown';
   }
 
-  checkInStateBadgeClass(status: string | null | undefined): string {
+  checkInStateBadgeVariant(status: string | null | undefined): BadgeVariants['variant'] {
     const normalized = String(status ?? '').toUpperCase();
-    if (normalized === 'USED') return 'border-success-300 bg-success-100 text-success-800';
-    if (normalized === 'ISSUED') return 'border-brand-300 bg-brand-100 text-brand-800';
-    if (normalized === 'REVOKED') return 'border-danger-300 bg-danger-100 text-danger-800';
-    if (normalized === 'EXPIRED') return 'border-warning-300 bg-warning-100 text-warning-800';
-    return 'border-brand-200 bg-brand-50 text-brand-700';
+    if (normalized === 'USED') return 'success';
+    if (normalized === 'ISSUED') return 'secondary';
+    if (normalized === 'REVOKED') return 'danger';
+    if (normalized === 'EXPIRED') return 'warning';
+    return 'secondary';
   }
 
   epochSecondsToMs(value: number | null | undefined): number | null {
@@ -1073,11 +1075,11 @@ export class Dashboard implements OnInit, OnDestroy {
     };
   }
 
-  paymentLinkSmsBadgeClass(status: string | null | undefined): string {
+  paymentLinkSmsBadgeVariant(status: string | null | undefined): BadgeVariants['variant'] {
     const normalized = String(status ?? '').trim().toUpperCase();
-    if (normalized === 'SENT') return 'border-success-300 bg-success-100 text-success-800';
-    if (normalized === 'FAILED') return 'border-danger-300 bg-danger-100 text-danger-800';
-    return 'border-brand-200 bg-brand-50 text-brand-700';
+    if (normalized === 'SENT') return 'success';
+    if (normalized === 'FAILED') return 'danger';
+    return 'secondary';
   }
 
   submitUrgentPayment(): void {
@@ -1492,12 +1494,12 @@ export class Dashboard implements OnInit, OnDestroy {
       : `$${remaining} remaining`;
   }
 
-  activityBadgeClass(activity: ActivityItem): string {
-    if (activity.type === 'CANCELLED') return 'bg-danger-100 text-danger-700';
-    if (activity.type === 'CHECKED_IN') return 'bg-success-100 text-success-700';
-    if (activity.type === 'PAID') return 'bg-success-100 text-success-700';
-    if (activity.type === 'PARTIAL') return 'bg-warm-100 text-warm-800';
-    return 'bg-brand-100 text-brand-700';
+  activityBadgeVariant(activity: ActivityItem): BadgeVariants['variant'] {
+    if (activity.type === 'CANCELLED') return 'danger';
+    if (activity.type === 'CHECKED_IN') return 'success';
+    if (activity.type === 'PAID') return 'success';
+    if (activity.type === 'PARTIAL') return 'warning';
+    return 'secondary';
   }
 
   activityCardClass(activity: ActivityItem): string {
@@ -1533,18 +1535,18 @@ export class Dashboard implements OnInit, OnDestroy {
     return normalized.replace(/_/g, ' ');
   }
 
-  historyEventBadgeClass(eventType: string): string {
+  historyEventBadgeVariant(eventType: string): BadgeVariants['variant'] {
     const normalized = String(eventType ?? '').trim().toUpperCase();
-    if (normalized === 'CHECKED_IN') return 'bg-success-100 text-success-700 border-success-200';
-    if (normalized === 'PAYMENT_RECORDED') return 'bg-brand-100 text-brand-700 border-brand-200';
-    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
-    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
-    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'bg-success-100 text-success-700 border-success-200';
-    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'bg-danger-100 text-danger-700 border-danger-200';
-    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'bg-success-100 text-success-700 border-success-200';
-    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'bg-success-100 text-success-700 border-success-200';
-    if (normalized === 'RESERVATION_CANCELLED') return 'bg-danger-100 text-danger-700 border-danger-200';
-    return 'bg-brand-50 text-brand-700 border-brand-200';
+    if (normalized === 'CHECKED_IN') return 'success';
+    if (normalized === 'PAYMENT_RECORDED') return 'secondary';
+    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'success';
+    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'danger';
+    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'success';
+    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'danger';
+    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'success';
+    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'success';
+    if (normalized === 'RESERVATION_CANCELLED') return 'danger';
+    return 'secondary';
   }
 
   historySummary(item: ReservationHistoryViewItem): string {
