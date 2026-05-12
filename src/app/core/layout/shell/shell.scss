@@ -1,13 +1,25 @@
 /*
- * <app-shell> is a flex child of the wrapper's row. Without explicit
- * flex properties, it gets `flex: 0 1 auto` and content-sizes — so the
- * <main> inside can't grow to fill the row width. `display: contents`
- * removes app-shell from the layout tree, letting <app-sidebar> and
- * <main hlmSidebarInset> become direct flex children of the row. Main's
- * `flex-1` then takes effect and fills the remaining space.
+ * <app-shell> needs to fill the wrapper's `flex flex-1` row width-wise
+ * so the <main> inside can grow.
+ *
+ * Originally used `display: contents` here — works in Chrome but Safari
+ * has long-standing bugs where descendants of a contents-displayed
+ * element don't reliably pick up flex sizing from the grandparent. After
+ * a sidebar toggle, the inset stayed stuck at its initial width on
+ * Safari while Chrome reflowed correctly.
+ *
+ * Switched to a real flex item: app-shell is itself a flex container
+ * (one effective child: the <main>; the <app-sidebar> is positioned
+ * fixed via its inner aside and contributes nothing to layout), and a
+ * flex-grow child of its parent row so it fills the available width.
+ * `min-width: 0` lets the flex children shrink below intrinsic content
+ * width — required for the dashboard's grids to behave on narrow
+ * viewports.
  */
 :host {
-  display: contents;
+  display: flex;
+  flex: 1;
+  min-width: 0;
 }
 
 /*
