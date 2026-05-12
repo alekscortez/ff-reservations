@@ -1,6 +1,7 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ClientsService } from '../../../core/http/clients.service';
 import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
 import { CrmClient } from '../../../shared/models/client.model';
@@ -12,10 +13,20 @@ import {
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmNumberedPagination } from '../../../shared/ui/pagination';
+
+const PAGE_SIZE = 50;
 
 @Component({
   selector: 'app-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmInput],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    PhoneDisplayPipe,
+    HlmButton,
+    HlmInput,
+    HlmNumberedPagination,
+  ],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
 })
@@ -23,43 +34,74 @@ export class Clients implements OnInit {
   private clientsApi = inject(ClientsService);
   private frequentApi = inject(FrequentClientsService);
 
-  items: CrmClient[] = [];
-  loading = false;
-  error: string | null = null;
-  filterQuery = new FormControl('', { nonNullable: true });
-  editingPhone: string | null = null;
+  readonly items = signal<CrmClient[]>([]);
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly editingPhone = signal<string | null>(null);
   editPhoneCountry: 'US' | 'MX' = 'US';
+
+  readonly filterQuery = new FormControl('', { nonNullable: true });
+  private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
+
+  readonly currentPage = signal(1);
+  readonly pageSize = signal(PAGE_SIZE);
+
+  readonly filtered = computed<CrmClient[]>(() => {
+    const q = (this.query() ?? '').trim().toLowerCase();
+    const all = this.items();
+    if (!q) return all;
+    return all.filter(
+      (c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q),
+    );
+  });
+
+  readonly totalFiltered = computed(() => this.filtered().length);
+
+  readonly paginated = computed<CrmClient[]>(() => {
+    const list = this.filtered();
+    const start = (this.currentPage() - 1) * this.pageSize();
+    return list.slice(start, start + this.pageSize());
+  });
+
+  readonly pageStart = computed(() =>
+    this.totalFiltered() === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1,
+  );
+  readonly pageEnd = computed(() =>
+    Math.min(this.currentPage() * this.pageSize(), this.totalFiltered()),
+  );
 
   editForm = new FormGroup({
     name: new FormControl('', { nonNullable: true }),
     phone: new FormControl('', { nonNullable: true }),
   });
 
+  constructor() {
+    effect(() => {
+      // Reset to page 1 whenever the search query changes. Reading
+      // `query()` registers the dependency; we only act when the value
+      // actually changes (signal equality handles dedupe).
+      this.query();
+      this.currentPage.set(1);
+    });
+  }
+
   ngOnInit(): void {
     this.load();
   }
 
   load(): void {
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     this.clientsApi.list().subscribe({
       next: (items) => {
-        this.items = items;
-        this.loading = false;
+        this.items.set(items);
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load clients';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load clients');
+        this.loading.set(false);
       },
     });
-  }
-
-  filteredItems(): CrmClient[] {
-    const q = this.filterQuery.value.trim().toLowerCase();
-    if (!q) return this.items;
-    return this.items.filter(
-      (c) => c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
-    );
   }
 
   formatMoney(value?: number): string {
@@ -67,8 +109,12 @@ export class Clients implements OnInit {
     return num.toFixed(2);
   }
 
+  trackByPhone(_: number, item: CrmClient): string {
+    return item.phone ?? '';
+  }
+
   startEdit(item: CrmClient): void {
-    this.editingPhone = item.phone;
+    this.editingPhone.set(item.phone);
     this.editPhoneCountry =
       inferPhoneCountryFromE164(item.phone) ??
       normalizePhoneCountry(item.phoneCountry ?? 'US');
@@ -79,35 +125,36 @@ export class Clients implements OnInit {
   }
 
   cancelEdit(): void {
-    this.editingPhone = null;
+    this.editingPhone.set(null);
   }
 
   saveEdit(): void {
-    if (!this.editingPhone) return;
+    const editingPhone = this.editingPhone();
+    if (!editingPhone) return;
     const phone = normalizePhoneToE164(
       this.editForm.controls.phone.value.trim(),
-      normalizePhoneCountry(this.editPhoneCountry)
+      normalizePhoneCountry(this.editPhoneCountry),
     );
     if (!phone) {
-      this.error = 'Phone must be a valid US or MX number.';
+      this.error.set('Phone must be a valid US or MX number.');
       return;
     }
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     const patch = {
       name: this.editForm.controls.name.value.trim(),
       phone,
       phoneCountry: this.editPhoneCountry,
     };
-    this.clientsApi.update(this.editingPhone, patch).subscribe({
+    this.clientsApi.update(editingPhone, patch).subscribe({
       next: (item) => {
-        this.items = this.items.map((x) => (x.phone === this.editingPhone ? item : x));
-        this.editingPhone = null;
-        this.loading = false;
+        this.items.update((list) => list.map((x) => (x.phone === editingPhone ? item : x)));
+        this.editingPhone.set(null);
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to update client';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to update client');
+        this.loading.set(false);
       },
     });
   }
@@ -116,8 +163,8 @@ export class Clients implements OnInit {
     const defaultTables = window.prompt('Default tables (e.g. A01, A02):', '');
     if (!defaultTables) return;
     const notes = window.prompt('Notes (optional):', '') || '';
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     this.frequentApi
       .create({
         name: item.name ?? 'Unknown',
@@ -131,12 +178,13 @@ export class Clients implements OnInit {
       })
       .subscribe({
         next: () => {
-          this.loading = false;
+          this.loading.set(false);
         },
         error: (err) => {
-          this.error =
-            err?.error?.message || err?.message || 'Failed to add frequent client';
-          this.loading = false;
+          this.error.set(
+            err?.error?.message || err?.message || 'Failed to add frequent client',
+          );
+          this.loading.set(false);
         },
       });
   }
@@ -144,16 +192,16 @@ export class Clients implements OnInit {
   deleteClient(item: CrmClient): void {
     const ok = window.confirm(`Delete client ${item.name}?`);
     if (!ok) return;
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     this.clientsApi.delete(item.phone ?? '').subscribe({
       next: () => {
-        this.items = this.items.filter((x) => x.phone !== item.phone);
-        this.loading = false;
+        this.items.update((list) => list.filter((x) => x.phone !== item.phone));
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to delete client';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to delete client');
+        this.loading.set(false);
       },
     });
   }
