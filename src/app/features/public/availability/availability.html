@@ -12,7 +12,7 @@
       <label class="grid gap-1 text-xs text-brand-600">
         Choose your night
         <select
-          class="h-10 rounded-lg border border-brand-200 px-3 text-sm"
+          hlmInput
           [value]="d.event.eventDate"
           (change)="onEventDateChange($any($event.target).value)"
         >
@@ -81,7 +81,7 @@
           Search table
           <input
             type="text"
-            class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+            hlmInput
             [formControl]="search"
             placeholder="A01, B38..."
             inputmode="text"

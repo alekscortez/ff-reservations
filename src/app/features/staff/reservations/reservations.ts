@@ -23,6 +23,7 @@ import { SquareWebPaymentsService } from '../../../core/payments/square-web-paym
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
+import { HlmInput } from '../../../shared/ui/input';
 // (BadgeVariants imported for paymentStatusBadgeVariant in Phase 5c —
 // re-used here for the 3 modal-internal badge variants below.)
 
@@ -81,6 +82,7 @@ interface PaymentLinkSmsState {
     HlmDialog,
     HlmButton,
     HlmBadge,
+    HlmInput,
   ],
   templateUrl: './reservations.html',
   styleUrl: './reservations.scss',
