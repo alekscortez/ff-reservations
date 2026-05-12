@@ -3,10 +3,11 @@ import { Component, OnInit, inject } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AdminUser, UsersService } from '../../../core/http/users.service';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, ReactiveFormsModule, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, HlmButton, HlmBadge],
   templateUrl: './users.html',
   styleUrl: './users.scss',
 })
@@ -196,17 +197,15 @@ export class Users implements OnInit {
     });
   }
 
-  roleBadgeClasses(role: string | null | undefined): string {
+  roleBadgeVariant(role: string | null | undefined): BadgeVariants['variant'] {
     const normalized = String(role ?? '').trim().toUpperCase();
-    if (normalized === 'ADMIN') return 'bg-danger-100 text-danger-800 border-danger-200';
-    if (normalized === 'STAFF') return 'bg-success-100 text-success-800 border-success-200';
-    return 'bg-brand-100 text-brand-700 border-brand-200';
+    if (normalized === 'ADMIN') return 'danger';
+    if (normalized === 'STAFF') return 'success';
+    return 'secondary';
   }
 
-  statusBadgeClasses(enabled: boolean): string {
-    return enabled
-      ? 'bg-success-100 text-success-800 border-success-200'
-      : 'bg-brand-100 text-brand-700 border-brand-200';
+  statusBadgeVariant(enabled: boolean): BadgeVariants['variant'] {
+    return enabled ? 'success' : 'secondary';
   }
 
   formatDateTime(epochSeconds: number | null | undefined): string {
