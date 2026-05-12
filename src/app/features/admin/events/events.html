@@ -9,11 +9,11 @@
       <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
         <label class="grid gap-1 text-xs text-brand-600">
           Filter by Date
-          <input type="date" [formControl]="filterDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          <input type="date" [formControl]="filterDate" hlmInput />
         </label>
         <label class="grid gap-1 text-xs text-brand-600">
           Filter by Name
-          <input type="text" [formControl]="filterName" placeholder="Saturday Night" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+          <input type="text" [formControl]="filterName" placeholder="Saturday Night" hlmInput />
         </label>
         <button
           type="button"
@@ -67,15 +67,15 @@
           <div class="mt-3 grid gap-3 md:grid-cols-3">
             <label class="grid gap-1 text-xs text-brand-600">
               Event Name
-              <input type="text" formControlName="eventName" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+              <input type="text" formControlName="eventName" hlmInput />
             </label>
             <label class="grid gap-1 text-xs text-brand-600">
               Event Date
-              <input type="date" formControlName="eventDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+              <input type="date" formControlName="eventDate" hlmInput />
             </label>
             <label class="grid gap-1 text-xs text-brand-600">
               Status
-              <select formControlName="status" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm">
+              <select formControlName="status" hlmInput>
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="INACTIVE">INACTIVE</option>
               </select>
@@ -88,7 +88,7 @@
           <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
             <label class="grid min-w-0 gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
               Section {{ s }}
-              <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+              <input type="number" min="0" [formControl]="getSectionControl(editSectionPricing, s)" hlmInput class="min-w-0" />
             </label>
           </div>
         </details>
@@ -213,11 +213,11 @@
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="grid gap-1 text-xs text-brand-600">
             Event Name
-            <input type="text" formControlName="eventName" placeholder="Saturday Night" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="text" formControlName="eventName" placeholder="Saturday Night" hlmInput />
           </label>
           <label class="grid gap-1 text-xs text-brand-600">
             Event Date
-            <input type="date" formControlName="eventDate" class="h-10 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="date" formControlName="eventDate" hlmInput />
           </label>
         </div>
       </details>
@@ -227,7 +227,7 @@
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-5">
           <label class="grid min-w-0 gap-1 text-xs text-brand-600" *ngFor="let s of templateSections">
             Section {{ s }}
-            <input type="number" min="0" [formControl]="getSectionControl(createSectionPricing, s)" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="number" min="0" [formControl]="getSectionControl(createSectionPricing, s)" hlmInput class="min-w-0" />
           </label>
         </div>
       </details>

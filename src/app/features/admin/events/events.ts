@@ -9,10 +9,11 @@ import { TableInfo } from '../../../shared/models/table.model';
 import { FrequentClient } from '../../../shared/models/frequent-client.model';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-events',
-  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, HlmDialog, HlmButton, HlmInput],
   templateUrl: './events.html',
   styleUrl: './events.scss',
 })
