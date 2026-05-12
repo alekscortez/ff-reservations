@@ -1,19 +1,12 @@
-.shell-content {
-  padding: 16px;
-  background: #fff;
-  min-height: calc(100svh - var(--header-height, 0px));
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-}
-
+/*
+ * Block-only rules. Padding is intentionally NOT set here because
+ * component-scoped styles get an [_ngcontent-XXX] attribute that raises
+ * their specificity above Tailwind utilities. That made an earlier
+ * `padding: 16px` rule beat the directive's `md:pl-64`, sliding dashboard
+ * cards under the sidebar. Padding is now applied via Tailwind classes
+ * on the <main> element in shell.html.
+ */
 .shell-content > * {
   width: 100%;
   align-self: stretch;
-}
-
-@media (max-width: 900px) {
-  .shell-content {
-    padding: 12px;
-  }
 }
