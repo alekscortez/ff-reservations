@@ -198,7 +198,7 @@
       <h3 class="text-lg font-semibold text-brand-900">Create Event</h3>
       <button
         type="button"
-        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+        hlmBtn variant="outline" size="icon-sm" disabled:cursor-not-allowed disabled:opacity-50 class="rounded-full"
         (click)="closeCreateModal()"
         [disabled]="loading"
         aria-label="Close create event modal"
@@ -280,8 +280,8 @@
 
       <div class="sticky bottom-0 z-10 -mx-4 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
         <div class="flex flex-wrap gap-2">
-          <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50" [disabled]="form.invalid || loading">Create</button>
-          <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="closeCreateModal()" [disabled]="loading">Cancel</button>
+          <button hlmBtn type="submit" [disabled]="form.invalid || loading">Create</button>
+          <button hlmBtn variant="outline" type="button" (click)="closeCreateModal()" [disabled]="loading">Cancel</button>
         </div>
       </div>
     </form>
