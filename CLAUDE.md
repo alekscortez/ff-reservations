@@ -79,6 +79,7 @@ bash backend/lambda/deploy.sh            # deploy lambda (uses default AWS profi
 - Groups: `Admin`, `Staff` (managed). Users without a group fall through to the `unauthorized` page.
 - Frontend role guards live in `src/app/core/guards/` (`auth.guard.ts`, `role.guard.ts`, `admin.guard.ts`).
 - **Customer auth** (mobile app, separate from staff): Cognito Custom Auth phone-OTP via `backend/cognito-customer-auth/` triggers. Public mediator routes `POST /auth/customer/start` + `POST /auth/customer/verify` (in `routes-customer-auth.mjs`) wrap the synthetic-email convention so the client only handles plain phone + OTP. Customer-only routes live under `/me/*` (in `routes-me.mjs`) and use `requireCustomerOwnership(event)` (in `index.mjs:262-269`) to extract the Cognito `sub` and re-check resource ownership. Audience is enforced separately at API Gateway via the customer authorizer.
+- **Token TTLs** (staff client `1kdkvis45qo915plp7lvj03u16`, set 2026-05-11): access 8h, ID 8h, refresh 30d. Silent renew via refresh token is enabled in `auth.config.ts`. Customer client (`21n3rd1sp4o9ka4l7tld45f0ka`) unchanged at Cognito defaults.
 
 ## Concurrency / data integrity
 
@@ -195,3 +196,5 @@ Settings stored in `ff-settings` override env at runtime; some keys (Square IDs,
 - Auditing auth → re-read this file's "Auth model" section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin` / `requireCustomerOwnership`.
 - "Did SMS X arrive?" → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber` (success) or `.../Failure` (failure). Logs include `messageId`, `destination`, `providerResponse`, `dwellTimeMs`, `status`.
 - "Did the cron sweep run?" → `aws logs filter-log-events --log-group-name /aws/lambda/ff-reservations-api --filter-pattern "scheduled_maintenance"`.
+- **Debugging an iOS-Chrome-only bug** → visit `/?debug=1` on the phone. Loads eruda from CDN + injects a top-right fixed panel with live event counters (touch/pointer/click + viewport) and OIDC lifecycle events on console. Gated by `localStorage.ff-debug=1`; never loads for real users. Disable with `/?debug=0`. Code: `src/main.ts` (panel) + `src/app/app.ts` (OIDC).
+- **`*ngFor` with template method calls is an anti-pattern** — see `topbar.ts:quickActions()` for the memoized + `trackBy` pattern. CD re-invokes the method every cycle, identity-tracking destroys/recreates DOM mid-touch, iOS Chrome drops the trailing touchend. Memory: `feedback_ngfor_no_template_methods.md`.
