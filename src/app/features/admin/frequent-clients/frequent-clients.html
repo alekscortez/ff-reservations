@@ -8,7 +8,7 @@
     <div class="flex items-center gap-2">
       <input
         type="text"
-        class="h-10 min-w-0 flex-1 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+        hlmInput class="min-w-0 flex-1"
         placeholder="Search name, phone, or table"
         [formControl]="filterQuery"
       />
@@ -36,7 +36,7 @@
             Phone
             <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
               <select
-                class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
+                hlmInput class="min-w-0 px-2"
                 [value]="editPhoneCountry"
                 (change)="editPhoneCountry = $any($event.target).value"
               >
@@ -46,7 +46,7 @@
               <input
                 type="tel"
                 formControlName="phone"
-                class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                hlmInput class="min-w-0"
                 inputmode="tel"
                 placeholder="+1..."
               />
@@ -54,7 +54,7 @@
           </label>
           <label class="grid min-w-0 gap-1 text-xs text-brand-600">
             Name
-            <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="text" formControlName="name" hlmInput class="min-w-0" />
           </label>
           <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
             Reserved Tables
@@ -113,18 +113,18 @@
               <small class="text-xs text-brand-500" *ngIf="getTableInfo(editTableIdAt(i)) as info">Section {{ info.section }} · ${{ info.price }}</small>
             </div>
 
-            <select formControlName="paymentStatus" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm">
+            <select formControlName="paymentStatus" hlmInput class="min-w-0">
               <option *ngFor="let status of paymentStatuses" [value]="status">{{ status }}</option>
             </select>
 
             <ng-container *ngIf="!isEditCourtesy(i); else courtesyEditStandalone">
-              <input type="number" min="0" formControlName="amountDue" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+              <input type="number" min="0" formControlName="amountDue" hlmInput class="min-w-0" />
               <input
                 type="number"
                 min="0"
                 [disabled]="editStatusAt(i) === 'PENDING' || editStatusAt(i) === 'PAID'"
                 formControlName="amountPaid"
-                class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                hlmInput class="min-w-0"
               />
             </ng-container>
 
@@ -134,7 +134,7 @@
             </ng-template>
 
                 <div class="grid min-w-0 gap-1" *ngIf="isEditPendingOrPartial(i)">
-                  <input type="time" formControlName="paymentDeadlineTime" class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+                  <input type="time" formControlName="paymentDeadlineTime" hlmInput class="min-w-0" />
                   <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz }} (global setting)</p>
                 </div>
           </div>
@@ -143,14 +143,14 @@
         <div class="grid min-w-0 gap-3 md:grid-cols-3">
           <label class="grid min-w-0 gap-1 text-xs text-brand-600">
             Status
-            <select formControlName="status" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm">
+            <select formControlName="status" hlmInput class="min-w-0">
               <option value="ACTIVE">ACTIVE</option>
               <option value="DISABLED">DISABLED</option>
             </select>
           </label>
           <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
             Notes
-            <input type="text" formControlName="notes" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="text" formControlName="notes" hlmInput class="min-w-0" />
           </label>
         </div>
 
@@ -254,7 +254,7 @@
               Phone
               <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
                 <select
-                  class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-2 text-base md:text-sm"
+                  hlmInput class="min-w-0 px-2"
                   [value]="createPhoneCountry"
                   (change)="createPhoneCountry = $any($event.target).value"
                 >
@@ -264,7 +264,7 @@
                 <input
                   type="tel"
                   formControlName="phone"
-                  class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                  hlmInput class="min-w-0"
                   inputmode="tel"
                   placeholder="+1..."
                 />
@@ -272,7 +272,7 @@
             </label>
             <label class="grid min-w-0 gap-1 text-xs text-brand-600">
               Name
-              <input type="text" formControlName="name" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+              <input type="text" formControlName="name" hlmInput class="min-w-0" />
             </label>
             <label class="grid min-w-0 gap-1 text-xs text-brand-600 md:col-span-2">
               Reserved Tables
@@ -332,7 +332,7 @@
                   <small class="text-xs text-brand-500" *ngIf="getTableInfo(tableId) as info">Section {{ info.section }} · ${{ info.price }}</small>
                 </div>
                 <select
-                  class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                  hlmInput class="min-w-0"
                   [value]="setting.paymentStatus"
                   (change)="updateCreateSetting(tableId, { paymentStatus: $any($event.target).value })"
                 >
@@ -349,14 +349,14 @@
                   <input
                     type="number"
                     min="0"
-                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    hlmInput class="min-w-0"
                     [value]="setting.amountDue"
                     (input)="updateCreateSetting(tableId, { amountDue: toNumber($any($event.target).value) })"
                   />
                   <input
                     type="number"
                     min="0"
-                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    hlmInput class="min-w-0"
                     [value]="setting.amountPaid ?? 0"
                     [disabled]="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PAID'"
                     (input)="updateCreateSetting(tableId, { amountPaid: toNumber($any($event.target).value) })"
@@ -371,7 +371,7 @@
                 <div class="grid min-w-0 gap-1" *ngIf="setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PARTIAL'">
                   <input
                     type="time"
-                    class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-base md:text-sm"
+                    hlmInput class="min-w-0"
                     [value]="setting.paymentDeadlineTime"
                     (input)="updateCreateSetting(tableId, { paymentDeadlineTime: $any($event.target).value })"
                   />
@@ -383,7 +383,7 @@
 
           <label class="grid min-w-0 gap-1 text-xs text-brand-600">
             Notes
-            <input type="text" formControlName="notes" class="h-10 w-full max-w-full min-w-0 box-border rounded-lg border border-brand-200 px-3 text-base md:text-sm" />
+            <input type="text" formControlName="notes" hlmInput class="min-w-0" />
           </label>
 
           <p class="text-sm text-danger-700" *ngIf="error">{{ error }}</p>

@@ -19,10 +19,11 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { SettingsService } from '../../../core/http/settings.service';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-frequent-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog, HlmInput],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })
