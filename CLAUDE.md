@@ -16,7 +16,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 
 ## UI primitives — read before adding new UI
 
-Nine Spartan-style primitive families live under `src/app/shared/ui/`. Use them
+Ten Spartan-style primitive families live under `src/app/shared/ui/`. Use them
 instead of hand-rolling new Tailwind class strings. Each is a
 standalone Angular directive/component with `cva` variants +
 `tailwind-merge` for consumer-class overrides.
@@ -32,6 +32,7 @@ standalone Angular directive/component with `cva` variants +
 | `HlmSidebar` (compound family — see "Shell layout" below) | `<hlm-sidebar>` + slot directives + `[hlmSidebarWrapper]` / `[hlmSidebarInset]` / `[hlmSidebarTrigger]` | desktop gap-div + fixed container; mobile slide-over via own fixed `<aside>` + backdrop (NOT HlmDialog); cookie-persisted open state; Cmd/Ctrl+B shortcut | The staff/admin shell only. Don't pull these into feature pages — feature routes render *inside* the inset. |
 | `HlmPagination` (compound family — see "Pagination" below) | `<hlm-numbered-pagination>` high-level wrapper, or compose from `nav[hlmPagination]` + `ul[hlmPaginationContent]` + `li[hlmPaginationItem]` + `button[hlmPaginationLink]` + `<hlm-pagination-previous>` / `<hlm-pagination-next>` / `<hlm-pagination-ellipsis>` | Two-way `[(currentPage)]` + `[(itemsPerPage)]` model signals + `[totalItems]` input. Sliding window with ellipses (default `maxSize=7`). Event-only — no RouterLink integration | Any long client-side list that doesn't fit on one screen. Currently used by the admin Clients page (1,400+ rows, 50 per page). |
 | `HlmTable` (compound family — see "Data tables" below) | `<div hlmTableContainer>` + `<table hlmTable>` + `<thead hlmTHead>` + `<tbody hlmTBody>` + `<tfoot hlmTFoot>` + `<tr hlmTr>` + `<th hlmTh>` + `<td hlmTd>` + `<caption hlmCaption>`, plus `<hlm-table-sort-header [column] label>` for sortable headers | Pure CSS class application matching the existing hand-rolled table markup; sort-header composes with TanStack `Column<T>` | Long lists that need sort / filter / pagination. Pair with `@tanstack/angular-table`'s `createAngularTable` for state. Currently used by the admin Clients page. |
+| `HlmDropdownMenu` (compound family — see "Dropdown menus" below) | `[hlmMenuTriggerFor]` on the launcher button + `[hlmMenu]` on a `<div>` inside an `<ng-template>` + `button[hlmMenuItem]` (with `variant="default \| destructive"`) + `<hlm-menu-separator>` + `[hlmMenuLabel]` | Wraps `@angular/cdk/menu` — full keyboard nav (arrows, Esc, Home/End), focus management, outside-click dismiss, return-focus to trigger. Renders into an overlay portal | Row action menus (Edit/Delete/etc.), context menus. Currently used by the admin Clients page row "⋯" button. Skip this for binary actions where two buttons fit — only use when 3+ actions or you need to save horizontal space. |
 
 **Convention for TS helpers**: when a template's state-driven styling
 depends on a function, that function returns a `BadgeVariants['variant']`
@@ -301,6 +302,70 @@ The admin Clients page is the reference (`features/admin/clients/`).
 When the same pattern is rolled out to Reservations list / Financials,
 the per-page chunk grows by ~14 kB gzipped (TanStack vendored once,
 shared across lazy chunks at runtime).
+
+**Spartan-stock card layout**: the table is *the* visual block — not
+wrapped in another card. The page outline for a data-table screen
+should be:
+
+```
+<section class="flex flex-col gap-4">
+  <header>...title + subtitle...</header>
+  <div class="flex items-end gap-2">...filter input + refresh...</div>
+  <div class="overflow-hidden rounded-md border border-brand-200 bg-white">
+    <div hlmTableContainer>
+      <table hlmTable>...
+```
+
+Two wrappers around `<table>`: the outer with `overflow-hidden rounded-md border` clips the row dividers against the rounded corners, and the inner `[hlmTableContainer]` provides `overflow-x-auto` so wide tables can scroll horizontally on small viewports. Combining the two into one element forces a vertical scrollbar on the round-corner clip — split them.
+
+### Dropdown menus — `HlmDropdownMenu` family
+
+Wraps `@angular/cdk/menu` (CdkMenuTrigger, CdkMenu, CdkMenuItem) with
+our styling convention. Use for row action menus (Edit / Delete / etc.)
+and any "more actions" UX where multiple actions need to fit in a small
+space.
+
+```html
+<button hlmBtn variant="ghost" size="icon-sm" [hlmMenuTriggerFor]="rowMenu"
+  [attr.aria-label]="'Actions for ' + name">
+  <ng-icon name="lucideEllipsis" size="16" />
+</button>
+<ng-template #rowMenu>
+  <div hlmMenu>
+    <button hlmMenuItem (click)="edit()">Edit</button>
+    <button hlmMenuItem (click)="addToFrequent()">Add to frequent</button>
+    <hlm-menu-separator />
+    <button hlmMenuItem variant="destructive" (click)="delete()">Delete</button>
+  </div>
+</ng-template>
+```
+
+**Trigger** uses `[hlmMenuTriggerFor]="ngTemplateRef"` — pass the
+template ref, NOT the menu div directly. CDK instantiates the template
+into an overlay portal at the trigger's position when opened.
+
+**Menu items** are plain `<button>`s with `[hlmMenuItem]`. CDK handles
+keyboard activation (Enter / Space), arrow-key navigation between
+items, Esc to dismiss, and returning focus to the trigger after close.
+Click handlers fire normally; the menu auto-closes after a click on
+any item.
+
+**Destructive variant** uses `variant="destructive"` and renders the
+item in danger-red. Use for irreversible / dangerous actions (Delete,
+Cancel reservation, Refund). Pair with a separator above it.
+
+**Why CDK Menu and not HlmDialog**: a menu is a transient floating
+list anchored to a trigger; a dialog is a focused task with backdrop +
+modal semantics. They have opposite intent. CDK's menu module is
+~14 kB gzipped per lazy chunk that uses it — meaningful but worth it
+for keyboard a11y + screen-reader semantics that would be painful to
+hand-roll.
+
+**Skipping for now (additive later)**: `HlmMenuCheckbox` (for column
+visibility), `HlmMenuRadio` (single-select submenu options), submenu
+support (`[hlmMenuTriggerFor]` nested inside a menu item). All are
+provided by `@angular/cdk/menu` already; just need styled wrappers
+when a real use case lands.
 
 ## Repo layout
 
