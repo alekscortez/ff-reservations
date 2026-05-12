@@ -2,13 +2,14 @@ import { Directive, ElementRef, effect, inject } from '@angular/core';
 import { twMerge } from 'tailwind-merge';
 
 /**
- * Apply to the `<main>` (or whatever you use for the main content
- * column). Reserves left padding equal to the sidebar's desktop width
- * when the sidebar is expanded; collapses to 0 when the sidebar is
- * collapsed. On mobile, padding is always 0 (the sidebar slides over
- * via portal instead of taking layout space).
+ * Apply to the `<main>` (or any block) that should fill the remaining
+ * row width next to `<hlm-sidebar>`. The sidebar's gap div reserves
+ * its own layout width — the inset just flex-grows into whatever's
+ * left. When the sidebar's gap collapses to w-0, this inset
+ * automatically expands to full width via standard flex sizing.
  *
- * Pair with `<hlm-sidebar>` inside the same `[hlmSidebarWrapper]` root.
+ * Pair with `<hlm-sidebar>` as a flex sibling in the row inside
+ * `[hlmSidebarWrapper]`.
  */
 @Directive({
   selector: '[hlmSidebarInset]',
@@ -28,7 +29,7 @@ export class HlmSidebarInset {
       this.el.nativeElement.setAttribute(
         'class',
         twMerge(
-          'relative flex flex-1 flex-col bg-background md:pl-64 group-data-[state=collapsed]/sidebar-wrapper:md:pl-0',
+          'relative flex w-full flex-1 flex-col bg-background',
           this.consumerClasses,
         ),
       );

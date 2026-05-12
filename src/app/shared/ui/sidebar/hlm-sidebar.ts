@@ -5,11 +5,22 @@ import { HlmDialog } from '../dialog';
 import { HlmSidebarService } from './hlm-sidebar.service';
 
 /**
- * Sidebar surface. On desktop it renders as a fixed-position column on
- * the left, anchored below the sticky header (via the `--header-height`
- * CSS variable read off the wrapper). On mobile it portals into
- * HlmDialog (size="sheet") so the same template slides over the content
- * from the left.
+ * Sidebar surface. On desktop renders as TWO divs (Spartan's gap +
+ * container pattern):
+ *
+ *   1. A "gap" div with real layout width — this is what reserves
+ *      space in the flex row. Animating its width from w-64 to w-0
+ *      naturally causes the adjacent `<main hlmSidebarInset>` to
+ *      flex-grow into the freed space. No padding-left hack on the
+ *      inset, no display:contents Safari bug — just standard flex
+ *      sizing.
+ *
+ *   2. A fixed-positioned "container" div that holds the visual
+ *      sidebar UI. Anchored to top:--header-height so it sits below
+ *      a sticky header; slides off (translate-x) when collapsed.
+ *
+ * On mobile the same content portals into HlmDialog (size="sheet") so
+ * the slide-over doesn't take layout space.
  *
  * Slots:
  *
@@ -19,11 +30,7 @@ import { HlmSidebarService } from './hlm-sidebar.service';
  *     <hlm-sidebar-footer>...</hlm-sidebar-footer>
  *   </hlm-sidebar>
  *
- * Width is fixed at `w-64` (16rem) on desktop. The main content (via
- * HlmSidebarInset) reserves the same width with `md:pl-64`. When the
- * sidebar is collapsed, both the sidebar and the inset's left padding
- * collapse to 0 — handled by `group-data-[state=collapsed]/sidebar-wrapper:`
- * variants on this component and HlmSidebarInset respectively.
+ * Pair with `<main hlmSidebarInset>` as a flex sibling in the row.
  */
 @Component({
   selector: 'hlm-sidebar',
@@ -36,6 +43,10 @@ import { HlmSidebarService } from './hlm-sidebar.service';
     class: 'contents',
   },
   template: `
+    <ng-template #contents>
+      <ng-content></ng-content>
+    </ng-template>
+
     @if (service.isMobile()) {
       @if (service.openMobile()) {
         <hlm-dialog
@@ -44,19 +55,29 @@ import { HlmSidebarService } from './hlm-sidebar.service';
           (close)="service.setOpenMobile(false)"
         >
           <div class="flex h-full w-full flex-col">
-            <ng-content></ng-content>
+            <ng-container *ngTemplateOutlet="contents"></ng-container>
           </div>
         </hlm-dialog>
       }
     } @else {
+      <!-- Gap: real layout-occupying div in the flex row. Animating its
+           width drives the inset's flex-grow reflow automatically. -->
+      <div
+        data-slot="sidebar-gap"
+        class="relative hidden w-64 bg-transparent transition-[width] duration-200 ease-linear group-data-[state=collapsed]/sidebar-wrapper:w-0 md:block"
+        aria-hidden="true"
+      ></div>
+
+      <!-- Container: visual sidebar, fixed-positioned, slides off when
+           collapsed via left-[-16rem]. -->
       <aside
         data-slot="sidebar-container"
-        class="fixed left-0 z-40 hidden w-64 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-linear md:flex group-data-[state=collapsed]/sidebar-wrapper:-translate-x-full"
+        class="fixed left-0 z-40 hidden w-64 border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[left] duration-200 ease-linear md:flex group-data-[state=collapsed]/sidebar-wrapper:left-[-16rem]"
         [style.top]="'var(--header-height, 0px)'"
         [style.height]="'calc(100svh - var(--header-height, 0px))'"
       >
         <div class="flex h-full w-full flex-col">
-          <ng-content></ng-content>
+          <ng-container *ngTemplateOutlet="contents"></ng-container>
         </div>
       </aside>
     }

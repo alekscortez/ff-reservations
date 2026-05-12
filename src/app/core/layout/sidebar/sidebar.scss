@@ -1,3 +1,15 @@
+/*
+ * <app-sidebar> wraps <hlm-sidebar> which itself uses display: contents
+ * to push its gap + container divs up. For Safari to reliably treat the
+ * gap div as a flex item that drives the row's reflow, <app-sidebar>
+ * needs to be a real flex container — display: contents on this host
+ * has the same Safari bug as it did on <app-shell> (descendants don't
+ * propagate flex sizing).
+ *
+ * `flex-shrink: 0` keeps the sidebar from shrinking below the gap's
+ * intrinsic 16rem width when the row gets cramped.
+ */
 :host {
-  display: contents;
+  display: flex;
+  flex-shrink: 0;
 }
