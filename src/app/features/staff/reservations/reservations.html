@@ -101,10 +101,7 @@
               <p class="text-xs text-brand-500">{{ reservationListMeta(r) }}</p>
             </td>
             <td class="py-3 pr-3">
-              <span
-                class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                [ngClass]="paymentStatusBadgeClass(r)"
-              >
+              <span hlmBadge size="sm" [variant]="paymentStatusBadgeVariant(r)">
                 {{ paymentStatusLabel(r) }}
               </span>
             </td>
@@ -142,10 +139,7 @@
       >
         <div class="flex items-center justify-between gap-3">
           <p class="text-base font-semibold text-brand-900">{{ r | tableLabel }} · {{ r.customerName }}</p>
-          <span
-            class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-            [ngClass]="paymentStatusBadgeClass(r)"
-          >
+          <span hlmBadge size="sm" [variant]="paymentStatusBadgeVariant(r)">
             {{ paymentStatusLabel(r) }}
           </span>
         </div>
