@@ -6,27 +6,51 @@
     </p>
   </header>
 
-  <div class="flex items-end gap-2">
-    <label class="flex min-w-0 flex-1 flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500 sm:max-w-sm">
-      Search
-      <input
-        type="text"
-        [formControl]="filterQuery"
-        placeholder="Name or phone"
-        hlmInput
-      />
-    </label>
-    <button
-      hlmBtn variant="outline" size="icon"
-      type="button"
-      class="shrink-0 rounded-full"
-      (click)="load()"
-      [disabled]="loading()"
-      aria-label="Refresh clients"
-      title="Refresh clients"
-    >
-      ↻
-    </button>
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <input
+      type="text"
+      hlmInput
+      class="w-full sm:w-80"
+      [formControl]="filterQuery"
+      placeholder="Filter clients by name or phone…"
+      aria-label="Filter clients"
+    />
+    <div class="flex items-center gap-2">
+      <button
+        hlmBtn variant="outline"
+        type="button"
+        [hlmMenuTriggerFor]="columnsMenu"
+        aria-label="Show or hide columns"
+      >
+        Columns
+        <ng-icon name="lucideChevronDown" size="14" class="ml-2 opacity-70" />
+      </button>
+      <ng-template #columnsMenu>
+        <div hlmMenu class="min-w-[10rem]">
+          <ng-container *ngFor="let id of hidableColumnIds">
+            <button
+              hlmMenuCheckbox
+              type="button"
+              [checked]="isColumnVisible(id)"
+              (triggered)="toggleColumnVisibility(id)"
+            >
+              {{ columnLabel(id) }}
+            </button>
+          </ng-container>
+        </div>
+      </ng-template>
+      <button
+        hlmBtn variant="outline" size="icon"
+        type="button"
+        class="shrink-0"
+        (click)="load()"
+        [disabled]="loading()"
+        aria-label="Refresh clients"
+        title="Refresh clients"
+      >
+        ↻
+      </button>
+    </div>
   </div>
 
   <div *ngIf="loading()" class="text-sm text-brand-500">Loading…</div>
@@ -40,25 +64,25 @@
     <table hlmTable>
       <thead hlmTHead>
         <tr hlmTr class="hover:bg-transparent">
-          <th hlmTh>
+          <th hlmTh *ngIf="isColumnVisible('name')">
             <hlm-table-sort-header [column]="column('name')!" label="Name" />
           </th>
-          <th hlmTh>
+          <th hlmTh *ngIf="isColumnVisible('phone')">
             <hlm-table-sort-header [column]="column('phone')!" label="Phone" />
           </th>
-          <th hlmTh class="text-right">
+          <th hlmTh *ngIf="isColumnVisible('totalSpend')" class="text-right">
             <hlm-table-sort-header [column]="column('totalSpend')!" label="Total Spend" class="-mr-3 ml-auto flex" />
           </th>
-          <th hlmTh class="text-right">
+          <th hlmTh *ngIf="isColumnVisible('totalReservations')" class="text-right">
             <hlm-table-sort-header [column]="column('totalReservations')!" label="Reservations" class="-mr-3 ml-auto flex" />
           </th>
-          <th hlmTh>
+          <th hlmTh *ngIf="isColumnVisible('lastEventDate')">
             <hlm-table-sort-header [column]="column('lastEventDate')!" label="Last Event" />
           </th>
-          <th hlmTh>
+          <th hlmTh *ngIf="isColumnVisible('lastTableId')">
             <hlm-table-sort-header [column]="column('lastTableId')!" label="Last Table" />
           </th>
-          <th hlmTh>
+          <th hlmTh *ngIf="isColumnVisible('updatedBy')">
             <hlm-table-sort-header [column]="column('updatedBy')!" label="Updated By" />
           </th>
           <th hlmTh class="w-12 pl-0 pr-2"><span class="sr-only">Actions</span></th>
@@ -67,13 +91,13 @@
       <tbody hlmTBody>
         <ng-container *ngFor="let c of currentRows(); trackBy: trackByPhone">
           <tr hlmTr *ngIf="editingPhone() !== c.phone">
-            <td hlmTd class="font-medium text-brand-900">{{ c.name }}</td>
-            <td hlmTd class="text-brand-600">{{ c.phone | phoneDisplay }}</td>
-            <td hlmTd class="text-right tabular-nums">${{ formatMoney(c.totalSpend) }}</td>
-            <td hlmTd class="text-right tabular-nums">{{ c.totalReservations || 0 }}</td>
-            <td hlmTd class="text-brand-600">{{ c.lastEventDate || '—' }}</td>
-            <td hlmTd class="text-brand-600">{{ c.lastTableId || '—' }}</td>
-            <td hlmTd class="text-brand-600">{{ c.updatedBy || '—' }}</td>
+            <td hlmTd *ngIf="isColumnVisible('name')" class="font-medium text-brand-900">{{ c.name }}</td>
+            <td hlmTd *ngIf="isColumnVisible('phone')" class="text-brand-600">{{ c.phone | phoneDisplay }}</td>
+            <td hlmTd *ngIf="isColumnVisible('totalSpend')" class="text-right tabular-nums">${{ formatMoney(c.totalSpend) }}</td>
+            <td hlmTd *ngIf="isColumnVisible('totalReservations')" class="text-right tabular-nums">{{ c.totalReservations || 0 }}</td>
+            <td hlmTd *ngIf="isColumnVisible('lastEventDate')" class="text-brand-600">{{ c.lastEventDate || '—' }}</td>
+            <td hlmTd *ngIf="isColumnVisible('lastTableId')" class="text-brand-600">{{ c.lastTableId || '—' }}</td>
+            <td hlmTd *ngIf="isColumnVisible('updatedBy')" class="text-brand-600">{{ c.updatedBy || '—' }}</td>
             <td hlmTd class="pl-0 pr-2 text-right">
               <button
                 hlmBtn variant="ghost" size="icon-sm"
@@ -96,7 +120,7 @@
           </tr>
 
           <tr *ngIf="editingPhone() === c.phone" class="border-b border-brand-100 last:border-0 bg-brand-50/40">
-            <td colspan="8" class="p-4">
+            <td [attr.colspan]="visibleColumnCount()" class="p-4">
               <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
                 <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
                   Name
