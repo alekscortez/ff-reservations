@@ -1,7 +1,9 @@
-import { Component, DestroyRef, OnDestroy, OnInit, Renderer2, inject } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { CommonModule, DOCUMENT } from '@angular/common';
+import { CommonModule } from '@angular/common';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucidePanelLeft } from '@ng-icons/lucide';
 import { AuthService } from '../../auth/auth.service';
 import { Subscription, catchError, filter, map, of, switchMap } from 'rxjs';
 import { EventsService } from '../../http/events.service';
@@ -11,10 +13,12 @@ import { ReservationItem } from '../../../shared/models/reservation.model';
 import { localIsoInTimeZoneToEpochMs } from '../../../shared/datetime';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmSidebarTrigger } from '../../../shared/ui/sidebar';
 
 @Component({
   selector: 'app-topbar',
-  imports: [CommonModule, RouterLink, HlmButton, HlmDialog],
+  imports: [CommonModule, RouterLink, NgIcon, HlmButton, HlmDialog, HlmSidebarTrigger],
+  providers: [provideIcons({ lucidePanelLeft })],
   templateUrl: './topbar.html',
   styleUrl: './topbar.scss',
 })
@@ -23,10 +27,7 @@ export class Topbar implements OnInit, OnDestroy {
   private router = inject(Router);
   private eventsApi = inject(EventsService);
   private reservationsApi = inject(ReservationsService);
-  private renderer = inject(Renderer2);
-  private doc = inject(DOCUMENT);
   private destroyRef = inject(DestroyRef);
-  private mobileNavOpen = false;
 
   isAuthenticated$ = this.auth.isAuthenticated$();
 
@@ -75,13 +76,6 @@ export class Topbar implements OnInit, OnDestroy {
 
   login(): void {
     this.auth.login();
-  }
-
-  toggleMobileNav(): void {
-    this.mobileNavOpen = !this.mobileNavOpen;
-    const apply = this.mobileNavOpen ? 'addClass' : 'removeClass';
-    this.renderer[apply](this.doc.body, 'mobile-nav-open');
-    this.renderer[apply](this.doc.documentElement, 'mobile-nav-open');
   }
 
   toggleQuickActions(): void {

@@ -8,11 +8,12 @@ import {
 } from 'angular-auth-oidc-client';
 import { map } from 'rxjs';
 import { Topbar } from './core/layout/topbar/topbar';
+import { HlmSidebarWrapper } from './shared/ui/sidebar';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, Topbar],
+  imports: [CommonModule, RouterOutlet, Topbar, HlmSidebarWrapper],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
