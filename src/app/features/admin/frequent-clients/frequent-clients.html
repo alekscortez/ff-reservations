@@ -75,8 +75,8 @@
             <button
               type="button"
               *ngFor="let s of templateSections"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': activeSection === s }"
+              hlmToggle variant="outline"
+              [active]="activeSection === s"
               (click)="toggleSection(s)"
             >
               Section {{ s }}
@@ -85,9 +85,9 @@
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              hlmToggle variant="outline"
               *ngFor="let t of templateTablesBySection[activeSection]"
-              [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': isEditSelected(t.id) }"
+              [active]="isEditSelected(t.id)"
               (click)="toggleEditTable(t.id)"
             >
               {{ t.id }}
@@ -293,8 +293,8 @@
               <button
                 type="button"
                 *ngFor="let s of templateSections"
-                class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': activeSection === s }"
+                hlmToggle variant="outline"
+                [active]="activeSection === s"
                 (click)="toggleSection(s)"
               >
                 Section {{ s }}
@@ -303,9 +303,9 @@
             <div class="flex flex-wrap gap-2">
               <button
                 type="button"
-                class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                hlmToggle variant="outline"
                 *ngFor="let t of templateTablesBySection[activeSection]"
-                [ngClass]="{ 'border-brand-900 bg-brand-900 text-white': isCreateSelected(t.id) }"
+                [active]="isCreateSelected(t.id)"
                 (click)="toggleCreateTable(t.id)"
               >
                 {{ t.id }}

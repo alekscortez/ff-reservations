@@ -20,10 +20,11 @@ import { SettingsService } from '../../../core/http/settings.service';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-frequent-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog, HlmInput],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog, HlmInput, HlmToggle],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })
