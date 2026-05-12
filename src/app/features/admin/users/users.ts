@@ -2,10 +2,11 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AdminUser, UsersService } from '../../../core/http/users.service';
+import { HlmButton } from '../../../shared/ui/button';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, HlmButton],
   templateUrl: './users.html',
   styleUrl: './users.scss',
 })
