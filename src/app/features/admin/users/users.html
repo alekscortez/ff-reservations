@@ -120,7 +120,7 @@
             </td>
             <td class="py-3 pr-3">
               <span
-                class="inline-flex h-7 items-center rounded-full border border-brand-200 px-2 text-xs font-semibold uppercase tracking-[0.08em]"
+                class="inline-flex h-7 items-center rounded-full border px-2 text-xs font-semibold uppercase tracking-[0.08em]"
                 [ngClass]="statusBadgeClasses(item.enabled)"
               >
                 {{ item.enabled ? 'Enabled' : 'Disabled' }}
@@ -163,7 +163,7 @@
             <p class="mt-1 break-words text-sm text-brand-700">{{ item.email || '—' }}</p>
           </div>
           <span
-            class="inline-flex h-7 shrink-0 items-center rounded-full border border-brand-200 px-2 text-xs font-semibold uppercase tracking-[0.08em]"
+            class="inline-flex h-7 shrink-0 items-center rounded-full border px-2 text-xs font-semibold uppercase tracking-[0.08em]"
             [ngClass]="roleBadgeClasses(item.role)"
           >
             {{ item.role }}
@@ -173,7 +173,7 @@
         <div class="mt-3 flex items-center justify-between text-sm text-brand-700">
           <span>Status</span>
           <span
-            class="inline-flex h-7 items-center rounded-full border border-brand-200 px-2 text-xs font-semibold uppercase tracking-[0.08em]"
+            class="inline-flex h-7 items-center rounded-full border px-2 text-xs font-semibold uppercase tracking-[0.08em]"
             [ngClass]="statusBadgeClasses(item.enabled)"
           >
             {{ item.enabled ? 'Enabled' : 'Disabled' }}

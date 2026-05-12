@@ -26,7 +26,7 @@
     >
       <button
         type="button"
-        class="rounded-2xl border border-brand-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-900 active:-translate-y-0.5 active:border-brand-900"
+        class="rounded-2xl border border-brand-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-900"
         *ngFor="let e of upcomingEvents()"
         [ngClass]="{ 'ring-2 ring-brand-900': isThisWeek(e.eventDate) }"
         (click)="selectEvent(e.eventDate!)"
@@ -645,7 +645,7 @@
               Table {{ t.id }} · ${{ t.price }}
               <button
                 type="button"
-                class="text-brand-500 hover:text-brand-900 active:text-brand-900"
+                class="text-brand-500 hover:text-brand-900"
                 *ngIf="selectedTables.length > 1"
                 (click)="removeSelectedTable(t.id)"
                 [disabled]="loading"
@@ -657,7 +657,7 @@
           </div>
           <button
             type="button"
-            class="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:border-brand-500 active:border-brand-500 disabled:opacity-50"
+            class="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:border-brand-500 disabled:opacity-50"
             (click)="beginAddAnotherTable()"
             [disabled]="loading || !holdId || selectedTables.length >= maxTablesPerBooking"
           >

@@ -44,7 +44,7 @@
           Flip Camera
         </button>
         <span
-          class="rounded-full border border-brand-200 px-2 py-1 text-[11px] font-semibold"
+          class="rounded-full border px-2 py-1 text-[11px] font-semibold"
           [ngClass]="scannerActive ? 'border-success-300 bg-success-100 text-success-800' : 'border-brand-200 bg-white text-brand-600'"
         >
           {{ scannerActive ? 'Camera Active' : 'Camera Off' }}
@@ -66,9 +66,9 @@
       </div>
     </div>
 
-    <div class="mt-3 rounded-xl border border-current p-3 text-sm" *ngIf="verifyResult" [ngClass]="resultBadgeClass()">
+    <div class="mt-3 rounded-xl border p-3 text-sm" *ngIf="verifyResult" [ngClass]="resultBadgeClass()">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="rounded-full border border-current px-2 py-0.5 text-xs font-semibold">{{ verifyResult.code }}</span>
+        <span class="rounded-full border px-2 py-0.5 text-xs font-semibold">{{ verifyResult.code }}</span>
         <span class="font-semibold">{{ verifyResult.message }}</span>
       </div>
       <p class="mt-2 text-xs">

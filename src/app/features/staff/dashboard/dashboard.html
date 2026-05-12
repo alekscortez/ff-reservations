@@ -79,7 +79,7 @@
       <div class="mt-3 grid gap-2" *ngIf="urgentPayments.length > 0">
         <article
           *ngFor="let item of urgentPayments"
-          class="rounded-xl border border-current px-3 py-2"
+          class="rounded-xl border px-3 py-2"
           [ngClass]="urgencyClass(item)"
         >
           <div class="flex items-start justify-between gap-2">
@@ -88,12 +88,12 @@
               <p class="text-xs opacity-80">{{ item.reservation.paymentStatus }} · Due {{ formatDeadlineShort(item.reservation.paymentDeadlineAt, item.reservation.eventDate) }}</p>
             </div>
             <div class="flex flex-col items-end gap-1">
-              <span class="rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em]">
+              <span class="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em]">
                 {{ item.urgency === 'OVERDUE' ? 'Overdue' : 'Due Soon' }}
               </span>
               <button
                 type="button"
-                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white active:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                 (click)="sendPaymentLinkSms(item.reservation)"
                 [disabled]="paymentLinkLoadingId === item.reservation.reservationId || !canGeneratePaymentLink(item.reservation)"
               >
@@ -101,7 +101,7 @@
               </button>
               <button
                 type="button"
-                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white active:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                class="rounded-full border border-current bg-white/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                 (click)="openUrgentPayment(item)"
                 [disabled]="paymentLoading || !canTakePayment(item.reservation)"
               >
@@ -205,7 +205,7 @@
     <div class="mt-3 grid gap-2" *ngIf="recentActivity.length > 0">
       <button
         type="button"
-        class="cursor-pointer rounded-xl border border-current px-3 py-2 text-left transition-colors"
+        class="cursor-pointer rounded-xl border px-3 py-2 text-left transition-colors"
         [ngClass]="activityCardClass(activity)"
         *ngFor="let activity of recentActivity"
         (click)="openActivityDetails(activity)"
@@ -317,7 +317,7 @@
 
         <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="getPaymentLinkSmsState(detailItem) as smsState">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold" [ngClass]="paymentLinkSmsBadgeClass(smsState.status)">
+            <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" [ngClass]="paymentLinkSmsBadgeClass(smsState.status)">
               {{ smsState.status === 'SENT' ? 'SMS SENT' : 'SMS FAILED' }}
             </span>
             <span class="text-xs text-brand-600">{{ smsState.atMs | date:'short' }}</span>
@@ -403,7 +403,7 @@
 
         <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="getCheckInPassState(detailItem) as state">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold" [ngClass]="checkInStateBadgeClass(state.status)">
+            <span class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold" [ngClass]="checkInStateBadgeClass(state.status)">
               {{ checkInStateLabel(state.status) }}
             </span>
             <span class="text-xs text-brand-600" *ngIf="epochSecondsToMs(state.usedAt) as usedAtMs">
@@ -478,7 +478,7 @@
                 <p class="mt-0.5 text-[11px] text-brand-500">By {{ h.actor | systemActorLabel }}</p>
               </div>
               <div class="text-right">
-                <span class="inline-flex rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold" [ngClass]="historyEventBadgeClass(h.eventType)">
+                <span class="inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold" [ngClass]="historyEventBadgeClass(h.eventType)">
                   {{ historyEventLabel(h.eventType) }}
                 </span>
                 <p class="mt-1 text-[11px] text-brand-500">{{ h.atMs | date:'short' }}</p>
