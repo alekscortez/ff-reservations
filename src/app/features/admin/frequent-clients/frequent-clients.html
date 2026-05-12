@@ -475,3 +475,14 @@
       </div>
 </hlm-dialog>
 </section>
+
+<hlm-confirm-dialog
+  *ngIf="deleteTarget"
+  title="Delete frequent client?"
+  [message]="'Remove ' + (deleteTarget.name || '') + ' from the recurring guest list.'"
+  confirmText="Delete"
+  loadingText="Deleting…"
+  [destructive]="true"
+  (confirm)="confirmDelete()"
+  (cancel)="cancelDelete()"
+/>

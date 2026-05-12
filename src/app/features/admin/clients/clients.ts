@@ -26,6 +26,7 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import {
   HlmMenu,
   HlmMenuCheckbox,
@@ -56,6 +57,8 @@ const PAGE_SIZE = 50;
     NgIcon,
     PhoneDisplayPipe,
     HlmButton,
+    HlmConfirmDialog,
+    HlmDialog,
     HlmInput,
     HlmMenu,
     HlmMenuCheckbox,
@@ -324,10 +327,29 @@ export class Clients implements OnInit {
     });
   }
 
+  frequentTarget: CrmClient | null = null;
+  frequentForm = new FormGroup({
+    defaultTables: new FormControl('', { nonNullable: true }),
+    notes: new FormControl('', { nonNullable: true }),
+  });
+  deleteTarget: CrmClient | null = null;
+
   addToFrequent(item: CrmClient): void {
-    const defaultTables = window.prompt('Default tables (e.g. A01, A02):', '');
+    this.frequentTarget = item;
+    this.frequentForm.reset({ defaultTables: '', notes: '' });
+  }
+
+  cancelAddToFrequent(): void {
+    this.frequentTarget = null;
+  }
+
+  confirmAddToFrequent(): void {
+    const item = this.frequentTarget;
+    if (!item) return;
+    const defaultTables = this.frequentForm.controls.defaultTables.value.trim();
     if (!defaultTables) return;
-    const notes = window.prompt('Notes (optional):', '') || '';
+    const notes = this.frequentForm.controls.notes.value.trim();
+    this.frequentTarget = null;
     this.loading.set(true);
     this.error.set(null);
     this.frequentApi
@@ -339,7 +361,7 @@ export class Clients implements OnInit {
           .split(',')
           .map((v) => v.trim())
           .filter(Boolean),
-        notes: notes.trim(),
+        notes,
       })
       .subscribe({
         next: () => {
@@ -355,8 +377,17 @@ export class Clients implements OnInit {
   }
 
   deleteClient(item: CrmClient): void {
-    const ok = window.confirm(`Delete client ${item.name}?`);
-    if (!ok) return;
+    this.deleteTarget = item;
+  }
+
+  cancelDeleteClient(): void {
+    this.deleteTarget = null;
+  }
+
+  confirmDeleteClient(): void {
+    const item = this.deleteTarget;
+    if (!item) return;
+    this.deleteTarget = null;
     this.loading.set(true);
     this.error.set(null);
     this.clientsApi.delete(item.phone ?? '').subscribe({

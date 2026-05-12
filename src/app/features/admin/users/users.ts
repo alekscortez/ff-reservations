@@ -25,6 +25,7 @@ import {
 import { AdminUser, UsersService } from '../../../core/http/users.service';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
+import { HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import {
   HlmMenu,
@@ -54,6 +55,7 @@ const PAGE_SIZE = 25;
     NgIcon,
     HlmButton,
     HlmBadge,
+    HlmConfirmDialog,
     HlmInput,
     HlmMenu,
     HlmMenuCheckbox,
@@ -339,13 +341,32 @@ export class Users implements OnInit {
     });
   }
 
+  resetUserTarget: AdminUser | null = null;
+
   sendPasswordReset(user: AdminUser): void {
     const username = String(user.username ?? '').trim();
     if (!username) return;
     if (this.actionLoadingByUsername[username]) return;
-    const label = String(user.email ?? user.name ?? username).trim();
-    const ok = window.confirm(`Send password reset to ${label}?`);
-    if (!ok) return;
+    this.resetUserTarget = user;
+  }
+
+  resetUserTargetLabel(): string {
+    const u = this.resetUserTarget;
+    if (!u) return '';
+    return String(u.email ?? u.name ?? u.username ?? '').trim();
+  }
+
+  cancelResetUser(): void {
+    this.resetUserTarget = null;
+  }
+
+  confirmResetUser(): void {
+    const user = this.resetUserTarget;
+    if (!user) return;
+    const username = String(user.username ?? '').trim();
+    if (!username) return;
+    const label = this.resetUserTargetLabel();
+    this.resetUserTarget = null;
 
     this.setActionLoading(username, true);
     this.error = null;

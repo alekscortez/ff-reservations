@@ -28,7 +28,7 @@ import { FrequentClientsService } from '../../../core/http/frequent-clients.serv
 import { CreateEventPayload, EventItem } from '../../../shared/models/event.model';
 import { TableInfo } from '../../../shared/models/table.model';
 import { FrequentClient } from '../../../shared/models/frequent-client.model';
-import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
@@ -58,6 +58,7 @@ const PAGE_SIZE = 25;
     CommonModule,
     ReactiveFormsModule,
     NgIcon,
+    HlmConfirmDialog,
     HlmDialog,
     HlmButton,
     HlmInput,
@@ -390,9 +391,20 @@ export class Events implements OnInit, OnDestroy {
     });
   }
 
+  deleteTarget: EventItem | null = null;
+
   deleteEvent(item: EventItem): void {
-    const ok = window.confirm(`Delete event ${item.eventName} (${item.eventDate})?`);
-    if (!ok) return;
+    this.deleteTarget = item;
+  }
+
+  cancelDeleteEvent(): void {
+    this.deleteTarget = null;
+  }
+
+  confirmDeleteEvent(): void {
+    const item = this.deleteTarget;
+    if (!item) return;
+    this.deleteTarget = null;
 
     this.loading = true;
     this.error = null;

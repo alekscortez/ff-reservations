@@ -283,3 +283,14 @@
       </div>
     </form>
 </hlm-dialog>
+
+<hlm-confirm-dialog
+  *ngIf="deleteTarget"
+  title="Delete event?"
+  [message]="'Delete ' + (deleteTarget.eventName || '') + ' (' + (deleteTarget.eventDate || '') + '). This cannot be undone.'"
+  confirmText="Delete"
+  loadingText="Deleting…"
+  [destructive]="true"
+  (confirm)="confirmDeleteEvent()"
+  (cancel)="cancelDeleteEvent()"
+/>

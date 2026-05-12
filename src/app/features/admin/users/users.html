@@ -264,3 +264,13 @@
     </div>
   </section>
 </section>
+
+<hlm-confirm-dialog
+  *ngIf="resetUserTarget"
+  title="Send password reset?"
+  [message]="'A reset email will be sent to ' + resetUserTargetLabel() + '.'"
+  confirmText="Send reset"
+  loadingText="Sending…"
+  (confirm)="confirmResetUser()"
+  (cancel)="cancelResetUser()"
+/>

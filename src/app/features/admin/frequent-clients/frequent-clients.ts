@@ -39,7 +39,7 @@ import {
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { SettingsService } from '../../../core/http/settings.service';
 import { HlmButton } from '../../../shared/ui/button';
-import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmConfirmDialog, HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
 import {
@@ -71,6 +71,7 @@ const PAGE_SIZE = 25;
     NgIcon,
     PhoneDisplayPipe,
     HlmButton,
+    HlmConfirmDialog,
     HlmDialog,
     HlmInput,
     HlmToggle,
@@ -518,9 +519,20 @@ export class FrequentClients implements OnInit {
     });
   }
 
+  deleteTarget: FrequentClient | null = null;
+
   delete(item: FrequentClient): void {
-    const ok = window.confirm(`Delete client ${item.name}?`);
-    if (!ok) return;
+    this.deleteTarget = item;
+  }
+
+  cancelDelete(): void {
+    this.deleteTarget = null;
+  }
+
+  confirmDelete(): void {
+    const item = this.deleteTarget;
+    if (!item) return;
+    this.deleteTarget = null;
     this.loading = true;
     this.error = null;
     this.clientsApi.delete(item.clientId).subscribe({
