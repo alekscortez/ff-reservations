@@ -313,10 +313,7 @@ container card) and sits above the table-card. Page outline:
 
   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
     <input hlmInput class="w-full sm:w-80" placeholder="Filter ..." />
-    <div class="flex items-center gap-2">
-      <button hlmBtn variant="outline" [hlmMenuTriggerFor]="columnsMenu">Columns ⌄</button>
-      <button hlmBtn variant="outline" size="icon" (click)="reload()">↻</button>
-    </div>
+    <button hlmBtn variant="outline" [hlmMenuTriggerFor]="columnsMenu">Columns ⌄</button>
   </div>
 
   <div class="overflow-hidden rounded-md border border-brand-200 bg-white">
