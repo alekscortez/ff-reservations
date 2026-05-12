@@ -11,10 +11,11 @@ import {
 } from '../../../core/http/public-availability.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
+import { HlmInput } from '../../../shared/ui/input';
 
 @Component({
   selector: 'app-public-availability',
-  imports: [CommonModule, ReactiveFormsModule, TableMap],
+  imports: [CommonModule, ReactiveFormsModule, TableMap, HlmInput],
   templateUrl: './availability.html',
   styleUrl: './availability.scss',
 })

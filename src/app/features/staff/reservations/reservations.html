@@ -53,7 +53,7 @@
         <input
           type="date"
           [formControl]="filterDate"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+          hlmInput size="lg"
         />
       </label>
       <button hlmBtn size="lg" type="button" (click)="load()">
@@ -269,7 +269,7 @@
           </p>
           <input
             type="text"
-            class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-xs text-brand-900"
+            hlmInput class="min-w-0 text-xs"
             [value]="paymentLink.url"
             readonly
           />
@@ -358,7 +358,7 @@
           <p class="break-all text-xs text-brand-600">Pass {{ pass.passId }} · Updated {{ pass.createdAtMs | date:'shortTime' }}</p>
           <input
             type="text"
-            class="h-10 w-full min-w-0 rounded-lg border border-brand-200 px-3 text-xs text-brand-900"
+            hlmInput class="min-w-0 text-xs"
             [value]="pass.url"
             readonly
           />
@@ -484,7 +484,7 @@
           step="0.01"
           formControlName="amount"
           [readonly]="isCreditPaymentMethodSelected()"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900 readonly:bg-brand-50"
+          hlmInput size="lg"
         />
       </label>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
@@ -492,7 +492,7 @@
         <select
           formControlName="method"
           (change)="onPaymentMethodChanged()"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+          hlmInput size="lg"
         >
           <option value="square">Square</option>
           <option value="cashapp">Cash App Pay</option>
@@ -506,7 +506,7 @@
           <select
             formControlName="creditId"
             (change)="onPaymentCreditChanged()"
-            class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900 disabled:bg-brand-50"
+            hlmInput size="lg"
             [disabled]="paymentCreditsLoading || !paymentCredits.length"
           >
             <option value="" disabled selected hidden>Select reservation credit</option>
@@ -527,7 +527,7 @@
         <select
           formControlName="remainingMethod"
           (change)="onRemainingMethodChanged()"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+          hlmInput size="lg"
         >
           <option value="cash">Cash</option>
           <option value="square">Square</option>
@@ -547,7 +547,7 @@
           maxlength="64"
           autocomplete="off"
           placeholder="Enter receipt number"
-          class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900"
+          hlmInput size="lg"
         />
       </label>
       <p class="text-xs text-danger-700" *ngIf="shouldShowCashReceiptError()">
@@ -555,7 +555,7 @@
       </p>
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Note
-        <input type="text" formControlName="note" class="h-11 rounded-lg border border-brand-200 px-3 text-sm text-brand-900 outline-none focus:border-brand-900" />
+        <input type="text" formControlName="note" hlmInput size="lg" />
       </label>
 
       <p class="text-xs text-brand-600" *ngIf="isSquarePaymentMethodSelected()">
