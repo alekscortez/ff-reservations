@@ -1012,28 +1012,29 @@
   </ng-template>
 </div>
 
-<div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showReleaseConfirm">
-  <div class="absolute inset-0 bg-black/40" (click)="cancelReleasePrompt()"></div>
-  <div class="relative w-[90vw] max-w-sm rounded-2xl bg-white p-5 text-center">
-    <h4 class="text-lg font-semibold text-brand-900">Release hold?</h4>
-    <p class="mt-2 text-sm text-brand-600">
-      You created this hold. Do you want to release it when closing?
-    </p>
-    <div class="mt-4 grid gap-2">
-      <button
-        type="button"
-        class="h-11 rounded-full bg-brand-900 text-sm font-semibold text-white"
-        (click)="releaseHold()"
-      >
-        Release Hold
-      </button>
-      <button
-        type="button"
-        class="h-11 rounded-full border border-brand-200 text-sm font-semibold text-brand-700"
-        (click)="cancelReleasePrompt(); showReservationModal = true"
-      >
-        Continue Reservation
-      </button>
-    </div>
+<hlm-dialog
+  *ngIf="showReleaseConfirm"
+  (close)="cancelReleasePrompt()"
+  panelClass="w-[90vw] max-w-sm p-5 text-center"
+>
+  <h4 class="text-lg font-semibold text-brand-900">Release hold?</h4>
+  <p class="mt-2 text-sm text-brand-600">
+    You created this hold. Do you want to release it when closing?
+  </p>
+  <div class="mt-4 grid gap-2">
+    <button
+      type="button"
+      class="h-11 rounded-full bg-brand-900 text-sm font-semibold text-white"
+      (click)="releaseHold()"
+    >
+      Release Hold
+    </button>
+    <button
+      type="button"
+      class="h-11 rounded-full border border-brand-200 text-sm font-semibold text-brand-700"
+      (click)="cancelReleasePrompt(); showReservationModal = true"
+    >
+      Continue Reservation
+    </button>
   </div>
-</div>
+</hlm-dialog>
