@@ -74,7 +74,7 @@
         Name
         <input type="text" hlmInput [formControl]="pastFilterName" placeholder="Saturday Night" />
       </label>
-      <button type="button" hlmInput (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
+      <button hlmBtn variant="outline" type="button" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
         Clear
       </button>
     </div>
@@ -127,16 +127,16 @@
         <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
           <button
             type="button"
-            class="rounded-full px-3 py-1 text-xs font-semibold"
-            [ngClass]="isTableViewMode('MAP') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            hlmToggle
+="isTableViewMode('MAP')"
             (click)="setTableViewMode('MAP')"
           >
             Map
           </button>
           <button
             type="button"
-            class="rounded-full px-3 py-1 text-xs font-semibold"
-            [ngClass]="isTableViewMode('LIST') ? 'bg-brand-900 text-white' : 'text-brand-700'"
+            hlmToggle
+="isTableViewMode('LIST')"
             (click)="setTableViewMode('LIST')"
           >
             List
@@ -197,48 +197,48 @@
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'ALL' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'ALL'"
               (click)="setFilterStatus('ALL')"
             >
               All
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'AVAILABLE' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'AVAILABLE'"
               (click)="setFilterStatus('AVAILABLE')"
             >
               Available
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'HOLD' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'HOLD'"
               (click)="setFilterStatus('HOLD')"
             >
               Hold
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'PENDING_PAYMENT'"
               (click)="setFilterStatus('PENDING_PAYMENT')"
             >
               Pending Payment
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'RESERVED'"
               (click)="setFilterStatus('RESERVED')"
             >
               Reserved
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'DISABLED' }"
+              hlmToggle variant="outline"
+="filterStatus.value === 'DISABLED'"
               (click)="setFilterStatus('DISABLED')"
             >
               Disabled
@@ -251,17 +251,17 @@
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+              hlmToggle variant="outline"
+="filterSection.value === 'ALL'"
               (click)="setFilterSection('ALL')"
             >
               All
             </button>
             <button
               type="button"
-              class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+              hlmToggle variant="outline"
               *ngFor="let s of sections"
-              [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+              [active]="filterSection.value === s"
               (click)="setFilterSection(s)"
             >
               Section {{ s }}
@@ -428,48 +428,48 @@
                 <div class="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'ALL' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'ALL'"
                     (click)="setFilterStatus('ALL')"
                   >
                     All
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'AVAILABLE' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'AVAILABLE'"
                     (click)="setFilterStatus('AVAILABLE')"
                   >
                     Available
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'HOLD' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'HOLD'"
                     (click)="setFilterStatus('HOLD')"
                   >
                     Hold
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'PENDING_PAYMENT' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'PENDING_PAYMENT'"
                     (click)="setFilterStatus('PENDING_PAYMENT')"
                   >
                     Pending Payment
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'RESERVED' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'RESERVED'"
                     (click)="setFilterStatus('RESERVED')"
                   >
                     Reserved
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterStatus.value === 'DISABLED' }"
+                    hlmToggle variant="outline"
+="filterStatus.value === 'DISABLED'"
                     (click)="setFilterStatus('DISABLED')"
                   >
                     Disabled
@@ -482,17 +482,17 @@
                 <div class="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === 'ALL' }"
+                    hlmToggle variant="outline"
+="filterSection.value === 'ALL'"
                     (click)="setFilterSection('ALL')"
                   >
                     All
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-brand-200 px-3 py-1 text-xs"
+                    hlmToggle variant="outline"
                     *ngFor="let s of sections"
-                    [ngClass]="{ 'bg-brand-900 text-white border-brand-900': filterSection.value === s }"
+                    [active]="filterSection.value === s"
                     (click)="setFilterSection(s)"
                   >
                     Section {{ s }}
@@ -787,9 +787,10 @@
               <div class="relative z-30 grid grid-cols-3 gap-2 pointer-events-auto">
                 <button
                   type="button"
-                  hlmInput class="font-semibold touch-manipulation"
+                  hlmToggle variant="outline"
+                  class="rounded-lg h-10 font-semibold touch-manipulation"
                   *ngFor="let method of paymentMethodOptions; trackBy: trackByPaymentMethodOption"
-                  [ngClass]="isPaymentMethod(method.value) ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-brand-800'"
+                  [active]="isPaymentMethod(method.value)"
                   (mousedown)="onPaymentMethodButtonClick($event, method.value)"
                   (click)="onPaymentMethodButtonClick($event, method.value)"
                 >
@@ -840,7 +841,7 @@
                     [class.readonly]="!allowCustomDeposit"
                     hlmInput
                   />
-                  <button type="button" hlmInput (click)="toggleCustomDeposit()">
+                  <button hlmBtn variant="outline" size="xs" type="button" (click)="toggleCustomDeposit()">
                     {{ allowCustomDeposit ? 'Lock' : 'Modify' }}
                   </button>
                 </div>
