@@ -18,8 +18,9 @@
         />
       </label>
       <button
+        hlmBtn variant="outline" size="icon"
         type="button"
-        class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-200 text-brand-700"
+        class="shrink-0 rounded-full"
         (click)="load()"
         [disabled]="loading"
         aria-label="Refresh clients"
@@ -61,10 +62,10 @@
               <td class="py-3 pr-3">{{ c.updatedBy || '—' }}</td>
               <td class="py-3 pr-3">
                 <div class="flex flex-wrap gap-2">
-                  <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(c)">
+                  <button hlmBtn variant="outline" type="button" (click)="startEdit(c)">
                     Edit
                   </button>
-                  <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteClient(c)">
+                  <button hlmBtn variant="destructive" type="button" (click)="deleteClient(c)">
                     Delete
                   </button>
                 </div>
@@ -99,10 +100,10 @@
                     </div>
                   </label>
                   <div class="flex flex-wrap gap-2">
-                    <button type="submit" class="h-10 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white" [disabled]="loading">
+                    <button hlmBtn type="submit" [disabled]="loading">
                       Save
                     </button>
-                    <button type="button" class="h-10 rounded-lg border border-brand-200 px-4 text-sm text-brand-700" (click)="cancelEdit()" [disabled]="loading">
+                    <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading">
                       Cancel
                     </button>
                   </div>
@@ -141,10 +142,10 @@
           </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800" (click)="startEdit(c)">
+          <button hlmBtn variant="outline" type="button" (click)="startEdit(c)">
             Edit
           </button>
-          <button type="button" class="h-10 rounded-lg bg-danger-700 px-3 text-sm font-semibold text-white" (click)="deleteClient(c)">
+          <button hlmBtn variant="destructive" type="button" (click)="deleteClient(c)">
             Delete
           </button>
         </div>
