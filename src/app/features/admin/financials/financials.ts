@@ -12,6 +12,7 @@ import {
   ReservationPayment,
 } from '../../../shared/models/reservation.model';
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
+import { HlmButton } from '../../../shared/ui/button';
 
 interface FinancialRow {
   eventId: string;
@@ -95,7 +96,7 @@ interface PaymentLedgerRow {
 
 @Component({
   selector: 'app-financials',
-  imports: [CommonModule, ReactiveFormsModule, RouterLink, TableLabelPipe],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, TableLabelPipe, HlmButton],
   templateUrl: './financials.html',
   styleUrl: './financials.scss',
 })

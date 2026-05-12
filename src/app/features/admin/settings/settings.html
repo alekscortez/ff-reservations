@@ -10,7 +10,7 @@
       </div>
       <button
         type="button"
-        class="h-10 rounded-lg border border-brand-200 px-3 text-sm font-semibold text-brand-800 disabled:opacity-50"
+        hlmBtn variant="outline"
         (click)="load()"
         [disabled]="loading || saving"
       >
@@ -303,7 +303,7 @@
     <div class="mt-4 flex justify-end">
       <button
         type="button"
-        class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
+        hlmBtn size="lg"
         (click)="save()"
         [disabled]="loading || saving || form.invalid"
       >
