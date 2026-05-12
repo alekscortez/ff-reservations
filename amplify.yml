@@ -8,10 +8,10 @@ frontend:
         # `packageManager` field). Node 22 ships with npm 10.9.7, whose `npm
         # ci` validation rejects the npm-11-written lock file with
         # "Missing chokidar@4.0.3 from lock file" even though the entry is
-        # present. Corepack reads `packageManager` and activates the right
-        # npm version, so `npm ci` succeeds the way it does locally.
-        - corepack enable
-        - corepack prepare npm@11.6.2 --activate
+        # present. Corepack's `prepare --activate` doesn't actually replace
+        # the bundled npm shim — it works for yarn/pnpm but is a no-op for
+        # npm. Install npm 11.6.2 globally instead so it lands in PATH.
+        - npm install -g npm@11.6.2
         - node --version
         - npm --version
         - npm ci
