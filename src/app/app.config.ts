@@ -14,7 +14,12 @@ import {
 
 import { routes } from './app.routes';
 import { authConfig } from './core/auth/auth.config';
-import { provideAuth, OidcSecurityService } from 'angular-auth-oidc-client';
+import {
+  provideAuth,
+  OidcSecurityService,
+  AbstractSecurityStorage,
+  DefaultLocalStorageService,
+} from 'angular-auth-oidc-client';
 import { AuthInterceptor } from './core/http/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
@@ -24,6 +29,12 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(withInterceptorsFromDi()),
     provideAuth(authConfig),
+    // Persist OIDC state (incl. the 30-day refresh token) in localStorage
+    // instead of the library's default sessionStorage. sessionStorage is
+    // cleared when the user closes the last tab/window for the origin, which
+    // forced a fresh /login round-trip on every browser restart even though
+    // the refresh token was nowhere near its TTL.
+    { provide: AbstractSecurityStorage, useClass: DefaultLocalStorageService },
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);

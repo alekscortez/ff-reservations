@@ -6,6 +6,7 @@ import {
   OidcSecurityService,
   PublicEventsService,
 } from 'angular-auth-oidc-client';
+import { map } from 'rxjs';
 import { Topbar } from './core/layout/topbar/topbar';
 
 @Component({
@@ -19,14 +20,17 @@ export class App implements OnInit {
   private oidc = inject(OidcSecurityService);
   private oidcEvents = inject(PublicEventsService);
 
-  isAuthenticated = false;
+  // Async pipe in the template — avoids a manual boolean field that could
+  // briefly race against the bootstrap's checkAuth() emission.
+  isAuthenticated$ = this.oidc.isAuthenticated$.pipe(
+    map((r) => r.isAuthenticated)
+  );
   userData$ = this.oidc.userData$;
 
   ngOnInit(): void {
-    this.oidc.checkAuth().subscribe();
-    this.oidc.isAuthenticated$.subscribe(({ isAuthenticated }) => {
-      this.isAuthenticated = isAuthenticated;
-    });
+    // provideAppInitializer (app.config.ts) already calls oidc.checkAuth()
+    // during bootstrap. Subscribing to isAuthenticated$ via the async pipe
+    // in the template is enough — no extra checkAuth() call here.
 
     // Diagnostic-only: log OIDC lifecycle events when the ff-debug flag
     // is set. Lets us verify on mobile (via eruda) whether silent renewal

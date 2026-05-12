@@ -1,4 +1,4 @@
-<app-topbar *ngIf="isAuthenticated"></app-topbar>
-<main class="app-main" [class.app-main--with-topbar]="isAuthenticated">
+<app-topbar *ngIf="isAuthenticated$ | async"></app-topbar>
+<main class="app-main" [class.app-main--with-topbar]="isAuthenticated$ | async">
   <router-outlet></router-outlet>
 </main>
