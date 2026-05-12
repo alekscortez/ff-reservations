@@ -15,42 +15,29 @@
       placeholder="Filter clients by name or phone…"
       aria-label="Filter clients"
     />
-    <div class="flex items-center gap-2">
-      <button
-        hlmBtn variant="outline"
-        type="button"
-        [hlmMenuTriggerFor]="columnsMenu"
-        aria-label="Show or hide columns"
-      >
-        Columns
-        <ng-icon name="lucideChevronDown" size="14" class="ml-2 opacity-70" />
-      </button>
-      <ng-template #columnsMenu>
-        <div hlmMenu class="min-w-[10rem]">
-          <ng-container *ngFor="let id of hidableColumnIds">
-            <button
-              hlmMenuCheckbox
-              type="button"
-              [checked]="isColumnVisible(id)"
-              (triggered)="toggleColumnVisibility(id)"
-            >
-              {{ columnLabel(id) }}
-            </button>
-          </ng-container>
-        </div>
-      </ng-template>
-      <button
-        hlmBtn variant="outline" size="icon"
-        type="button"
-        class="shrink-0"
-        (click)="load()"
-        [disabled]="loading()"
-        aria-label="Refresh clients"
-        title="Refresh clients"
-      >
-        ↻
-      </button>
-    </div>
+    <button
+      hlmBtn variant="outline"
+      type="button"
+      [hlmMenuTriggerFor]="columnsMenu"
+      aria-label="Show or hide columns"
+    >
+      Columns
+      <ng-icon name="lucideChevronDown" size="14" class="ml-2 opacity-70" />
+    </button>
+    <ng-template #columnsMenu>
+      <div hlmMenu class="min-w-[10rem]">
+        <ng-container *ngFor="let id of hidableColumnIds">
+          <button
+            hlmMenuCheckbox
+            type="button"
+            [checked]="isColumnVisible(id)"
+            (triggered)="toggleColumnVisibility(id)"
+          >
+            {{ columnLabel(id) }}
+          </button>
+        </ng-container>
+      </div>
+    </ng-template>
   </div>
 
   <div *ngIf="loading()" class="text-sm text-brand-500">Loading…</div>
