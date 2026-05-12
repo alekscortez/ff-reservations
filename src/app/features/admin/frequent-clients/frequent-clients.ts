@@ -18,10 +18,11 @@ import {
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { SettingsService } from '../../../core/http/settings.service';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmDialog } from '../../../shared/ui/dialog';
 
 @Component({
   selector: 'app-frequent-clients',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, HlmButton, HlmDialog],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
 })
