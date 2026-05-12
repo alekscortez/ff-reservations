@@ -46,11 +46,11 @@
     "@aws-sdk/client-secrets-manager": "^3.1045.0",
     "@aws-sdk/client-sns": "^3.1045.0",
     "@aws-sdk/lib-dynamodb": "^3.1045.0",
+    "@tailwindcss/postcss": "^4.3.0",
     "@types/qrcode": "^1.5.6",
-    "autoprefixer": "^10.4.21",
     "jsdom": "^27.1.0",
     "postcss": "^8.5.3",
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^4.3.0",
     "typescript": "~5.9.2",
     "vitest": "^4.0.8"
   }
