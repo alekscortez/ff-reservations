@@ -81,10 +81,11 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
+import { HlmDialog } from '../../../shared/ui/dialog';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap],
+  imports: [CommonModule, ReactiveFormsModule, PhoneDisplayPipe, TableMap, HlmDialog],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
 })

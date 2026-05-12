@@ -53,48 +53,45 @@
     </div>
   </section>
 
-  <div class="fixed inset-0 z-[200] flex items-center justify-center" *ngIf="showPastModal">
-    <div class="absolute inset-0 bg-black/50" (click)="showPastModal = false"></div>
-    <div class="relative max-h-[92dvh] w-[92vw] max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl bg-white p-4 md:p-6">
-      <div class="flex items-center justify-between gap-4">
-        <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
-        <button
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
-          (click)="showPastModal = false"
-          aria-label="Close past events"
-        >
-          ✕
-        </button>
-      </div>
-      <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-        <label class="grid gap-1 text-xs text-brand-600">
-          Date
-          <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterDate" />
-        </label>
-        <label class="grid gap-1 text-xs text-brand-600">
-          Name
-          <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterName" placeholder="Saturday Night" />
-        </label>
-        <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
-          Clear
-        </button>
-      </div>
-      <div class="mt-4 grid gap-2">
-        <button
-          type="button"
-          class="grid grid-cols-[120px_1fr_auto] items-center gap-3 rounded-xl border border-brand-100 px-3 py-3 text-left text-sm"
-          *ngFor="let e of pastEvents()"
-          (click)="selectEvent(e.eventDate!)"
-        >
-          <span class="font-semibold text-brand-900">{{ e.eventDate }}</span>
-          <span class="text-brand-700">{{ e.eventName }}</span>
-          <span class="text-[11px] uppercase tracking-[0.2em] text-brand-500">{{ e.status || 'ACTIVE' }}</span>
-        </button>
-        <div class="text-sm text-brand-500" *ngIf="pastEvents().length === 0">No past events found.</div>
-      </div>
+  <hlm-dialog *ngIf="showPastModal" (close)="showPastModal = false">
+    <div class="flex items-center justify-between gap-4">
+      <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
+      <button
+        type="button"
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand-200 text-xs text-brand-700"
+        (click)="showPastModal = false"
+        aria-label="Close past events"
+      >
+        ✕
+      </button>
     </div>
-  </div>
+    <div class="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+      <label class="grid gap-1 text-xs text-brand-600">
+        Date
+        <input type="date" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterDate" />
+      </label>
+      <label class="grid gap-1 text-xs text-brand-600">
+        Name
+        <input type="text" class="rounded-lg border border-brand-200 px-3 py-2 text-sm" [formControl]="pastFilterName" placeholder="Saturday Night" />
+      </label>
+      <button type="button" class="rounded-lg border border-brand-200 px-3 py-2 text-sm text-brand-700" (click)="pastFilterDate.setValue(''); pastFilterName.setValue('')">
+        Clear
+      </button>
+    </div>
+    <div class="mt-4 grid gap-2">
+      <button
+        type="button"
+        class="grid grid-cols-[120px_1fr_auto] items-center gap-3 rounded-xl border border-brand-100 px-3 py-3 text-left text-sm"
+        *ngFor="let e of pastEvents()"
+        (click)="selectEvent(e.eventDate!)"
+      >
+        <span class="font-semibold text-brand-900">{{ e.eventDate }}</span>
+        <span class="text-brand-700">{{ e.eventName }}</span>
+        <span class="text-[11px] uppercase tracking-[0.2em] text-brand-500">{{ e.status || 'ACTIVE' }}</span>
+      </button>
+      <div class="text-sm text-brand-500" *ngIf="pastEvents().length === 0">No past events found.</div>
+    </div>
+  </hlm-dialog>
 
   <section
     class="w-full pb-24 lg:pb-6"
