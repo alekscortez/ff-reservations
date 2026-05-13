@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   DoCheck,
@@ -97,6 +98,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
