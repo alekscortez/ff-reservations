@@ -856,12 +856,12 @@
             <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="!isUsingClientCredit() && isCashMethod()">
               <label class="grid gap-1 text-xs text-brand-600">
                 Payment Status
-                <select hlmInput formControlName="paymentStatus" (change)="onPaymentStatusChange()">
+                <hlm-native-select formControlName="paymentStatus" (change)="onPaymentStatusChange()">
                   <option value="PAID">PAID</option>
                   <option value="PARTIAL">PARTIAL</option>
                   <option value="PENDING">PENDING</option>
                   <option value="COURTESY">COURTESY</option>
-                </select>
+                </hlm-native-select>
               </label>
 
               <label class="grid gap-1 text-xs text-brand-600">

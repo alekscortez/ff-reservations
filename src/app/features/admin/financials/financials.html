@@ -26,11 +26,11 @@
       </label>
       <label class="grid min-w-0 gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Event Status
-        <select hlmInput [formControl]="eventStatus">
+        <hlm-native-select [formControl]="eventStatus">
           <option value="ALL">All</option>
           <option value="ACTIVE">Active</option>
           <option value="INACTIVE">Inactive</option>
-        </select>
+        </hlm-native-select>
       </label>
       <button hlmBtn type="button" (click)="applyFilters()" class="w-full sm:w-auto">Apply</button>
     </div>

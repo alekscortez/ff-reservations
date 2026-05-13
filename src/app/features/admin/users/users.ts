@@ -29,10 +29,12 @@ import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmNativeSelect } from '../../../shared/ui/native-select';
 import {
   HlmMenu,
   HlmMenuCheckbox,
   HlmMenuItem,
+  HlmMenuSeparator,
   HlmMenuTrigger,
 } from '../../../shared/ui/dropdown-menu';
 import { HlmNumberedPagination } from '../../../shared/ui/pagination';
@@ -63,7 +65,9 @@ const PAGE_SIZE = 25;
     HlmMenu,
     HlmMenuCheckbox,
     HlmMenuItem,
+    HlmMenuSeparator,
     HlmMenuTrigger,
+    HlmNativeSelect,
     HlmNumberedPagination,
     HlmTable,
     HlmTBody,
@@ -300,18 +304,16 @@ export class Users implements OnInit {
     });
   }
 
-  onRoleChange(user: AdminUser, event: Event): void {
+  setRole(user: AdminUser, role: 'Admin' | 'Staff'): void {
     const username = String(user.username ?? '').trim();
     if (!username) return;
-    const selected = String((event.target as HTMLSelectElement | null)?.value ?? '').trim();
-    if (selected !== 'Admin' && selected !== 'Staff') return;
-    if (user.role === selected) return;
+    if (user.role === role) return;
     if (this.actionLoadingByUsername()[username]) return;
 
     this.setActionLoading(username, true);
     this.error.set(null);
     this.notice.set(null);
-    this.usersApi.updateRole(username, selected).subscribe({
+    this.usersApi.updateRole(username, role).subscribe({
       next: (updated) => {
         this.replaceItem(updated);
         this.setActionLoading(username, false);

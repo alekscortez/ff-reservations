@@ -18,10 +18,10 @@
 
       <label class="flex flex-col gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
         Role
-        <select hlmInput formControlName="role">
+        <hlm-native-select formControlName="role">
           <option value="Staff">Staff</option>
           <option value="Admin">Admin</option>
-        </select>
+        </hlm-native-select>
       </label>
 
       <button
@@ -118,17 +118,9 @@
               </td>
               <td hlmTd *ngIf="isColumnVisible('email')" class="text-brand-600">{{ item.email || '—' }}</td>
               <td hlmTd *ngIf="isColumnVisible('role')">
-                <select
-                  hlmInput size="sm"
-                  class="h-8 px-2"
-                  [value]="item.role"
-                  [disabled]="isActionLoading(item)"
-                  (change)="onRoleChange(item, $event)"
-                >
-                  <option value="User">User (none)</option>
-                  <option value="Staff">Staff</option>
-                  <option value="Admin">Admin</option>
-                </select>
+                <span hlmBadge size="sm" [variant]="roleBadgeVariant(item.role)" class="shrink-0">
+                  {{ item.role }}
+                </span>
               </td>
               <td hlmTd *ngIf="isColumnVisible('status')">
                 <span hlmBadge size="sm" [variant]="statusBadgeVariant(item.enabled)">
@@ -151,6 +143,23 @@
                 </button>
                 <ng-template #rowMenu>
                   <div hlmMenu>
+                    <button
+                      hlmMenuItem
+                      type="button"
+                      [disabled]="item.role === 'Admin'"
+                      (click)="setRole(item, 'Admin')"
+                    >
+                      Set role: Admin
+                    </button>
+                    <button
+                      hlmMenuItem
+                      type="button"
+                      [disabled]="item.role === 'Staff'"
+                      (click)="setRole(item, 'Staff')"
+                    >
+                      Set role: Staff
+                    </button>
+                    <hlm-menu-separator />
                     <button hlmMenuItem type="button" (click)="sendPasswordReset(item)">
                       Send password reset
                     </button>
@@ -192,6 +201,23 @@
             </button>
             <ng-template #mobileMenu>
               <div hlmMenu>
+                <button
+                  hlmMenuItem
+                  type="button"
+                  [disabled]="item.role === 'Admin'"
+                  (click)="setRole(item, 'Admin')"
+                >
+                  Set role: Admin
+                </button>
+                <button
+                  hlmMenuItem
+                  type="button"
+                  [disabled]="item.role === 'Staff'"
+                  (click)="setRole(item, 'Staff')"
+                >
+                  Set role: Staff
+                </button>
+                <hlm-menu-separator />
                 <button hlmMenuItem type="button" (click)="sendPasswordReset(item)">
                   Send password reset
                 </button>
@@ -215,21 +241,6 @@
           <span>{{ formatDateTime(item.updatedAt) }}</span>
         </div>
 
-        <div class="mt-3">
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Role
-            <select
-              hlmInput size="sm"
-              [value]="item.role"
-              [disabled]="isActionLoading(item)"
-              (change)="onRoleChange(item, $event)"
-            >
-              <option value="User">User (none)</option>
-              <option value="Staff">Staff</option>
-              <option value="Admin">Admin</option>
-            </select>
-          </label>
-        </div>
       </article>
     </div>
 

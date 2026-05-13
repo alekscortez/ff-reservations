@@ -38,6 +38,7 @@ import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmDateRangePicker } from '../../../shared/ui/date-picker';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmNativeSelect } from '../../../shared/ui/native-select';
 import {
   HlmMenu,
   HlmMenuCheckbox,
@@ -163,6 +164,7 @@ interface PaymentLedgerRow {
     HlmButton,
     HlmDateRangePicker,
     HlmInput,
+    HlmNativeSelect,
     HlmMenu,
     HlmMenuCheckbox,
     HlmMenuTrigger,
