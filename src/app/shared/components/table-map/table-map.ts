@@ -1,5 +1,6 @@
 import {
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   OnChanges,
@@ -8,12 +9,23 @@ import {
   Output,
   SimpleChanges,
   inject,
+  signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { TableForEvent } from '../../models/table.model';
+
+const NAV_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+]);
+const ACTIVATE_KEYS = new Set(['Enter', ' ', 'Spacebar']);
 
 @Component({
   selector: 'app-table-map',
@@ -24,6 +36,7 @@ import { TableForEvent } from '../../models/table.model';
 export class TableMap implements OnInit, OnChanges, OnDestroy {
   private http = inject(HttpClient);
   private sanitizer = inject(DomSanitizer);
+  private elementRef = inject(ElementRef<HTMLElement>);
   private readonly defaultSectionColors: Record<string, string> = {
     A: '#ec008c',
     B: '#2e3192',
@@ -40,8 +53,8 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
 
   @Output() tableSelect = new EventEmitter<TableForEvent>();
 
-  safeSvgMarkup: SafeHtml | null = null;
-  loadError: string | null = null;
+  readonly safeSvgMarkup = signal<SafeHtml | null>(null);
+  readonly loadError = signal<string | null>(null);
 
   private baseSvgMarkup = '';
   private loadSub: Subscription | null = null;
@@ -70,8 +83,33 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
     if (!(target instanceof Element)) return;
     const tableEl = target.closest('[data-table-id]');
     if (!(tableEl instanceof Element)) return;
+    this.emitTableSelectFromElement(tableEl);
+  }
 
-    const tableId = String(tableEl.getAttribute('data-table-id') ?? '').trim();
+  onSvgKeydown(event: KeyboardEvent): void {
+    if (!this.interactive) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const tableEl = target.closest('[data-table-id]');
+    if (!(tableEl instanceof Element)) return;
+    const clickable = tableEl.getAttribute('data-clickable') === 'true';
+
+    if (ACTIVATE_KEYS.has(event.key)) {
+      if (!clickable) return;
+      event.preventDefault();
+      this.emitTableSelectFromElement(tableEl);
+      return;
+    }
+
+    if (!NAV_KEYS.has(event.key)) return;
+    const next = this.findNeighbor(tableEl, event.key);
+    if (!next) return;
+    event.preventDefault();
+    this.moveRover(next);
+  }
+
+  private emitTableSelectFromElement(el: Element): void {
+    const tableId = String(el.getAttribute('data-table-id') ?? '').trim();
     if (!tableId) return;
     const table = this.tables.find((item) => item.id === tableId);
     if (!table) return;
@@ -79,14 +117,67 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
     this.tableSelect.emit(table);
   }
 
+  private findNeighbor(currentEl: Element, key: string): Element | null {
+    const root = this.elementRef.nativeElement.querySelector('.ff-map-root');
+    if (!(root instanceof Element)) return null;
+    const focusables = Array.from(root.querySelectorAll('[data-clickable="true"]'));
+    if (focusables.length === 0) return null;
+
+    if (key === 'Home') return focusables[0] ?? null;
+    if (key === 'End') return focusables[focusables.length - 1] ?? null;
+
+    const cur = currentEl.getBoundingClientRect();
+    const cx = cur.left + cur.width / 2;
+    const cy = cur.top + cur.height / 2;
+
+    let best: { el: Element; dist: number } | null = null;
+    for (const el of focusables) {
+      if (el === currentEl) continue;
+      const r = el.getBoundingClientRect();
+      const ex = r.left + r.width / 2;
+      const ey = r.top + r.height / 2;
+      const dx = ex - cx;
+      const dy = ey - cy;
+
+      let valid = false;
+      switch (key) {
+        case 'ArrowRight':
+          valid = dx > 0.5 && Math.abs(dy) <= Math.abs(dx);
+          break;
+        case 'ArrowLeft':
+          valid = dx < -0.5 && Math.abs(dy) <= Math.abs(dx);
+          break;
+        case 'ArrowDown':
+          valid = dy > 0.5 && Math.abs(dx) <= Math.abs(dy);
+          break;
+        case 'ArrowUp':
+          valid = dy < -0.5 && Math.abs(dx) <= Math.abs(dy);
+          break;
+      }
+      if (!valid) continue;
+      const dist = Math.hypot(dx, dy);
+      if (best == null || dist < best.dist) best = { el, dist };
+    }
+    return best?.el ?? null;
+  }
+
+  private moveRover(target: Element): void {
+    const root = this.elementRef.nativeElement.querySelector('.ff-map-root');
+    if (!(root instanceof Element)) return;
+    for (const node of Array.from(root.querySelectorAll('[data-clickable="true"]'))) {
+      node.setAttribute('tabindex', node === target ? '0' : '-1');
+    }
+    this.focusElement(target);
+  }
+
   private loadSvg(): void {
     this.loadSub?.unsubscribe();
-    this.loadError = null;
-    this.safeSvgMarkup = null;
+    this.loadError.set(null);
+    this.safeSvgMarkup.set(null);
 
     const path = String(this.svgAssetPath ?? '').trim();
     if (!path) {
-      this.loadError = 'Map SVG path is not configured.';
+      this.loadError.set('Map SVG path is not configured.');
       return;
     }
 
@@ -97,8 +188,9 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
       },
       error: (err) => {
         this.baseSvgMarkup = '';
-        this.loadError =
-          err?.error?.message || err?.message || 'Failed to load reservations map.';
+        this.loadError.set(
+          err?.error?.message || err?.message || 'Failed to load reservations map.'
+        );
       },
     });
   }
@@ -110,14 +202,18 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
     const doc = parser.parseFromString(this.baseSvgMarkup, 'image/svg+xml');
     const svg = doc.documentElement;
     if (!svg || svg.nodeName.toLowerCase() !== 'svg') {
-      this.loadError = 'Invalid SVG map format.';
+      this.loadError.set('Invalid SVG map format.');
       return;
     }
 
     svg.classList.add('ff-map-root');
+    this.loadError.set(null);
+
+    const focusedTableId = this.getFocusedTableId();
 
     const tableById = new Map(this.tables.map((table) => [table.id, table] as const));
     const candidates = Array.from(doc.querySelectorAll('g[id]'));
+    const focusableNodes: Element[] = [];
     for (const node of candidates) {
       const tableId = String(node.getAttribute('id') ?? '').trim();
       if (!/^[A-Z]\d{2,3}$/.test(tableId)) continue;
@@ -128,7 +224,17 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
       node.classList.add('ff-map-table', statusClass);
       node.setAttribute('data-table-id', table.id);
       node.setAttribute('data-status', table.status);
-      node.setAttribute('data-clickable', table.status === 'AVAILABLE' ? 'true' : 'false');
+      const clickable = this.interactive && table.status === 'AVAILABLE';
+      node.setAttribute('data-clickable', clickable ? 'true' : 'false');
+      if (clickable) {
+        node.setAttribute('role', 'button');
+        node.setAttribute('aria-label', this.buildTableAriaLabel(table));
+        node.setAttribute('tabindex', '-1');
+        if (table.id === this.selectedTableId) {
+          node.setAttribute('aria-pressed', 'true');
+        }
+        focusableNodes.push(node);
+      }
       if (table.id === this.selectedTableId) {
         node.classList.add('ff-map-selected');
         this.appendSelectionMarker(doc, node);
@@ -147,8 +253,52 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
       node.insertBefore(title, node.firstChild);
     }
 
+    if (focusableNodes.length > 0) {
+      const rover =
+        focusableNodes.find(
+          (n) => n.getAttribute('data-table-id') === this.selectedTableId
+        ) ?? focusableNodes[0];
+      rover.setAttribute('tabindex', '0');
+    }
+
     const serialized = new XMLSerializer().serializeToString(svg);
-    this.safeSvgMarkup = this.sanitizer.bypassSecurityTrustHtml(serialized);
+    this.safeSvgMarkup.set(this.sanitizer.bypassSecurityTrustHtml(serialized));
+
+    if (focusedTableId) {
+      setTimeout(() => this.restoreFocus(focusedTableId), 0);
+    }
+  }
+
+  private buildTableAriaLabel(table: TableForEvent): string {
+    const status = String(table.status).toLowerCase().replace(/_/g, ' ');
+    return `Table ${table.id}, section ${table.section}, $${table.price}, ${status}`;
+  }
+
+  private getFocusedTableId(): string | null {
+    if (typeof document === 'undefined') return null;
+    const active = document.activeElement;
+    if (!(active instanceof Element)) return null;
+    if (!this.elementRef.nativeElement.contains(active)) return null;
+    const tableEl = active.closest('[data-table-id]');
+    if (!(tableEl instanceof Element)) return null;
+    return String(tableEl.getAttribute('data-table-id') ?? '').trim() || null;
+  }
+
+  private restoreFocus(tableId: string): void {
+    const target = this.findTableElement(tableId);
+    if (!target) return;
+    if (target.getAttribute('data-clickable') !== 'true') return;
+    this.focusElement(target);
+  }
+
+  private findTableElement(tableId: string): Element | null {
+    const root = this.elementRef.nativeElement.querySelector('.ff-map-root');
+    if (!(root instanceof Element)) return null;
+    return root.querySelector(`[data-table-id="${tableId}"]`);
+  }
+
+  private focusElement(el: Element): void {
+    (el as unknown as { focus?: (opts?: FocusOptions) => void }).focus?.({ preventScroll: false });
   }
 
   private applyStatusFill(node: Element, table: TableForEvent): void {
