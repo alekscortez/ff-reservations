@@ -445,7 +445,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.loading = true;
       this.error = null;
     }
-    this.tablesApi.getForEvent(date).subscribe({
+    this.tablesApi
+      .getForEvent(date)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (res) => {
         this.event = res.event;
         // Most polls return identical tables. Reassigning this.tables forces
@@ -519,7 +522,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   loadEvents(): void {
     this.eventsLoading = true;
     this.eventsError = null;
-    this.eventsApi.listEvents().subscribe({
+    this.eventsApi
+      .listEvents()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (items) => {
         this.events = (items ?? []).sort((a, b) =>
           (a.eventDate || '').localeCompare(b.eventDate || '')
@@ -574,16 +580,27 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       .slice(0, 4);
   }
 
+  // Max past events kept in the cache. The "Past Events" modal is meant
+  // for "find a recent past event" — older events are reachable via the
+  // date/name filters (filtered results bypass the slice because they
+  // narrow before this cap kicks in). Bounds DOM size as event history
+  // grows.
+  private readonly maxPastEventsRendered = 50;
+
   private recomputePastEvents(): void {
     const dateFilter = this.pastFilterDate.value.trim();
     const nameFilter = this.pastFilterName.value.trim().toLowerCase();
-    this.pastEventsCache = this.events
+    const hasFilters = Boolean(dateFilter || nameFilter);
+    const filtered = this.events
       .filter((e) => (e.eventDate || '') < this.businessDate)
       .filter((e) => (dateFilter ? e.eventDate === dateFilter : true))
       .filter((e) =>
         nameFilter ? (e.eventName || '').toLowerCase().includes(nameFilter) : true
       )
       .reverse();
+    this.pastEventsCache = hasFilters
+      ? filtered
+      : filtered.slice(0, this.maxPastEventsRendered);
   }
 
   private recomputeFilteredTables(): void {
@@ -713,6 +730,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         phone: phone || undefined,
         phoneCountry: this.phoneCountry,
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (item) => {
           this.selectedTables = [...this.selectedTables, t];
@@ -762,7 +780,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     const entry = this.holdEntries.find((h) => h.tableId === tableId);
     if (!entry) return;
     this.loading = true;
-    this.holdsApi.releaseHold(this.eventDate, tableId).subscribe({
+    this.holdsApi
+      .releaseHold(this.eventDate, tableId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: () => {
         const wasPrimary = this.selectedTableId === tableId;
         this.selectedTables = this.selectedTables.filter((t) => t.id !== tableId);
@@ -845,6 +866,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         phone: phone || undefined,
         phoneCountry: this.phoneCountry,
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (item) => {
           this.holdId = item.holdId;
@@ -921,7 +943,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       entries.map(
         (entry) =>
           new Promise<void>((resolve, reject) => {
-            this.holdsApi.releaseHold(eventDate, entry.tableId).subscribe({
+            this.holdsApi
+              .releaseHold(eventDate, entry.tableId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
               next: () => resolve(),
               error: (err) => reject(err),
             });
@@ -1071,6 +1096,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         paymentDeadlineAt,
         paymentDeadlineTz: needsDeadline ? this.paymentDeadlineTz : null,
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (created) => {
           const createdItem = created?.item;
@@ -1120,6 +1146,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                 creditId: selectedCredit?.creditId,
                 note: 'Applied reservation credit',
               })
+              .pipe(takeUntilDestroyed(this.destroyRef))
               .subscribe({
                 next: () => {
                   if (creditRemainingAmount > 0) {
@@ -1140,6 +1167,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                         receiptNumber:
                           remainingMethod === 'cash' ? this.normalizedReceiptNumber() : '',
                       })
+                      .pipe(takeUntilDestroyed(this.destroyRef))
                       .subscribe({
                         next: () => {
                           this.confirmingReservation = false;
@@ -1610,6 +1638,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           eventDate: this.createdReservation.eventDate,
           amount: this.createdReservation.amount,
         })
+        .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (res) => {
             const url = String(res?.cashAppLink?.url ?? '').trim();
@@ -1643,6 +1672,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         }`,
         idempotencyKey,
       })
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
           const url = String(res?.square?.url ?? '').trim();
@@ -1904,7 +1934,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.clientCredits = [];
     const seq = ++this.creditsLookupSeq;
 
-    this.clientsApi.listRescheduleCredits(phone, country).subscribe({
+    this.clientsApi
+      .listRescheduleCredits(phone, country)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (items) => {
         if (seq !== this.creditsLookupSeq) return;
         const currentSelectedCreditId = String(this.form.controls.creditId.value ?? '').trim();
@@ -2004,7 +2037,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   private loadRuntimeContext(): void {
-    this.eventsApi.getCurrentContext().subscribe({
+    this.eventsApi
+      .getCurrentContext()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (ctx) => {
         this.businessDate = String(ctx?.businessDate ?? '').trim() || todayString();
         // businessDate is the upcoming/past split point — recompute both
@@ -2064,10 +2100,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   private scheduleDesktopSplitLayout(): void {
     if (typeof window === 'undefined') return;
-    if (this.desktopLayoutRafId !== null) {
-      window.cancelAnimationFrame(this.desktopLayoutRafId);
-      this.desktopLayoutRafId = null;
-    }
+    // Skip if a recompute is already pending for the next frame. Audit
+    // flagged the prior cancel+request churn that ran on every ngDoCheck —
+    // collapsing duplicate schedules to a single rAF eliminates the
+    // wasted bookkeeping while still picking up state-driven layout
+    // changes (modal open, table list grow, etc.) on the next frame.
+    if (this.desktopLayoutRafId !== null) return;
     this.desktopLayoutRafId = window.requestAnimationFrame(() => {
       this.desktopLayoutRafId = null;
       this.recalculateDesktopSplitHeight();
@@ -2137,7 +2175,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (!this.activeHoldSession || this.activeHoldSession.eventDate !== this.eventDate) return;
     this.holdRestoreInFlight = true;
     const session = this.activeHoldSession;
-    this.holdsApi.listLocks(this.eventDate).subscribe({
+    this.holdsApi
+      .listLocks(this.eventDate)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
       next: (items) => {
         this.holdRestoreInFlight = false;
         // Resolve every persisted hold in one shot. Holds that expired
