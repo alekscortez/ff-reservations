@@ -107,6 +107,19 @@ export class AdminSettings implements OnInit {
     // Free-form on the client — backend normalizes US/MX formats and
     // rejects unparseable input with a clear 400 message.
     customerContactPhoneE164: new FormControl('', { nonNullable: true }),
+    // Anonymous public booking — gates everything off until flipped on.
+    // Default false so a fresh deploy can't accidentally start taking
+    // real customer bookings before /map UX + Turnstile are ready.
+    allowAnonymousPublicBooking: new FormControl(false, { nonNullable: true }),
+    anonymousHoldTtlSeconds: new FormControl(600, {
+      nonNullable: true,
+      validators: [Validators.min(300), Validators.max(1800)],
+    }),
+    anonymousMaxTablesPerBooking: new FormControl(4, {
+      nonNullable: true,
+      validators: [Validators.min(1), Validators.max(10)],
+    }),
+    turnstileSiteKey: new FormControl('', { nonNullable: true }),
     allowPastEventEdits: new FormControl(false, { nonNullable: true }),
     allowPastEventPayments: new FormControl(false, { nonNullable: true }),
     auditVerboseLogging: new FormControl(false, { nonNullable: true }),
@@ -180,6 +193,10 @@ export class AdminSettings implements OnInit {
       sectionColorE: String(item.sectionMapColors?.E ?? '#711411').trim().toLowerCase(),
       showClientFacingMap: Boolean(item.showClientFacingMap),
       customerContactPhoneE164: String(item.customerContactPhoneE164 ?? '').trim(),
+      allowAnonymousPublicBooking: Boolean(item.allowAnonymousPublicBooking),
+      anonymousHoldTtlSeconds: Number(item.anonymousHoldTtlSeconds ?? 600),
+      anonymousMaxTablesPerBooking: Number(item.anonymousMaxTablesPerBooking ?? 4),
+      turnstileSiteKey: String(item.turnstileSiteKey ?? '').trim(),
       allowPastEventEdits: Boolean(item.allowPastEventEdits),
       allowPastEventPayments: Boolean(item.allowPastEventPayments),
       auditVerboseLogging: Boolean(item.auditVerboseLogging),
@@ -215,6 +232,16 @@ export class AdminSettings implements OnInit {
       },
       showClientFacingMap: Boolean(this.form.controls.showClientFacingMap.value),
       customerContactPhoneE164: this.form.controls.customerContactPhoneE164.value.trim(),
+      allowAnonymousPublicBooking: Boolean(
+        this.form.controls.allowAnonymousPublicBooking.value
+      ),
+      anonymousHoldTtlSeconds: Number(
+        this.form.controls.anonymousHoldTtlSeconds.value
+      ),
+      anonymousMaxTablesPerBooking: Number(
+        this.form.controls.anonymousMaxTablesPerBooking.value
+      ),
+      turnstileSiteKey: this.form.controls.turnstileSiteKey.value.trim(),
       allowPastEventEdits: Boolean(this.form.controls.allowPastEventEdits.value),
       allowPastEventPayments: Boolean(this.form.controls.allowPastEventPayments.value),
       auditVerboseLogging: Boolean(this.form.controls.auditVerboseLogging.value),

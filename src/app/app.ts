@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   '/check-in/pass',
   '/map',
   '/pay',
+  '/r',
 ];
 
 function isPublicPath(url: string): boolean {

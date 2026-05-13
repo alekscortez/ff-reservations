@@ -47,6 +47,10 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
 
   @Input() tables: TableForEvent[] = [];
   @Input() selectedTableId: string | null = null;
+  // Multi-table selection (anonymous public booking on /map). Renders a
+  // selection ring on every id in the array. Backward-compatible: if
+  // empty/unset, falls back to single-selection via selectedTableId.
+  @Input() selectedTableIds: string[] = [];
   @Input() svgAssetPath = 'assets/maps/FF_Reservations_Map.normalized.svg';
   @Input() interactive = true;
   @Input() sectionColors: Partial<Record<string, string>> = {};
@@ -64,7 +68,12 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['tables'] || changes['selectedTableId'] || changes['interactive']) {
+    if (
+      changes['tables'] ||
+      changes['selectedTableId'] ||
+      changes['selectedTableIds'] ||
+      changes['interactive']
+    ) {
       this.renderSvg();
     }
     if (changes['svgAssetPath'] && !changes['svgAssetPath'].firstChange) {
@@ -113,8 +122,25 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
     if (!tableId) return;
     const table = this.tables.find((item) => item.id === tableId);
     if (!table) return;
-    if (table.status !== 'AVAILABLE') return;
+    // AVAILABLE tiles can be clicked to select. Already-selected tiles
+    // (in selectedTableIds) can also be clicked — caller handles the
+    // toggle (deselect). Other statuses stay non-clickable.
+    const inSelection = this.selectedTableIdsSet().has(tableId);
+    if (table.status !== 'AVAILABLE' && !inSelection) return;
     this.tableSelect.emit(table);
+  }
+
+  private selectedTableIdsSet(): Set<string> {
+    const ids = new Set<string>();
+    for (const id of this.selectedTableIds ?? []) {
+      const trimmed = String(id ?? '').trim();
+      if (trimmed) ids.add(trimmed);
+    }
+    if (this.selectedTableId) {
+      const trimmed = String(this.selectedTableId).trim();
+      if (trimmed) ids.add(trimmed);
+    }
+    return ids;
   }
 
   private findNeighbor(currentEl: Element, key: string): Element | null {
@@ -214,6 +240,7 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
     const tableById = new Map(this.tables.map((table) => [table.id, table] as const));
     const candidates = Array.from(doc.querySelectorAll('g[id]'));
     const focusableNodes: Element[] = [];
+    const selectedSet = this.selectedTableIdsSet();
     for (const node of candidates) {
       const tableId = String(node.getAttribute('id') ?? '').trim();
       if (!/^[A-Z]\d{2,3}$/.test(tableId)) continue;
@@ -224,18 +251,23 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
       node.classList.add('ff-map-table', statusClass);
       node.setAttribute('data-table-id', table.id);
       node.setAttribute('data-status', table.status);
-      const clickable = this.interactive && table.status === 'AVAILABLE';
+      const isSelected = selectedSet.has(table.id);
+      // Clickable when interactive AND (available OR already-selected so
+      // the customer can deselect). Non-available + non-selected stays
+      // non-interactive (RESERVED, HOLD, FROZEN tiles).
+      const clickable =
+        this.interactive && (table.status === 'AVAILABLE' || isSelected);
       node.setAttribute('data-clickable', clickable ? 'true' : 'false');
       if (clickable) {
         node.setAttribute('role', 'button');
         node.setAttribute('aria-label', this.buildTableAriaLabel(table));
         node.setAttribute('tabindex', '-1');
-        if (table.id === this.selectedTableId) {
+        if (isSelected) {
           node.setAttribute('aria-pressed', 'true');
         }
         focusableNodes.push(node);
       }
-      if (table.id === this.selectedTableId) {
+      if (isSelected) {
         node.classList.add('ff-map-selected');
         this.appendSelectionMarker(doc, node);
         node.parentNode?.appendChild(node);
@@ -255,9 +287,9 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
 
     if (focusableNodes.length > 0) {
       const rover =
-        focusableNodes.find(
-          (n) => n.getAttribute('data-table-id') === this.selectedTableId
-        ) ?? focusableNodes[0];
+        focusableNodes.find((n) => selectedSet.has(
+          String(n.getAttribute('data-table-id') ?? '')
+        )) ?? focusableNodes[0];
       rover.setAttribute('tabindex', '0');
     }
 

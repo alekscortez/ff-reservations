@@ -36,6 +36,12 @@ export interface PublicAvailabilityResponse {
   refreshSeconds: number;
   sectionMapColors?: Record<string, string>;
   customerContactPhoneE164?: string;
+  // Public anonymous-booking flags. Frontend gates "Tap to reserve" on
+  // allowAnonymousPublicBooking. anonymousMaxTablesPerBooking caps the
+  // selection. turnstileSiteKey, when set, mounts the Cloudflare widget.
+  allowAnonymousPublicBooking?: boolean;
+  anonymousMaxTablesPerBooking?: number;
+  turnstileSiteKey?: string;
   events: PublicAvailabilityEventSummary[];
   tables: PublicAvailabilityTable[];
 }

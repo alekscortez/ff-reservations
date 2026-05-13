@@ -49,6 +49,17 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/public/pay/pay').then((m) => m.PublicPayPage),
   },
+  {
+    // Token-gated reservation status page. URL: /r/{reservationId}?t={token}.
+    // The anonymous public-booking flow redirects here from Square after
+    // checkout; the page polls /public/reservations/{id} until PAID and
+    // hands off Apple Wallet download.
+    path: 'r/:id',
+    loadComponent: () =>
+      import('./features/public/reservation-status/reservation-status').then(
+        (m) => m.ReservationStatus
+      ),
+  },
 
   // ✅ Staff (must be logged in)
   {

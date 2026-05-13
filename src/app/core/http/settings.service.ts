@@ -35,6 +35,10 @@ export interface AppSettings {
   checkInPassBaseUrl: string;
   showClientFacingMap: boolean;
   customerContactPhoneE164: string;
+  allowAnonymousPublicBooking: boolean;
+  anonymousHoldTtlSeconds: number;
+  anonymousMaxTablesPerBooking: number;
+  turnstileSiteKey: string;
   auditVerboseLogging: boolean;
   squareEnvMode: 'sandbox' | 'production';
   sectionMapColors: SectionMapColors;

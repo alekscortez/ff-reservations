@@ -1,0 +1,133 @@
+<hlm-dialog
+  *ngIf="open"
+  size="sheet"
+  panelClass="max-w-md p-0 sm:p-0"
+  ariaLabel="Reserve your table"
+  (close)="onClose()"
+>
+  <header class="flex items-start justify-between gap-3 border-b border-brand-100 p-4">
+    <div>
+      <h2 class="text-lg font-semibold text-brand-900">Reserve your table</h2>
+      <p *ngIf="eventName" class="text-xs uppercase tracking-[0.14em] text-brand-500">
+        {{ eventName }} · {{ eventDate }}
+      </p>
+    </div>
+    <button
+      type="button"
+      hlmBtn variant="ghost" size="icon-sm"
+      (click)="onClose()"
+      aria-label="Close"
+    >×</button>
+  </header>
+
+  <div class="grid gap-4 p-4">
+    <section class="grid gap-2">
+      <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
+        Selected ({{ selectedTables.length }} of {{ maxTables }})
+      </p>
+      <ul class="grid gap-2">
+        <li
+          *ngFor="let t of selectedTables; trackBy: trackTableById"
+          class="flex items-center justify-between rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm"
+        >
+          <span class="font-medium text-brand-900">Table {{ t.id }}</span>
+          <span class="flex items-center gap-2">
+            <span class="text-brand-700">${{ t.price }}</span>
+            <button
+              type="button"
+              hlmBtn variant="ghost" size="icon-sm"
+              (click)="onRemoveTable(t.id)"
+              [disabled]="submitting()"
+              [attr.aria-label]="'Remove table ' + t.id"
+            >×</button>
+          </span>
+        </li>
+      </ul>
+      <button
+        *ngIf="canAddAnother()"
+        type="button"
+        hlmBtn variant="outline" size="sm"
+        (click)="onAddAnother()"
+        [disabled]="submitting()"
+      >+ Add another table</button>
+      <p
+        *ngIf="!canAddAnother()"
+        class="text-xs text-brand-500"
+      >
+        Maximum {{ maxTables }} tables per booking.
+      </p>
+    </section>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3">
+      <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        Your name
+        <input
+          type="text"
+          autocomplete="name"
+          formControlName="name"
+          hlmInput size="lg"
+          [disabled]="submitting()"
+          required
+        />
+      </label>
+
+      <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        Phone number
+        <input
+          type="tel"
+          autocomplete="tel"
+          inputmode="tel"
+          placeholder="(956) 555-0000"
+          formControlName="phone"
+          hlmInput size="lg"
+          [disabled]="submitting()"
+          required
+        />
+        <span class="text-[11px] normal-case tracking-normal text-brand-500">
+          We will send your reservation details here.
+        </span>
+      </label>
+
+      <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        Email <span class="lowercase text-brand-400">(optional)</span>
+        <input
+          type="email"
+          autocomplete="email"
+          inputmode="email"
+          formControlName="email"
+          hlmInput size="lg"
+          [disabled]="submitting()"
+        />
+        <span class="text-[11px] normal-case tracking-normal text-brand-500">
+          For your Square receipt.
+        </span>
+      </label>
+
+      <hlm-alert *ngIf="errorMessage()" variant="destructive">
+        {{ errorMessage() }}
+        <span
+          *ngIf="errorDetails()?.unavailableTableIds as ids"
+          class="block pt-1 text-xs"
+        >
+          Unavailable: {{ ids.join(', ') }}
+        </span>
+      </hlm-alert>
+
+      <p class="text-sm text-brand-700">
+        Total to pay now:
+        <span class="font-semibold text-brand-900">${{ totalAmount() }} USD</span>
+      </p>
+
+      <button
+        type="submit"
+        hlmBtn size="lg"
+        [disabled]="submitting() || form.invalid || selectedTables.length === 0"
+      >
+        {{ submitting() ? 'Reserving…' : 'Hold & continue to payment' }}
+      </button>
+      <p class="text-[11px] text-brand-500">
+        By continuing, you agree to hold this table for 10 minutes while you complete payment via Square.
+      </p>
+    </form>
+  </div>
+</hlm-dialog>

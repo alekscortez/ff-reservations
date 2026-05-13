@@ -10,12 +10,21 @@ import {
   PublicAvailabilityService,
   PublicAvailabilityTable,
 } from '../../../core/http/public-availability.service';
+import { CreatePublicReservationResponse } from '../../../core/http/public-bookings.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
+import { ReserveTableModal } from './reserve-table-modal/reserve-table-modal';
+import {
+  PendingHold,
+  clearPendingHold,
+  pendingHoldExpired,
+  readPendingHold,
+  writePendingHold,
+} from './pending-hold.store';
 
 interface PublicAvailabilityPickerOption {
   eventDate: string;
@@ -24,7 +33,16 @@ interface PublicAvailabilityPickerOption {
 
 @Component({
   selector: 'app-public-availability',
-  imports: [CommonModule, ReactiveFormsModule, TableMap, HlmAlert, HlmButton, HlmInput, HlmToggle],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    TableMap,
+    HlmAlert,
+    HlmButton,
+    HlmInput,
+    HlmToggle,
+    ReserveTableModal,
+  ],
   templateUrl: './availability.html',
   styleUrl: './availability.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,6 +65,18 @@ export class PublicAvailability implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly data = signal<PublicAvailabilityResponse | null>(null);
+
+  // Anonymous-public-booking selection state. Empty until the customer
+  // taps an AVAILABLE tile; modal opens on first selection. Cap enforced
+  // against `data.anonymousMaxTablesPerBooking`.
+  readonly selectedIds = signal<string[]>([]);
+  readonly modalOpen = signal(false);
+  readonly selectionLimitNotice = signal<string | null>(null);
+
+  // Pending-hold banner. Polled from localStorage on init + after each
+  // modal submit / release. Auto-clears if the stored hold is past its
+  // expiry epoch.
+  readonly pendingHold = signal<PendingHold | null>(null);
 
   viewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
   search = new FormControl('', { nonNullable: true });
@@ -73,6 +103,15 @@ export class PublicAvailability implements OnInit, OnDestroy {
       content:
         'See which tables are open tonight at Famoso Fuego. Live availability updates every few seconds.',
     });
+    // Hydrate any pending hold from a previous session; if its TTL has
+    // already passed, drop it on the floor.
+    const stored = readPendingHold();
+    if (stored && !pendingHoldExpired(stored)) {
+      this.pendingHold.set(stored);
+    } else if (stored) {
+      clearPendingHold();
+    }
+
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -114,6 +153,118 @@ export class PublicAvailability implements OnInit, OnDestroy {
   clearFilters(): void {
     this.search.setValue('');
     this.availableOnly.setValue(false);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Anonymous-public-booking flow
+  // ─────────────────────────────────────────────────────────────────────
+
+  readonly bookingEnabled = computed<boolean>(() =>
+    Boolean(this.data()?.allowAnonymousPublicBooking)
+  );
+
+  readonly maxTables = computed<number>(() => {
+    const raw = Number(this.data()?.anonymousMaxTablesPerBooking ?? 4);
+    if (!Number.isFinite(raw) || raw <= 0) return 4;
+    return Math.max(1, Math.min(10, Math.round(raw)));
+  });
+
+  readonly turnstileSiteKey = computed<string>(
+    () => String(this.data()?.turnstileSiteKey ?? '').trim()
+  );
+
+  // Concrete table rows for the modal — just the selected ids resolved
+  // against the latest availability snapshot.
+  readonly selectedTables = computed<PublicAvailabilityTable[]>(() => {
+    const ids = this.selectedIds();
+    if (!ids.length) return [];
+    const map = new Map(
+      (this.data()?.tables ?? []).map((t) => [t.id, t] as const)
+    );
+    return ids
+      .map((id) => map.get(id))
+      .filter((t): t is PublicAvailabilityTable => Boolean(t));
+  });
+
+  onTableSelect(table: TableForEvent): void {
+    if (!this.bookingEnabled()) return;
+    this.selectionLimitNotice.set(null);
+    const current = this.selectedIds();
+    if (current.includes(table.id)) {
+      // Deselect — caller clicked an already-selected tile.
+      this.selectedIds.set(current.filter((id) => id !== table.id));
+      // Keep modal open while there are still tables in the selection,
+      // close otherwise.
+      if (this.selectedIds().length === 0) {
+        this.modalOpen.set(false);
+      }
+      return;
+    }
+    if (current.length >= this.maxTables()) {
+      this.selectionLimitNotice.set(
+        `Maximum ${this.maxTables()} tables per booking.`
+      );
+      return;
+    }
+    this.selectedIds.set([...current, table.id]);
+    this.modalOpen.set(true);
+  }
+
+  onModalClose(): void {
+    this.modalOpen.set(false);
+    this.selectedIds.set([]);
+    this.selectionLimitNotice.set(null);
+  }
+
+  onModalAddAnother(): void {
+    // Keep selection; just dismiss the modal so the customer can tap
+    // another tile on the map.
+    this.modalOpen.set(false);
+  }
+
+  onModalRemoveTable(tableId: string): void {
+    this.selectedIds.set(this.selectedIds().filter((id) => id !== tableId));
+    if (this.selectedIds().length === 0) {
+      this.modalOpen.set(false);
+    }
+  }
+
+  onReservationSubmitted(event: {
+    response: CreatePublicReservationResponse;
+    eventDate: string;
+  }): void {
+    const hold: PendingHold = {
+      reservationId: event.response.reservationId,
+      customerToken: event.response.customerToken,
+      eventDate: event.eventDate,
+      paymentUrl: event.response.paymentUrl,
+      holdExpiresAtEpoch: event.response.holdExpiresAtEpoch,
+    };
+    writePendingHold(hold);
+    this.pendingHold.set(hold);
+    this.modalOpen.set(false);
+    this.selectedIds.set([]);
+    // Redirect to Square hosted checkout. Customer returns via Square's
+    // configured redirect URL → /r/{id}?t=... per backend setting.
+    if (typeof window !== 'undefined' && event.response.paymentUrl) {
+      window.location.href = event.response.paymentUrl;
+    }
+  }
+
+  onContinuePending(): void {
+    const hold = this.pendingHold();
+    if (!hold?.paymentUrl) return;
+    if (typeof window !== 'undefined') {
+      window.location.href = hold.paymentUrl;
+    }
+  }
+
+  onDismissPending(): void {
+    // Dismiss only — don't release. Lets the customer hide the banner
+    // without forfeiting the hold (they can come back via Square's
+    // email receipt or the /r/{id} URL).
+    clearPendingHold();
+    this.pendingHold.set(null);
   }
 
   // Memoized derivations of `data` + form-control filters. Computed
