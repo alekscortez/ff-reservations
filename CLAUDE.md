@@ -2,7 +2,7 @@
 
 Restaurant table reservation system for Famoso Fuego. Staff create reservations on behalf of customers; customers pay via Square / Cash App link and self-check-in via QR codes. Admin manages frequent clients, events, settings, and financials.
 
-> **Branch state (2026-05-09):** `main` runs the Angular 21 SPA in production. A React + Expo monorepo port exists on the `react` branch (snapshot tag `react-port-snapshot-2026-05-09`), paused mid-Phase 5. Do not introduce React, pnpm, Vite, or `apps/`/`packages/` changes on `main`.
+> **Branch state (2026-05-13):** `main` runs the Angular 21 SPA in production with the **anonymous public-booking flow shipped behind `allowAnonymousPublicBooking`**. Customers can self-book on `/map` → Square hosted checkout → land on `/r/{id}` confirmation page (Apple Wallet badge + check-in pass link). Short URLs at `/p/{slug}` for SMS/WhatsApp share. Staff still create bookings on behalf via the existing flow. Full implementation memo: [[anon_public_booking_implementation_2026_05_13]]. A React + Expo monorepo port exists on the `react` branch (snapshot tag `react-port-snapshot-2026-05-09`), paused mid-Phase 5. Do not introduce React, pnpm, Vite, or `apps/`/`packages/` changes on `main`.
 
 > **Lambda Square env — PRODUCTION as of 2026-05-11.** `ff-reservations-api` runs against production Square. Real cards / Cash App charges fire. **Open verification item:** production Square webhook subscription must point at `https://api.famosofuego.com/webhooks/square` with `payment.created` + `payment.updated` events; signature key in the production secret. Without that, real payments succeed at Square but reservations don't auto-flip to PAID. Full env IDs + sandbox revert procedure in memory `lambda_square_env_production_cutover.md`.
 
@@ -82,6 +82,17 @@ backend/lambda/lib/
   services-holds.mjs                # createHold / releaseHold / listHolds
   services-reservations-holds.mjs   # 67-line BARREL composing the four above (public surface for index.mjs)
 
+# Anonymous public-booking module (shipped 2026-05-13)
+backend/lambda/lib/
+  routes-public-bookings.mjs        # POST /public/reservations + GET /public/reservations/{id}
+                                    # + POST /public/reservations/{id}/{release,wallet-pass}
+                                    # + GET /p/{slug}[?to=pass] short-URL alias
+  services-anon-bookings.mjs        # phone-slot registry (1 active unpaid hold per phone)
+                                    # + verifyCustomerToken (timingSafeEqual wrapper)
+  services-turnstile.mjs            # Cloudflare siteverify wrapper (fail-closed on infra)
+  services-reservation-codes.mjs    # 6-char confirmation codes + 16-char URL slugs
+                                    # (alphabet excludes 0/O/1/I/L) + extract/validate helpers
+
 backend/cognito-pre-token-gen/      # separate Lambda — Cognito Pre Token Gen v2 trigger
 backend/cognito-customer-auth/      # Cognito Custom Auth phone-OTP triggers
 http/*.http                         # smoke tests for IDE HTTP runner
@@ -130,8 +141,12 @@ Backend tests use Node 22's built-in `node:test`. `@aws-sdk/*` are devDeps at th
 ## DynamoDB tables
 
 - `ff-events` (events + per-date locks under `(EVENTDATE, DATE#YYYY-MM-DD)`)
-- `ff-table-holds` (HOLDS_TABLE — HOLD and RESERVED locks per `(EVENTDATE#YYYY-MM-DD, TABLE#{id})`)
-- `ff-reservations` (RES_TABLE — reservations + history)
+- `ff-table-holds` (HOLDS_TABLE — HOLD and RESERVED locks per `(EVENTDATE#YYYY-MM-DD, TABLE#{id})`). Also carries `(PK="RATE", SK="SMS#…" | "CUSTHOLD#…" | "ANONHOLD#{phoneKey}")` rows for in-Lambda rate limiting + the "1 active unpaid hold per phone" registry on the anon-booking flow (services-anon-bookings.mjs).
+- `ff-reservations` (RES_TABLE — reservations + history). Three additional partitions ride in this same table:
+  - `(PK="EVENTDATE#YYYY-MM-DD", SK="RES#{uuid}")` — the reservation row itself
+  - `(PK="EVENTDATE#YYYY-MM-DD", SK="HIST#…")` — append-only history events
+  - `(PK="CODE", SK="CODE#XXXXXX")` — 6-char confirmation-code → `{reservationId, eventDate}` lookup (anon flow)
+  - `(PK="SLUG", SK="SLUG#xxxxxxxxxxxxxxxx")` — 16-char short-URL slug → `{reservationId, eventDate, customerToken}` lookup (anon flow)
 - `ff-frequent-clients`
 - `ff-clients` (CRM + reschedule credits)
 - `ff-checkin-passes`
@@ -139,7 +154,7 @@ Backend tests use Node 22's built-in `node:test`. `@aws-sdk/*` are devDeps at th
 
 ## Lambda env vars
 
-Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `CLIENTS_TABLE`, `CHECKIN_PASSES_TABLE`, `SETTINGS_TABLE`. Cognito: `USER_POOL_ID`. Square: `SQUARE_SECRET_ARN`, `SQUARE_ENV`, `SQUARE_LOCATION_ID`, `SQUARE_API_VERSION`, `SQUARE_WEBHOOK_NOTIFICATION_URL`, `SQUARE_CURRENCY`, `SQUARE_CHECKOUT_REDIRECT_URL`, `SQUARE_LINK_ENABLE_*`. SMS: `SMS_ENABLED`, `SMS_SENDER_ID`, `SMS_TYPE`, `SMS_MAX_PRICE_USD`. Payment links: `PAYMENT_LINK_TTL_MINUTES`, `FREQUENT_PAYMENT_LINK_TTL_MINUTES`, `AUTO_SEND_SQUARE_LINK_SMS`, `CASH_APP_LINK_BASE_URL`. Check-in: `CHECKIN_PASS_BASE_URL`, `CHECKIN_PASS_TTL_DAYS`. Wallet: `WALLET_PASS_TYPE_IDENTIFIER`, `WALLET_TEAM_IDENTIFIER`, `WALLET_PASS_SECRET_ARN` + optional brand overrides. Operating: `OPERATING_TZ`, `OPERATING_DAY_CUTOFF_HOUR`, `HOLD_TTL_SECONDS`.
+Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `CLIENTS_TABLE`, `CHECKIN_PASSES_TABLE`, `SETTINGS_TABLE`. Cognito: `USER_POOL_ID`. Square: `SQUARE_SECRET_ARN`, `SQUARE_ENV`, `SQUARE_LOCATION_ID`, `SQUARE_API_VERSION`, `SQUARE_WEBHOOK_NOTIFICATION_URL`, `SQUARE_CURRENCY`, `SQUARE_CHECKOUT_REDIRECT_URL`, `SQUARE_LINK_ENABLE_*`. SMS: `SMS_ENABLED`, `SMS_SENDER_ID`, `SMS_TYPE`, `SMS_MAX_PRICE_USD`. Payment links: `PAYMENT_LINK_TTL_MINUTES`, `FREQUENT_PAYMENT_LINK_TTL_MINUTES`, `AUTO_SEND_SQUARE_LINK_SMS`, `CASH_APP_LINK_BASE_URL`. Check-in: `CHECKIN_PASS_BASE_URL`, `CHECKIN_PASS_TTL_DAYS`. Wallet: `WALLET_PASS_TYPE_IDENTIFIER`, `WALLET_TEAM_IDENTIFIER`, `WALLET_PASS_SECRET_ARN` + optional brand overrides. Operating: `OPERATING_TZ`, `OPERATING_DAY_CUTOFF_HOUR`, `HOLD_TTL_SECONDS`. **Anon public-booking:** `TURNSTILE_SECRET_ARN` (Cloudflare Turnstile secret in Secrets Manager — site key is admin-writable in app settings), `PUBLIC_BOOKING_RETURN_BASE_URL` (defaults to `https://famosofuego.com`; used for the post-Square return URL + the customer-facing `/p/{slug}` short URLs).
 
 ## Frontend config
 
@@ -154,7 +169,8 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - **Venue takes forward bookings** — every reservation is for a future `eventDate`. Date-range filters on admin views (Financials, future reports) MUST NOT cap the upper bound at "today" by default — that filter would always be empty in the typical case. See memory `financials_reducer_invariants.md` for the Financials default-range convention.
 - **Errors**: raise via `httpError(status, message)` from `core-utils.mjs`; the router's outer `try/catch` formats the response.
 - **Reservation enums**: `paymentStatus` ∈ `{PENDING, PARTIAL, PAID, COURTESY, REFUNDED}`; `paymentMethod` ∈ `{cash, square, cashapp, credit}`; `status` ∈ `{CONFIRMED, CANCELLED}`; `lockType` ∈ `{HOLD, RESERVED}`; cancellation `resolutionType` ∈ `{CANCEL_NO_REFUND, RESCHEDULE_CREDIT, REFUND}`. REFUND iterates `payments[]`, refunds each via Square, then sets `paymentStatus=REFUNDED`. Partial failure throws 502 without cancelling (operator must reconcile).
-- **Multi-table bookings**: row carries `tableIds: string[]` + `tablePrices: number[]` plus legacy scalar `tableId`/`tablePrice` (= first / sum). One reservation = one customer = one deposit = one Square link / SMS / check-in pass / Wallet pass listing every table. Cap: 10/booking. **Every reader prefers `tableIds[]` then falls back to `[tableId]`; every writer stamps both.** Shared helpers: `getReservationTableIds`/`normalizeIdList`/`formatTablesLabel` in `services-reservations-shared.mjs`, plus the Angular `TableLabelPipe` / `formatTableLabel{,Lower}` in `src/app/shared/table-label.pipe.ts` — the ONLY places that should branch on length. Mobile customer flow is single-table only in v1.
+- **Multi-table bookings**: row carries `tableIds: string[]` + `tablePrices: number[]` plus legacy scalar `tableId`/`tablePrice` (= first / sum). One reservation = one customer = one deposit = one Square link / SMS / check-in pass / Wallet pass listing every table. Cap: 10/booking (4/booking for anonymous public). **Every reader prefers `tableIds[]` then falls back to `[tableId]`; every writer stamps both.** Shared helpers: `getReservationTableIds`/`normalizeIdList`/`formatTablesLabel` in `services-reservations-shared.mjs`, plus the Angular `TableLabelPipe` / `formatTableLabel{,Lower}` in `src/app/shared/table-label.pipe.ts` — the ONLY places that should branch on length. Mobile customer flow is single-table only in v1.
+- **Customer-facing IDs are short**, internal IDs are full. Anonymous public bookings mint a 6-char `confirmationCode` ("FF-K7M3X2") for human readability + a 16-char `publicSlug` for `/p/{slug}` short URLs. The 36-char UUID + 64-char customerToken stay internal. Receipts, /r page header, and SMS/WhatsApp links all use the short forms; staff search accepts the code too. Generators + alphabets in `services-reservation-codes.mjs` (excludes 0/O/1/I/L). See [[anon_public_booking_implementation_2026_05_13]].
 - **Signals + `ChangeDetectionStrategy.OnPush` everywhere.** All 16 feature components are on OnPush as of 2026-05-13. Two patterns: **bare signals** (`readonly foo = signal(...)`, template `{{ foo() }}`) for new code; **signal-backed accessors** (reservations-new only) when a spec needs the property shape. Record/Set state mutates via `.update(c => ({ ...c, [k]: v }))` (copy-on-write). Nullable modal items wrap in `*ngIf="signal() as ref"`. See memory `signals_onpush_migration_status_2026_05_13.md` for recipe + script approach for large files.
 - **`.sr-only` = Tailwind 3 built-in.** Don't roll a custom screen-reader-only class.
 - **Empty-state rows on filtered lists get `aria-live="polite"`** so AT users hear the count change after a filter mutation.
@@ -170,6 +186,11 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - **`*ngFor` with template method calls is an anti-pattern** — CD re-invokes them every cycle; iOS Chrome drops the trailing touchend. Memoize + use `trackBy`. See memory `feedback_ngfor_no_template_methods.md`.
 - **Lines that start with `=` in `.html` templates** are corrupted bindings (usually `[active]` whose attribute name got stripped). Angular parses them as a string attribute called `""` and silently does nothing — toggle stays dead. Hit twice in 2026-05-12. Grep `find src -name '*.html' -exec grep -l '^=' {} \;` before shipping any HlmToggle-heavy page. Memory: `feedback_stripped_active_bindings.md`.
 - **`@angular/cdk` is pinned to exact `21.1.6`** — do NOT bump. CDK 21.2 uses `ChangeDetectionStrategy.Eager` which only `@angular/core@21.2+` can resolve. Brain primitives' `popover` / `dialog` import `@angular/cdk/dialog` — bumping CDK alone breaks the AOT build with `Unsupported change detection strategy`. To upgrade, bump every `@angular/*` package to a matching 21.2 minor together. Memory: `cdk_21_1_pin_for_dialog_eager_strategy.md`.
+- **Each new API Gateway route needs its own `lambda:add-permission`.** `aws apigatewayv2 create-route` is only half the work — without a matching `--source-arn` permission scoped to the route, API GW returns 500 (Lambda invoke denied) and Lambda logs are silent. Pattern: `aws lambda add-permission --function-name ff-reservations-api --statement-id apigw-<route>-$(date +%s) --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:us-east-1:908027422124:oxk1adhl3a/*/*/<path/with/{params}>"`. Hit on the public-bookings + /p/{slug} rollouts (2026-05-13).
+- **`createReservation` accepts a caller-supplied `payload.reservationId`.** Internal flow generates a UUID when omitted, but anonymous public booking pre-generates one upfront so the same id stamps the phone slot, the Square payment-link note (for webhook lookup), and the customer-return URL. Without passing it through, createReservation generated its own id and the Square webhook silently dropped paid customers (`reservation_update_ignored`) — caused a real-customer incident on 2026-05-13. Memory: [[anon_public_booking_implementation_2026_05_13]].
+- **Customer-facing receipts must avoid operator-internal phrasing.** Square's `payment_note` shows up on the customer's email + Cash App receipt. "Anonymous public booking" looked scammy to a real customer; prefer `Booking #FF-<code> • <date>` framing. Webhook handler accepts both old + new note formats so receipt-copy changes don't strand in-flight payments.
+- **`takeUntilDestroyed()` without an arg requires injection context.** Calling it inside an event handler (e.g. `submit()`) throws synchronously; the HTTP error never propagates and the button stays in "Submitting…". For event-handler use, inject `DestroyRef` at construction and pass it explicitly: `.pipe(takeUntilDestroyed(this.destroyRef))`.
+- **`computed()` doesn't track legacy `@Input` reads** — only signals. Computeds reading `this.someInput` memoize on first render and never refresh when the parent updates the binding. Migrate to `input()` (Angular 17+ signal-input API) or convert the computed to a plain method. Hit on `<reserve-table-modal>` (totalAmount memoized stale, showed wrong totals).
 
 ## Wiring outside this repo
 
@@ -200,6 +221,7 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - **Push notifications** → `services-push-notifications.mjs` (Expo Push dispatcher); `addReservationPayment` fires `sendPushToCustomer` on every recording. Logs `payment_push_dispatched`/`_skipped`.
 - **Apple Wallet `.pkpass`** → `services-wallet-pass.mjs` builds via `passkit-generator`. Cert PEMs in Secrets Manager (`WALLET_PASS_SECRET_ARN`). Icons in `backend/lambda/assets/wallet-pass/` — missing files → 501 `WALLET_PASS_NOT_CONFIGURED`.
 - **Customer self-service (`/me/*`)** → single file `routes-me.mjs`. Booking → payment (3 paths) → check-in pass → wallet pass. Self-cancel ≥24h forces `RESCHEDULE_CREDIT`. **Customer payment routes must NOT pass `source: "customer"` to `addReservationPayment`** — string isn't in the allowed enum; omit and let it default to `square-direct`.
+- **Anonymous public booking (`/public/reservations/*`, `/p/{slug}`, `/r/{id}`)** → entry: `backend/lambda/lib/routes-public-bookings.mjs`. Customer journey: `/map` interactive (HlmDialog + Turnstile widget) → POST creates hold + reservation + Square hosted link → 302 to Square checkout → Square redirects to `/p/{slug}` → 302 to `/r/{id}?t=…&eventDate=…` polling page → on PAID, Apple Wallet badge + "View check-in pass" CTA. **Pre-mint reservationId + customerToken + confirmationCode + publicSlug upfront** so the same id stamps the phone slot, Square note, and customer-return URL — `createReservation` accepts all four in the payload. Phone-slot registry under `(PK="RATE", SK="ANONHOLD#{phoneKey}")` enforces 1 active unpaid hold per phone (release on payment / explicit release / TTL expiry). Webhook handler (`services-square-payments.mjs:processSquareWebhookEvent`) parses confirmationCode from `payment.note` and resolves via `lookupReservationByConfirmationCode`. Behind `allowAnonymousPublicBooking` settings flag (defaults false). Full implementation memo: [[anon_public_booking_implementation_2026_05_13]].
 - **CRM clients** → `services-clients.mjs` + `routes-clients.mjs`. `GET /clients/search?phone=…&q=…` (staff); `POST /clients/bulk-import` (admin, ≤500/req, conditional Put preserves existing). `upsertCrmClient` is the live-reservation path.
 - **Auditing auth** → re-read this file's Auth Model section, then `index.mjs:97-174` for `getGroupsFromEvent` / `requireAdmin` / `requireStaffOrAdmin` / `requireCustomerOwnership`.
 - **"Did SMS X arrive?"** → query `sns/us-east-1/908027422124/DirectPublishToPhoneNumber{,/Failure}` log groups.
