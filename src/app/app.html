@@ -1,4 +1,4 @@
-<ng-container *ngIf="isAuthenticated$ | async; else publicShell">
+<ng-container *ngIf="(shellMode$ | async) === 'staff'; else publicShell">
   <div hlmSidebarWrapper class="flex-col pt-14" style="--header-height: 3.5rem">
     <app-topbar></app-topbar>
     <div class="flex flex-1">
