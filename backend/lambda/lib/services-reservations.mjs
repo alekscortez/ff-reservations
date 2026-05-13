@@ -905,6 +905,13 @@ export function createReservationsService(
     const customerName = String(payload?.customerName ?? "").trim();
     const customerCognitoSub =
       String(payload?.customerCognitoSub ?? "").trim() || null;
+    // Customer-token-gated routes (anonymous public booking) use this to
+    // authorize follow-up reads/releases without a Cognito sub. Stored as
+    // an opaque 256-bit hex string from crypto.randomBytes(32). Optional
+    // — staff/customer-app paths don't pass it, so the field is omitted
+    // on the reservation row entirely.
+    const customerToken =
+      String(payload?.customerToken ?? "").trim() || null;
     const phoneRaw = String(payload?.phone ?? "").trim();
     const phoneCountry = normalizePhoneCountry(payload?.phoneCountry ?? "US");
     const phone = normalizePhoneE164(phoneRaw, phoneCountry);
@@ -1144,6 +1151,12 @@ export function createReservationsService(
                   // omitting the attribute on staff-created reservations
                   // keeps them out of /me/reservations.
                   ...(customerCognitoSub ? { customerCognitoSub } : {}),
+                  // Anonymous-public bookings carry a token that gates
+                  // GET /public/reservations/{id}?t=... and the release
+                  // / wallet routes. Omitted entirely for staff and
+                  // mobile-customer paths so the attribute doesn't grow
+                  // existing rows.
+                  ...(customerToken ? { customerToken } : {}),
                 },
                 ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
               },

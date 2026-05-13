@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 export function json(statusCode, body, extraHeaders = {}) {
   return {
     statusCode,
@@ -200,4 +202,21 @@ export function addDaysToIsoDate(dateStr, days) {
 export function requiredEnv(name, value) {
   if (!value) throw httpError(500, `Missing env var ${name}`);
   return value;
+}
+
+// Constant-time comparison of two opaque tokens. Returns true only when
+// both inputs are non-empty strings of identical length AND every byte
+// matches. crypto.timingSafeEqual throws on length mismatch, so we
+// short-circuit on length first to avoid leaking length via the throw
+// boundary. Used by anonymous customer-token-gated routes (the same
+// shape as the existing Cash App session check).
+export function safeStringEquals(a, b) {
+  const ax = typeof a === "string" ? a : "";
+  const bx = typeof b === "string" ? b : "";
+  if (!ax || !bx || ax.length !== bx.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(ax, "utf8"), Buffer.from(bx, "utf8"));
+  } catch {
+    return false;
+  }
 }

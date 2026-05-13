@@ -201,6 +201,23 @@ export function buildDefaults(env) {
       env?.CUSTOMER_CONTACT_PHONE_E164,
       "US"
     ),
+    allowAnonymousPublicBooking: parseBoolean(
+      env?.ALLOW_ANONYMOUS_PUBLIC_BOOKING,
+      false
+    ),
+    anonymousHoldTtlSeconds: clampInteger(
+      env?.ANONYMOUS_HOLD_TTL_SECONDS,
+      300,
+      1800,
+      600
+    ),
+    anonymousMaxTablesPerBooking: clampInteger(
+      env?.ANONYMOUS_MAX_TABLES_PER_BOOKING,
+      1,
+      10,
+      4
+    ),
+    turnstileSiteKey: String(env?.TURNSTILE_SITE_KEY ?? "").trim(),
     auditVerboseLogging: parseBoolean(env?.AUDIT_VERBOSE_LOGGING, false),
     squareEnvMode,
     squareApplicationId,
@@ -242,6 +259,7 @@ export function normalizeValueForKey(key, value, fallback) {
     case "allowPastEventEdits":
     case "allowPastEventPayments":
     case "showClientFacingMap":
+    case "allowAnonymousPublicBooking":
     case "auditVerboseLogging":
       return parseBoolean(value, fallback);
     case "defaultPaymentDeadlineHour":
@@ -277,6 +295,12 @@ export function normalizeValueForKey(key, value, fallback) {
       }
       return normalized;
     }
+    case "anonymousHoldTtlSeconds":
+      return clampInteger(value, 300, 1800, fallback);
+    case "anonymousMaxTablesPerBooking":
+      return clampInteger(value, 1, 10, fallback);
+    case "turnstileSiteKey":
+      return String(value ?? "").trim();
     case "squareEnvMode": {
       // Always env-managed; do not allow persisted settings to override.
       return fallback;

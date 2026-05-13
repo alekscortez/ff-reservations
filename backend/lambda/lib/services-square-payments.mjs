@@ -226,6 +226,16 @@ export function createSquarePaymentsService({
     amount,
     note,
     idempotencyKey,
+    // Optional buyer email for Square hosted checkout pre-population.
+    // Square uses it to send the receipt automatically. Anonymous public
+    // bookings collect this in the customer-facing form; staff routes
+    // omit it (Square collects on its own page if needed).
+    buyerEmail,
+    // Optional per-call redirect URL override. Defaults to the env-driven
+    // SQUARE_CHECKOUT_REDIRECT_URL (staff flow). Anonymous public bookings
+    // pass a customer-specific URL so the customer lands on
+    // /r/{reservationId}?t=... after checkout.
+    redirectUrlOverride,
     // Optional override for Square's accepted_payment_methods. Falls back
     // to the env-driven defaults (apple_pay/google_pay/cash_app_pay all
     // true) when omitted. Used by /me/cashapp-link to restrict the hosted
@@ -237,7 +247,11 @@ export function createSquarePaymentsService({
     const apiVersion = String(env.SQUARE_API_VERSION ?? "2026-01-22").trim();
     const locationId = String(requiredEnv("SQUARE_LOCATION_ID", env.SQUARE_LOCATION_ID) ?? "").trim();
     const currency = String(env.SQUARE_CURRENCY ?? "USD").trim().toUpperCase();
-    const redirectUrl = String(env.SQUARE_CHECKOUT_REDIRECT_URL ?? "").trim();
+    // redirectUrlOverride (from caller) wins; otherwise fall back to env.
+    // Trimmed; query strings are OK and Square preserves them on return.
+    const redirectUrl = String(
+      redirectUrlOverride ?? env.SQUARE_CHECKOUT_REDIRECT_URL ?? ""
+    ).trim();
     const acceptedPaymentMethods = acceptedPaymentMethodsOverride && typeof acceptedPaymentMethodsOverride === "object"
       ? {
           apple_pay: Boolean(acceptedPaymentMethodsOverride.apple_pay ?? false),
@@ -311,12 +325,17 @@ export function createSquarePaymentsService({
             : {
                 accepted_payment_methods: acceptedPaymentMethods,
               },
-          pre_populated_data:
-            includePhone && buyerPhoneNumber
-              ? {
-                  buyer_phone_number: buyerPhoneNumber,
-                }
-              : undefined,
+          pre_populated_data: (() => {
+            const parts = {};
+            if (includePhone && buyerPhoneNumber) {
+              parts.buyer_phone_number = buyerPhoneNumber;
+            }
+            const trimmedEmail = String(buyerEmail ?? "").trim();
+            if (trimmedEmail) {
+              parts.buyer_email = trimmedEmail;
+            }
+            return Object.keys(parts).length > 0 ? parts : undefined;
+          })(),
           payment_note:
             paymentNote,
         }),

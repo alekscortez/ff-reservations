@@ -358,6 +358,53 @@ describe("GET /public/availability (no auth)", () => {
       assert.equal(res.body.customerContactPhoneE164, undefined);
     }
   });
+
+  it("emits anon-booking flags + turnstile site key on /public/availability", async () => {
+    // All configured
+    {
+      const { ctx } = makeCtx({
+        method: "GET",
+        path: "/public/availability",
+        settings: {
+          showClientFacingMap: true,
+          tableAvailabilityPollingSeconds: 10,
+          allowAnonymousPublicBooking: true,
+          anonymousMaxTablesPerBooking: 3,
+          turnstileSiteKey: "0x4AAAAAAAAA",
+        },
+        events: [
+          { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE", eventName: "Friday" },
+        ],
+        eventForDate: { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE" },
+      });
+      const res = await handleEventsAndTablesRoute(ctx);
+      assert.equal(res.body.allowAnonymousPublicBooking, true);
+      assert.equal(res.body.anonymousMaxTablesPerBooking, 3);
+      assert.equal(res.body.turnstileSiteKey, "0x4AAAAAAAAA");
+    }
+    // Disabled + no site key
+    {
+      const { ctx } = makeCtx({
+        method: "GET",
+        path: "/public/availability",
+        settings: {
+          showClientFacingMap: true,
+          tableAvailabilityPollingSeconds: 10,
+          allowAnonymousPublicBooking: false,
+          anonymousMaxTablesPerBooking: 4,
+          turnstileSiteKey: "",
+        },
+        events: [
+          { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE", eventName: "Friday" },
+        ],
+        eventForDate: { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE" },
+      });
+      const res = await handleEventsAndTablesRoute(ctx);
+      assert.equal(res.body.allowAnonymousPublicBooking, false);
+      assert.equal(res.body.anonymousMaxTablesPerBooking, 4);
+      assert.equal(res.body.turnstileSiteKey, undefined);
+    }
+  });
 });
 
 describe("POST /events (admin)", () => {

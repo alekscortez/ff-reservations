@@ -174,6 +174,19 @@ export async function handleEventsAndTablesRoute(ctx) {
             : undefined,
         customerContactPhoneE164:
           String(settings?.customerContactPhoneE164 ?? "").trim() || undefined,
+        // Public anonymous-booking flags. Frontend uses these to decide
+        // whether to render the "Tap to reserve" CTA on AVAILABLE tiles
+        // and what cap to enforce on multi-table selection. turnstileSiteKey
+        // is the public Cloudflare Turnstile site key that the frontend
+        // mounts via the Turnstile widget script.
+        allowAnonymousPublicBooking: Boolean(
+          settings?.allowAnonymousPublicBooking
+        ),
+        anonymousMaxTablesPerBooking: Number(
+          settings?.anonymousMaxTablesPerBooking ?? 4
+        ),
+        turnstileSiteKey:
+          String(settings?.turnstileSiteKey ?? "").trim() || undefined,
         events: upcomingEvents.slice(0, 14).map((item) => ({
           eventDate: item.eventDate,
           eventName: item.eventName,

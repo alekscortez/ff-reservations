@@ -304,6 +304,25 @@ describe("buildDefaults", () => {
       "+18557656160"
     );
   });
+  it("anonymous booking: defaults are conservative, env can override", () => {
+    const out = buildDefaults({});
+    assert.equal(out.allowAnonymousPublicBooking, false);
+    assert.equal(out.anonymousHoldTtlSeconds, 600);
+    assert.equal(out.anonymousMaxTablesPerBooking, 4);
+    assert.equal(out.turnstileSiteKey, "");
+  });
+  it("anonymous booking: env overrides + clamps", () => {
+    const out = buildDefaults({
+      ALLOW_ANONYMOUS_PUBLIC_BOOKING: "true",
+      ANONYMOUS_HOLD_TTL_SECONDS: "9999", // above 1800 max → clamped
+      ANONYMOUS_MAX_TABLES_PER_BOOKING: "0", // below 1 min → clamped
+      TURNSTILE_SITE_KEY: "  0x4AAA  ",
+    });
+    assert.equal(out.allowAnonymousPublicBooking, true);
+    assert.equal(out.anonymousHoldTtlSeconds, 1800);
+    assert.equal(out.anonymousMaxTablesPerBooking, 1);
+    assert.equal(out.turnstileSiteKey, "0x4AAA");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -382,6 +401,25 @@ describe("normalizeValueForKey", () => {
       () => normalizeValueForKey("customerContactPhoneE164", "garbage", ""),
       /must be an E\.164 phone number/
     );
+  });
+  it("allowAnonymousPublicBooking: parsed via parseBoolean", () => {
+    assert.equal(normalizeValueForKey("allowAnonymousPublicBooking", "yes", false), true);
+    assert.equal(normalizeValueForKey("allowAnonymousPublicBooking", "off", true), false);
+    assert.equal(normalizeValueForKey("allowAnonymousPublicBooking", "", true), true);
+  });
+  it("anonymousHoldTtlSeconds: clamped 300-1800", () => {
+    assert.equal(normalizeValueForKey("anonymousHoldTtlSeconds", 600, 600), 600);
+    assert.equal(normalizeValueForKey("anonymousHoldTtlSeconds", 100, 600), 300);
+    assert.equal(normalizeValueForKey("anonymousHoldTtlSeconds", 9999, 600), 1800);
+  });
+  it("anonymousMaxTablesPerBooking: clamped 1-10", () => {
+    assert.equal(normalizeValueForKey("anonymousMaxTablesPerBooking", 4, 4), 4);
+    assert.equal(normalizeValueForKey("anonymousMaxTablesPerBooking", 0, 4), 1);
+    assert.equal(normalizeValueForKey("anonymousMaxTablesPerBooking", 99, 4), 10);
+  });
+  it("turnstileSiteKey: trims whitespace", () => {
+    assert.equal(normalizeValueForKey("turnstileSiteKey", "  abc  ", ""), "abc");
+    assert.equal(normalizeValueForKey("turnstileSiteKey", "", "x"), "");
   });
 });
 

@@ -17,6 +17,7 @@ import {
   nowEpoch,
   requiredEnv,
   roundToCents,
+  safeStringEquals,
   toMajorUnits,
   toMinorUnits,
 } from "./core-utils.mjs";
@@ -289,5 +290,29 @@ describe("normalizeNameForSearch", () => {
     assert.equal(normalizeNameForSearch(undefined), "");
     assert.equal(normalizeNameForSearch(""), "");
     assert.equal(normalizeNameForSearch(123), "123");
+  });
+});
+
+describe("safeStringEquals", () => {
+  it("matches identical non-empty strings", () => {
+    assert.equal(safeStringEquals("abc", "abc"), true);
+    assert.equal(safeStringEquals("a".repeat(64), "a".repeat(64)), true);
+  });
+  it("rejects mismatched same-length strings", () => {
+    assert.equal(safeStringEquals("abc", "abd"), false);
+  });
+  it("rejects different-length inputs (instead of throwing)", () => {
+    assert.equal(safeStringEquals("abc", "abcd"), false);
+    assert.equal(safeStringEquals("longer", "x"), false);
+  });
+  it("rejects empty inputs on either side", () => {
+    assert.equal(safeStringEquals("", ""), false);
+    assert.equal(safeStringEquals("abc", ""), false);
+    assert.equal(safeStringEquals("", "abc"), false);
+  });
+  it("rejects non-string inputs", () => {
+    assert.equal(safeStringEquals(null, "abc"), false);
+    assert.equal(safeStringEquals("abc", undefined), false);
+    assert.equal(safeStringEquals(123, "123"), false);
   });
 });
