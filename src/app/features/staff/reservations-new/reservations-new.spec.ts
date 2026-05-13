@@ -274,6 +274,83 @@ describe('ReservationsNew confirmReservation double-fire guard (C1)', () => {
     await fixture.whenStable();
   });
 
+  it('credit + cash remainder sends receiptNumber to the addPayment cash leg', async () => {
+    // Build a stubbed ReservationsService that emits a synthetic create
+    // response then captures both addPayment calls. The credit leg has no
+    // receipt number; the cash remainder leg MUST carry the staff-entered
+    // one — backend resolveCashReceiptNumberRequired() defaults to true,
+    // so omitting it would 4xx after the credit was already applied.
+    const addPaymentSpy = vi.fn((_payload: any) => of(undefined));
+    const createSpy2 = vi.fn((_payload: any) =>
+      of({
+        item: { reservationId: 'r-99', eventDate: '2026-05-09', tableId: 'A1' },
+        autoSquareLinkSms: null,
+      } as any)
+    );
+    const reservationsStub: Partial<ReservationsService> = {
+      create: createSpy2 as any,
+      addPayment: addPaymentSpy as any,
+    };
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ReservationsNew],
+      providers: [
+        provideRouter([]),
+        { provide: HoldsService, useValue: makeHoldsStub() },
+        { provide: TablesService, useValue: makeTablesStub() },
+        { provide: ReservationsService, useValue: reservationsStub },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParamMap: of(convertToParamMap({})),
+            paramMap: of(convertToParamMap({})),
+            snapshot: { queryParamMap: convertToParamMap({}), paramMap: convertToParamMap({}) },
+          },
+        },
+      ],
+    }).compileComponents();
+    const f = TestBed.createComponent(ReservationsNew);
+    const c = f.componentInstance;
+    await f.whenStable();
+
+    const tableA = { id: 'A1', price: 200, section: 'A', status: 'HOLD' } as any;
+    c.eventDate = '2026-05-09';
+    c.selectedTable = tableA;
+    c.selectedTableId = 'A1';
+    c.selectedTables = [tableA];
+    c.holdId = 'h-a1';
+    c.holdExpiresAt = Math.floor(Date.now() / 1000) + 300;
+    c.holdEntries = [
+      { tableId: 'A1', holdId: 'h-a1', holdExpiresAt: c.holdExpiresAt, holdCreatedByMe: true },
+    ];
+    c.holdCreatedByMe = true;
+    c.cashReceiptNumberRequired = true;
+    c.form.controls.customerName.setValue('Test');
+    c.form.controls.phone.setValue('5125551212');
+    c.form.controls.amountDue.setValue(200);
+    c.form.controls.useCredit.setValue(true);
+    c.form.controls.creditId.setValue('credit-1');
+    c.form.controls.remainingMethod.setValue('cash');
+    c.form.controls.receiptNumber.setValue('R-123');
+    c.clientCredits = [
+      { creditId: 'credit-1', remainingAmount: 50, status: 'ACTIVE', amountRemaining: 50 } as any,
+    ];
+
+    c.confirmReservation();
+
+    expect(createSpy2).toHaveBeenCalledTimes(1);
+    expect(addPaymentSpy).toHaveBeenCalledTimes(2);
+    // First call applies the credit; second collects the cash remainder.
+    const creditCall = addPaymentSpy.mock.calls[0]![0]! as any;
+    const cashCall = addPaymentSpy.mock.calls[1]![0]! as any;
+    expect(creditCall.method).toBe('credit');
+    expect(creditCall.creditId).toBe('credit-1');
+    expect(cashCall.method).toBe('cash');
+    expect(cashCall.amount).toBe(150);
+    // normalizedReceiptNumber strips non-digits.
+    expect(cashCall.receiptNumber).toBe('123');
+  });
+
   it('fires ReservationsService.create exactly once on rapid double-click', () => {
     // Seed enough state to bypass all the synchronous validation gates
     // in confirmReservation so we reach the actual POST.
