@@ -42,7 +42,7 @@ interface TurnstileGlobal {
     options: {
       sitekey: string;
       callback?: (token: string) => void;
-      'error-callback'?: () => void;
+      'error-callback'?: (errorCode?: string) => void;
       'expired-callback'?: () => void;
       theme?: 'light' | 'dark' | 'auto';
       size?: 'normal' | 'compact';
@@ -52,6 +52,27 @@ interface TurnstileGlobal {
   reset: (widgetId?: string) => void;
   remove: (widgetId?: string) => void;
   getResponse?: (widgetId?: string) => string | undefined;
+}
+
+// Friendly translations of the most common Cloudflare Turnstile error
+// codes. Full list: https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/
+// We surface the code so the operator can search docs if a new one shows up.
+function describeTurnstileError(code: string): string {
+  const c = String(code ?? '').trim();
+  if (!c) return 'Verification widget reported an error. Please try again.';
+  if (c.startsWith('1102')) {
+    return 'This site is not authorized for this domain. (Check Turnstile hostnames.)';
+  }
+  if (c.startsWith('110')) {
+    return `Verification config error (code ${c}). Please refresh and try again.`;
+  }
+  if (c.startsWith('200') || c.startsWith('300')) {
+    return `Network glitch verifying you (code ${c}). Please try again.`;
+  }
+  if (c.startsWith('400')) {
+    return `Too many verification attempts (code ${c}). Please wait a moment.`;
+  }
+  return `Verification error (code ${c}). Please try again.`;
 }
 
 declare global {
@@ -190,11 +211,15 @@ export class ReserveTableModal implements OnDestroy {
           this.turnstileToken.set(String(token ?? ''));
           this.turnstileError.set(null);
         },
-        'error-callback': () => {
+        'error-callback': (errorCode?: string) => {
           this.turnstileToken.set('');
-          this.turnstileError.set(
-            'Verification widget reported an error. Please try again.'
-          );
+          // Log the raw code so we can grep for it; show a friendlier
+          // message to the customer.
+          console.warn('[turnstile] error-callback', {
+            errorCode,
+            host: window.location.host,
+          });
+          this.turnstileError.set(describeTurnstileError(errorCode ?? ''));
         },
         'expired-callback': () => {
           this.turnstileToken.set('');

@@ -35,7 +35,15 @@
       Pick a table below, then contact us to reserve. Your table is held once payment is confirmed.
     </p>
 
-    <div class="mt-3 grid gap-2 sm:grid-cols-2" *ngIf="contactPhone() as phone">
+    <!-- Contact CTAs: only shown when self-booking is OFF (fallback), so
+         customers who can self-serve aren't given two competing paths.
+         When booking is enabled, the same numbers stay reachable from
+         the destructive error alert as a fallback. -->
+    <div
+      class="mt-3 grid gap-2 sm:grid-cols-2"
+      *ngIf="contactPhone() as phone"
+      [class.hidden]="bookingEnabled()"
+    >
       <a
         hlmBtn
         size="lg"
