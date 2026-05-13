@@ -268,8 +268,15 @@ export function createSquarePaymentsService({
     const amountMinor = toAmountMoney(amount);
     const secret = await loadSquareSecret();
     const buyerPhoneNumber = toSquareBuyerPhone(phone);
+    // Receipt-facing note. Customer sees this in their Square email
+    // receipt, so frame the reservation reference as a normal
+    // "Booking #..." instead of the operator-internal "Reservation ..."
+    // that read scammy. The webhook handler still parses the UUID +
+    // date from this string (extractReservationFromNote understands
+    // both "Reservation" and "Booking" prefixes for back-compat with
+    // existing in-flight payments).
     const reservationRefText =
-      `Reservation ${String(reservationId ?? "").trim()} · ${String(eventDate ?? "").trim()}`;
+      `Booking ${String(reservationId ?? "").trim()} • ${String(eventDate ?? "").trim()}`;
     const noteText = String(note ?? "").trim();
     const paymentNote = noteText ? `${noteText} | ${reservationRefText}` : reservationRefText;
     const eventDateLabel = formatEventDateForLabel(eventDate);
@@ -306,9 +313,14 @@ export function createSquarePaymentsService({
         },
         body: JSON.stringify({
           idempotency_key: idempotency,
+          // Description shows on the Square hosted checkout page above
+          // the amount. Friendly default for anonymous public bookings;
+          // staff-supplied notes still win when provided.
           description:
             noteText ||
-            `Reservation ${String(reservationId ?? "").trim()} payment link`,
+            (eventDateLabel
+              ? `Famoso Fuego booking — ${eventDateLabel}`
+              : `Famoso Fuego reservation`),
           quick_pay: {
             name: itemName,
             price_money: {

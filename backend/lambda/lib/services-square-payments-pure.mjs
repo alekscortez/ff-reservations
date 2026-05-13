@@ -122,8 +122,13 @@ export function isIsoDate(value) {
 export function extractReservationFromNote(noteRaw) {
   const note = String(noteRaw ?? "").trim();
   if (!note) return null;
+  // Accept both "Reservation <id> · <date>" (legacy operator-internal
+  // wording) and "Booking <id> • <date>" (current customer-friendly
+  // wording) so payments still in flight when the receipt copy
+  // changed continue to land on the right reservation. Separator
+  // class accepts middle-dot, bullet, hyphen, or pipe.
   const match = note.match(
-    /reservation\s+([0-9a-fA-F-]{36})\s*[·\-|]\s*(\d{4}-\d{2}-\d{2})/i
+    /(?:reservation|booking)\s+([0-9a-fA-F-]{36})\s*[·•\-|]\s*(\d{4}-\d{2}-\d{2})/i
   );
   if (!match) return null;
   const reservationId = String(match[1] ?? "").trim();

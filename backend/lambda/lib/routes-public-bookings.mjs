@@ -445,7 +445,11 @@ export async function handlePublicBookingsRoute(ctx) {
         customerName: customerNameRaw,
         phone: customerPhone,
         amount: amountDue,
-        note: "Anonymous public booking",
+        // No operator-internal "Anonymous public booking" prefix — it
+        // appeared on the customer's Square receipt and read like a
+        // scam. createPaymentLink will fall back to the clean
+        // "Booking <id> • <date>" reference text on its own.
+        note: "",
         idempotencyKey,
         buyerEmail: customerEmailRaw || undefined,
         redirectUrlOverride: customerReturnUrl,

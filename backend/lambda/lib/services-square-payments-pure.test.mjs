@@ -313,6 +313,16 @@ describe("extractReservationFromNote", () => {
     assert.equal(extractReservationFromNote(""), null);
     assert.equal(extractReservationFromNote(null), null);
   });
+  it("accepts the customer-friendly 'Booking <id> • <date>' format", () => {
+    const out = extractReservationFromNote(`Booking ${VALID_UUID} • ${VALID_DATE}`);
+    assert.deepEqual(out, { reservationId: VALID_UUID, eventDate: VALID_DATE });
+  });
+  it("accepts 'booking' (case-insensitive) with various separators", () => {
+    for (const sep of ["·", "•", "-", "|"]) {
+      const out = extractReservationFromNote(`booking ${VALID_UUID} ${sep} ${VALID_DATE}`);
+      assert.deepEqual(out, { reservationId: VALID_UUID, eventDate: VALID_DATE });
+    }
+  });
 });
 
 describe("extractReservationRefFromPayment", () => {
