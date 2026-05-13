@@ -172,6 +172,8 @@ export async function handleEventsAndTablesRoute(ctx) {
           settings?.sectionMapColors && typeof settings.sectionMapColors === "object"
             ? settings.sectionMapColors
             : undefined,
+        customerContactPhoneE164:
+          String(settings?.customerContactPhoneE164 ?? "").trim() || undefined,
         events: upcomingEvents.slice(0, 14).map((item) => ({
           eventDate: item.eventDate,
           eventName: item.eventName,

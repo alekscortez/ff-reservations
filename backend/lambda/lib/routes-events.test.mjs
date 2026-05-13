@@ -319,6 +319,45 @@ describe("GET /public/availability (no auth)", () => {
     // Falls back to the earliest upcoming event
     assert.ok(calls.getEventByDate.some((d) => d === "2026-05-09"));
   });
+
+  it("emits customerContactPhoneE164 when configured; omits when empty", async () => {
+    // Configured
+    {
+      const { ctx } = makeCtx({
+        method: "GET",
+        path: "/public/availability",
+        settings: {
+          showClientFacingMap: true,
+          tableAvailabilityPollingSeconds: 10,
+          customerContactPhoneE164: "+18557656160",
+        },
+        events: [
+          { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE", eventName: "Friday" },
+        ],
+        eventForDate: { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE" },
+      });
+      const res = await handleEventsAndTablesRoute(ctx);
+      assert.equal(res.body.customerContactPhoneE164, "+18557656160");
+    }
+    // Not configured (empty string)
+    {
+      const { ctx } = makeCtx({
+        method: "GET",
+        path: "/public/availability",
+        settings: {
+          showClientFacingMap: true,
+          tableAvailabilityPollingSeconds: 10,
+          customerContactPhoneE164: "",
+        },
+        events: [
+          { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE", eventName: "Friday" },
+        ],
+        eventForDate: { eventId: "e1", eventDate: "2026-05-09", status: "ACTIVE" },
+      });
+      const res = await handleEventsAndTablesRoute(ctx);
+      assert.equal(res.body.customerContactPhoneE164, undefined);
+    }
+  });
 });
 
 describe("POST /events (admin)", () => {

@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { Meta, Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
 import {
@@ -11,13 +12,19 @@ import {
 } from '../../../core/http/public-availability.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
+import { HlmAlert } from '../../../shared/ui/alert';
+import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
-import { HlmAlert } from '../../../shared/ui/alert';
+
+interface PublicAvailabilityPickerOption {
+  eventDate: string;
+  label: string;
+}
 
 @Component({
   selector: 'app-public-availability',
-  imports: [CommonModule, ReactiveFormsModule, TableMap, HlmInput, HlmToggle, HlmAlert],
+  imports: [CommonModule, ReactiveFormsModule, TableMap, HlmAlert, HlmButton, HlmInput, HlmToggle],
   templateUrl: './availability.html',
   styleUrl: './availability.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,6 +34,8 @@ export class PublicAvailability implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
+  private titleService = inject(Title);
+  private metaService = inject(Meta);
   private readonly defaultSectionColors: Record<string, string> = {
     A: '#ec008c',
     B: '#2e3192',
@@ -54,9 +63,16 @@ export class PublicAvailability implements OnInit, OnDestroy {
 
   private pollSub: Subscription | null = null;
   private pollingSeconds = 0;
+  private currentLoadSub: Subscription | null = null;
   private queryEventDate = '';
 
   ngOnInit(): void {
+    this.titleService.setTitle('Famoso Fuego — Live Table Availability');
+    this.metaService.updateTag({
+      name: 'description',
+      content:
+        'See which tables are open tonight at Famoso Fuego. Live availability updates every few seconds.',
+    });
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -69,6 +85,8 @@ export class PublicAvailability implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.pollSub?.unsubscribe();
     this.pollSub = null;
+    this.currentLoadSub?.unsubscribe();
+    this.currentLoadSub = null;
   }
 
   onEventDateChange(value: string): void {
@@ -87,6 +105,15 @@ export class PublicAvailability implements OnInit, OnDestroy {
 
   isViewMode(mode: 'MAP' | 'LIST'): boolean {
     return this.viewMode.value === mode;
+  }
+
+  retryLoad(): void {
+    this.loadAvailability(this.queryEventDate || undefined);
+  }
+
+  clearFilters(): void {
+    this.search.setValue('');
+    this.availableOnly.setValue(false);
   }
 
   // Memoized derivations of `data` + form-control filters. Computed
@@ -114,6 +141,61 @@ export class PublicAvailability implements OnInit, OnDestroy {
       disabled: !item.available,
     }));
   });
+
+  readonly hasNoFilteredTables = computed<boolean>(
+    () => this.filteredTables().length === 0
+  );
+
+  readonly hasActiveFilter = computed<boolean>(() => {
+    const query = (this.searchSignal() ?? '').trim();
+    const availableOnly = this.availableOnlySignal() ?? true;
+    return query.length > 0 || availableOnly;
+  });
+
+  readonly pickerOptions = computed<PublicAvailabilityPickerOption[]>(() => {
+    const events = this.data()?.events ?? [];
+    return events.map((item) => ({
+      eventDate: item.eventDate,
+      label: this.formatPickerLabel(item.eventDate, item.eventName),
+    }));
+  });
+
+  // E.164 phone (or empty). Public response carries it when the admin has
+  // configured `customerContactPhoneE164`; we render Call + WhatsApp CTAs
+  // when present, hide the block otherwise.
+  readonly contactPhone = computed<string>(() => {
+    return String(this.data()?.customerContactPhoneE164 ?? '').trim();
+  });
+
+  readonly telHref = computed<string>(() => {
+    const phone = this.contactPhone();
+    return phone ? `tel:${phone}` : '';
+  });
+
+  readonly whatsappHref = computed<string>(() => {
+    const phone = this.contactPhone();
+    if (!phone) return '';
+    // wa.me wants the digits only (no leading +).
+    const digits = phone.replace(/[^\d]/g, '');
+    return digits ? `https://wa.me/${digits}` : '';
+  });
+
+  trackEventDate(_index: number, item: PublicAvailabilityPickerOption): string {
+    return item.eventDate;
+  }
+
+  private formatPickerLabel(eventDate: string, eventName: string): string {
+    const parsed = new Date(`${eventDate}T00:00:00`);
+    const datePart = Number.isNaN(parsed.getTime())
+      ? eventDate
+      : parsed.toLocaleDateString(undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        });
+    const name = String(eventName ?? '').trim();
+    return name ? `${datePart} · ${name}` : datePart;
+  }
 
   asOfLabel(): string {
     const epoch = Number(this.data()?.asOfEpoch ?? 0);
@@ -150,11 +232,16 @@ export class PublicAvailability implements OnInit, OnDestroy {
   });
 
   private loadAvailability(eventDate?: string, silent = false): void {
+    // Cancel any in-flight load. Without this, rapid date toggles can
+    // resolve out-of-order and the slower (older) response wins.
+    this.currentLoadSub?.unsubscribe();
+    this.currentLoadSub = null;
+
     if (!silent) {
       this.loading.set(true);
       this.error.set(null);
     }
-    this.api.getAvailability(eventDate).subscribe({
+    this.currentLoadSub = this.api.getAvailability(eventDate).subscribe({
       next: (res) => {
         // Most polls return the same data. Re-rendering the 193KB SVG on
         // every tick stalls the main thread on iOS Chrome — enough to
@@ -174,6 +261,10 @@ export class PublicAvailability implements OnInit, OnDestroy {
         this.error.set(
           err?.error?.message || err?.message || 'Unable to load table availability right now.'
         );
+        // Keep polling even after a failure so transient errors recover
+        // on their own. First-call errors land here with `pollingSeconds`
+        // still 0; fall back to 10s.
+        this.ensurePolling(this.pollingSeconds || 10);
       },
     });
   }

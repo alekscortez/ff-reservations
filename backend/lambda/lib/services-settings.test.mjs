@@ -291,6 +291,19 @@ describe("buildDefaults", () => {
     const out = buildDefaults({ OPERATING_TZ: "Mars/Olympus" });
     assert.equal(out.operatingTz, "America/Chicago");
   });
+  it("customerContactPhoneE164: normalizes from env, empty when unset", () => {
+    assert.equal(buildDefaults({}).customerContactPhoneE164, "");
+    assert.equal(
+      buildDefaults({ CUSTOMER_CONTACT_PHONE_E164: "+18557656160" })
+        .customerContactPhoneE164,
+      "+18557656160"
+    );
+    assert.equal(
+      buildDefaults({ CUSTOMER_CONTACT_PHONE_E164: "(855) 765-6160" })
+        .customerContactPhoneE164,
+      "+18557656160"
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -348,6 +361,26 @@ describe("normalizeValueForKey", () => {
     assert.equal(
       normalizeValueForKey("checkInPassBaseUrl", "  https://x  ", ""),
       "https://x"
+    );
+  });
+  it("customerContactPhoneE164: empty stays empty", () => {
+    assert.equal(normalizeValueForKey("customerContactPhoneE164", "", "+1"), "");
+    assert.equal(normalizeValueForKey("customerContactPhoneE164", "   ", "+1"), "");
+  });
+  it("customerContactPhoneE164: accepts E.164 + national US/MX format", () => {
+    assert.equal(
+      normalizeValueForKey("customerContactPhoneE164", "+18557656160", ""),
+      "+18557656160"
+    );
+    assert.equal(
+      normalizeValueForKey("customerContactPhoneE164", "(855) 765-6160", ""),
+      "+18557656160"
+    );
+  });
+  it("customerContactPhoneE164: throws on bad input", () => {
+    assert.throws(
+      () => normalizeValueForKey("customerContactPhoneE164", "garbage", ""),
+      /must be an E\.164 phone number/
     );
   });
 });

@@ -104,6 +104,9 @@ export class AdminSettings implements OnInit {
       validators: [Validators.required, Validators.pattern(this.hexColorPattern)],
     }),
     showClientFacingMap: new FormControl(false, { nonNullable: true }),
+    // Free-form on the client — backend normalizes US/MX formats and
+    // rejects unparseable input with a clear 400 message.
+    customerContactPhoneE164: new FormControl('', { nonNullable: true }),
     allowPastEventEdits: new FormControl(false, { nonNullable: true }),
     allowPastEventPayments: new FormControl(false, { nonNullable: true }),
     auditVerboseLogging: new FormControl(false, { nonNullable: true }),
@@ -176,6 +179,7 @@ export class AdminSettings implements OnInit {
       sectionColorD: String(item.sectionMapColors?.D ?? '#f7941d').trim().toLowerCase(),
       sectionColorE: String(item.sectionMapColors?.E ?? '#711411').trim().toLowerCase(),
       showClientFacingMap: Boolean(item.showClientFacingMap),
+      customerContactPhoneE164: String(item.customerContactPhoneE164 ?? '').trim(),
       allowPastEventEdits: Boolean(item.allowPastEventEdits),
       allowPastEventPayments: Boolean(item.allowPastEventPayments),
       auditVerboseLogging: Boolean(item.auditVerboseLogging),
@@ -210,6 +214,7 @@ export class AdminSettings implements OnInit {
         E: this.form.controls.sectionColorE.value.trim().toLowerCase(),
       },
       showClientFacingMap: Boolean(this.form.controls.showClientFacingMap.value),
+      customerContactPhoneE164: this.form.controls.customerContactPhoneE164.value.trim(),
       allowPastEventEdits: Boolean(this.form.controls.allowPastEventEdits.value),
       allowPastEventPayments: Boolean(this.form.controls.allowPastEventPayments.value),
       auditVerboseLogging: Boolean(this.form.controls.auditVerboseLogging.value),

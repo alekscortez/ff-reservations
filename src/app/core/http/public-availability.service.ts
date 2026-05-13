@@ -35,6 +35,7 @@ export interface PublicAvailabilityResponse {
   };
   refreshSeconds: number;
   sectionMapColors?: Record<string, string>;
+  customerContactPhoneE164?: string;
   events: PublicAvailabilityEventSummary[];
   tables: PublicAvailabilityTable[];
 }

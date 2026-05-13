@@ -34,6 +34,7 @@ export interface AppSettings {
   checkInPassTtlDays: number;
   checkInPassBaseUrl: string;
   showClientFacingMap: boolean;
+  customerContactPhoneE164: string;
   auditVerboseLogging: boolean;
   squareEnvMode: 'sandbox' | 'production';
   sectionMapColors: SectionMapColors;

@@ -2,6 +2,7 @@ import {
   GetCommand,
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { normalizePhoneE164 } from "./core-utils.mjs";
 
 const SETTINGS_PK = "APP";
 const SETTINGS_SK = "CONFIG";
@@ -196,6 +197,10 @@ export function buildDefaults(env) {
     checkInPassTtlDays: clampInteger(env?.CHECKIN_PASS_TTL_DAYS, 1, 30, 2),
     checkInPassBaseUrl: String(env?.CHECKIN_PASS_BASE_URL ?? "").trim(),
     showClientFacingMap: parseBoolean(env?.SHOW_CLIENT_FACING_MAP, false),
+    customerContactPhoneE164: normalizePhoneE164(
+      env?.CUSTOMER_CONTACT_PHONE_E164,
+      "US"
+    ),
     auditVerboseLogging: parseBoolean(env?.AUDIT_VERBOSE_LOGGING, false),
     squareEnvMode,
     squareApplicationId,
@@ -261,6 +266,17 @@ export function normalizeValueForKey(key, value, fallback) {
       return clampInteger(value, 1, 30, fallback);
     case "checkInPassBaseUrl":
       return String(value ?? "").trim();
+    case "customerContactPhoneE164": {
+      const raw = String(value ?? "").trim();
+      if (!raw) return "";
+      const normalized = normalizePhoneE164(raw, "US");
+      if (!normalized) {
+        throw new Error(
+          "customerContactPhoneE164 must be an E.164 phone number"
+        );
+      }
+      return normalized;
+    }
     case "squareEnvMode": {
       // Always env-managed; do not allow persisted settings to override.
       return fallback;
