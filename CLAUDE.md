@@ -109,9 +109,11 @@ Backend tests use Node 22's built-in `node:test`. `@aws-sdk/*` are devDeps at th
 - Lambda re-checks `requireAdmin(event)` / `requireStaffOrAdmin(event)` per sensitive route (defense in depth — do not rely on API Gateway alone).
 - Cognito access tokens DO NOT include `cognito:groups` by default. A **Pre Token Generation v2 Lambda trigger** (`backend/cognito-pre-token-gen/`) injects groups into the access token. If disabled/broken, every authed request silently 403s; the `AuthHealthBanner` (driven by `GET /admin/whoami`) surfaces this.
 - Groups: `Admin`, `Staff`. Users without a group fall through to `/unauthorized`.
+- **Staff pool `us-east-1_Upsi9Q2Tc` is locked to admin-create-only** (2026-05-13): `AdminCreateUserConfig.AllowAdminCreateUserOnly=true`. Hosted UI's "Sign Up" tab is hidden; `cognito-idp:SignUp` API is rejected for non-admins. New staff/admin users created exclusively via the "Invite User" form (`POST /admin/users` → `AdminCreateUserCommand`). Memory: `cognito_pool_locked_admin_create_only.md`. **Customer pool app client `21n3rd1sp4o9ka4l7tld45f0ka` is on a different flow (custom-auth phone-OTP) and unaffected.**
 - **Customer auth** (mobile, separate from staff): Custom Auth phone-OTP via `backend/cognito-customer-auth/`. Public mediator routes `POST /auth/customer/start` + `POST /auth/customer/verify` (in `routes-customer-auth.mjs`) wrap the synthetic-email convention. Customer-only routes under `/me/*` (in `routes-me.mjs`) use `requireCustomerOwnership(event)`.
 - **Token TTLs** (staff client, set 2026-05-11): access 8h, ID 8h, refresh 30d. Silent renew via refresh token. **OIDC state persisted in localStorage** via `DefaultLocalStorageService` in `app.config.ts` — the library's default (sessionStorage) silently nuked the refresh token on browser restart. See memory `feedback_oidc_default_session_storage.md`.
 - `Login` component auto-redirects already-authed users to `/staff/dashboard`; routes `''` and `'home'` both redirect to `/login`.
+- **Embedded login (Path 3) is planned** — replace Hosted UI redirect with an in-app SRP form, no hop. Not started; full implementation plan + edge cases captured in memory `embedded_login_path_3_planned.md`. Do not begin without explicit go-ahead. Note: `aws@redbone.mx` is currently in `PASSWORD_RESET_REQUIRED` status — that flow needs to work before any cutover.
 
 ## Concurrency / data integrity
 
@@ -167,6 +169,7 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - API Gateway routes are explicit (no `$default` proxy). Adding a backend route requires both the handler in `lib/routes-*.mjs` AND `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public).
 - **`*ngFor` with template method calls is an anti-pattern** — CD re-invokes them every cycle; iOS Chrome drops the trailing touchend. Memoize + use `trackBy`. See memory `feedback_ngfor_no_template_methods.md`.
 - **Lines that start with `=` in `.html` templates** are corrupted bindings (usually `[active]` whose attribute name got stripped). Angular parses them as a string attribute called `""` and silently does nothing — toggle stays dead. Hit twice in 2026-05-12. Grep `find src -name '*.html' -exec grep -l '^=' {} \;` before shipping any HlmToggle-heavy page. Memory: `feedback_stripped_active_bindings.md`.
+- **`@angular/cdk` is pinned to exact `21.1.6`** — do NOT bump. CDK 21.2 uses `ChangeDetectionStrategy.Eager` which only `@angular/core@21.2+` can resolve. Brain primitives' `popover` / `dialog` import `@angular/cdk/dialog` — bumping CDK alone breaks the AOT build with `Unsupported change detection strategy`. To upgrade, bump every `@angular/*` package to a matching 21.2 minor together. Memory: `cdk_21_1_pin_for_dialog_eager_strategy.md`.
 
 ## Wiring outside this repo
 
