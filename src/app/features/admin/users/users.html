@@ -28,9 +28,9 @@
         hlmBtn
         type="submit"
         class="lg:col-span-2 xl:col-span-1"
-        [disabled]="createLoading"
+        [disabled]="createLoading()"
       >
-        {{ createLoading ? 'Inviting…' : 'Invite User' }}
+        {{ createLoading() ? 'Inviting…' : 'Invite User' }}
       </button>
     </form>
 
@@ -77,14 +77,14 @@
       </ng-template>
     </div>
 
-    <hlm-alert *ngIf="notice" variant="success">{{ notice }}</hlm-alert>
-    <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
+    <hlm-alert *ngIf="notice()" variant="success">{{ notice() }}</hlm-alert>
+    <hlm-alert *ngIf="error()" variant="destructive">{{ error() }}</hlm-alert>
 
-    <div *ngIf="loading" class="text-sm text-brand-500">Loading users…</div>
-    <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">
+    <div *ngIf="loading()" class="text-sm text-brand-500">Loading users…</div>
+    <div *ngIf="!loading() && items().length === 0" class="text-sm text-brand-500" aria-live="polite">
       No users found.
     </div>
-    <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">
+    <div *ngIf="!loading() && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">
       No matches.
     </div>
 
@@ -252,25 +252,26 @@
       />
     </div>
 
-    <div class="flex justify-center" *ngIf="nextToken">
+    <div class="flex justify-center" *ngIf="nextToken()">
       <button
         hlmBtn variant="outline"
         type="button"
-        [disabled]="loadingMore"
+        [disabled]="loadingMore()"
         (click)="loadMore()"
       >
-        {{ loadingMore ? 'Loading…' : 'Load more from Cognito' }}
+        {{ loadingMore() ? 'Loading…' : 'Load more from Cognito' }}
       </button>
     </div>
   </section>
 </section>
 
-<hlm-confirm-dialog
-  *ngIf="resetUserTarget"
-  title="Send password reset?"
-  [message]="'A reset email will be sent to ' + resetUserTargetLabel() + '.'"
-  confirmText="Send reset"
-  loadingText="Sending…"
-  (confirm)="confirmResetUser()"
-  (cancel)="cancelResetUser()"
-/>
+<ng-container *ngIf="resetUserTarget() as target">
+  <hlm-confirm-dialog
+    title="Send password reset?"
+    [message]="'A reset email will be sent to ' + (target.email || target.name || target.username || '') + '.'"
+    confirmText="Send reset"
+    loadingText="Sending…"
+    (confirm)="confirmResetUser()"
+    (cancel)="cancelResetUser()"
+  />
+</ng-container>

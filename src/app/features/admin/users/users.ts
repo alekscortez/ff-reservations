@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import {
+  ChangeDetectionStrategy,
   Component,
   OnInit,
   computed,
@@ -76,18 +77,19 @@ const PAGE_SIZE = 25;
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './users.html',
   styleUrl: './users.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Users implements OnInit {
   private usersApi = inject(UsersService);
 
   readonly items = signal<AdminUser[]>([]);
-  loading = false;
-  loadingMore = false;
-  createLoading = false;
-  error: string | null = null;
-  notice: string | null = null;
-  nextToken: string | null = null;
-  actionLoadingByUsername: Record<string, boolean> = {};
+  readonly loading = signal(false);
+  readonly loadingMore = signal(false);
+  readonly createLoading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly notice = signal<string | null>(null);
+  readonly nextToken = signal<string | null>(null);
+  readonly actionLoadingByUsername = signal<Record<string, boolean>>({});
 
   filterQuery = new FormControl('', { nonNullable: true });
   createForm = new FormGroup({
@@ -223,28 +225,29 @@ export class Users implements OnInit {
   }
 
   load(): void {
-    this.loading = true;
-    this.error = null;
-    this.notice = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.notice.set(null);
     this.usersApi.list(50).subscribe({
       next: (res) => {
         this.items.set(this.sortUsers(res.items ?? []));
-        this.nextToken = res.nextToken ?? null;
+        this.nextToken.set(res.nextToken ?? null);
         this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load users';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load users');
+        this.loading.set(false);
       },
     });
   }
 
   loadMore(): void {
-    if (!this.nextToken || this.loadingMore) return;
-    this.loadingMore = true;
-    this.error = null;
-    this.usersApi.list(50, this.nextToken).subscribe({
+    const token = this.nextToken();
+    if (!token || this.loadingMore()) return;
+    this.loadingMore.set(true);
+    this.error.set(null);
+    this.usersApi.list(50, token).subscribe({
       next: (res) => {
         const merged = [...this.items(), ...(res.items ?? [])];
         this.items.set(
@@ -255,12 +258,12 @@ export class Users implements OnInit {
             ),
           ),
         );
-        this.nextToken = res.nextToken ?? null;
-        this.loadingMore = false;
+        this.nextToken.set(res.nextToken ?? null);
+        this.loadingMore.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load more users';
-        this.loadingMore = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load more users');
+        this.loadingMore.set(false);
       },
     });
   }
@@ -270,9 +273,9 @@ export class Users implements OnInit {
       this.createForm.markAllAsTouched();
       return;
     }
-    this.createLoading = true;
-    this.error = null;
-    this.notice = null;
+    this.createLoading.set(true);
+    this.error.set(null);
+    this.notice.set(null);
     const payload = {
       name: this.createForm.controls.name.value.trim() || undefined,
       email: this.createForm.controls.email.value.trim().toLowerCase(),
@@ -282,17 +285,17 @@ export class Users implements OnInit {
     this.usersApi.create(payload).subscribe({
       next: (item) => {
         this.items.set(this.sortUsers([item, ...this.items()]));
-        this.createLoading = false;
+        this.createLoading.set(false);
         this.createForm.reset({
           name: '',
           email: '',
           role: 'Staff',
         });
-        this.notice = `Invitation sent to ${item.email ?? payload.email}.`;
+        this.notice.set(`Invitation sent to ${item.email ?? payload.email}.`);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to create user';
-        this.createLoading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to create user');
+        this.createLoading.set(false);
       },
     });
   }
@@ -303,19 +306,21 @@ export class Users implements OnInit {
     const selected = String((event.target as HTMLSelectElement | null)?.value ?? '').trim();
     if (selected !== 'Admin' && selected !== 'Staff') return;
     if (user.role === selected) return;
-    if (this.actionLoadingByUsername[username]) return;
+    if (this.actionLoadingByUsername()[username]) return;
 
     this.setActionLoading(username, true);
-    this.error = null;
-    this.notice = null;
+    this.error.set(null);
+    this.notice.set(null);
     this.usersApi.updateRole(username, selected).subscribe({
       next: (updated) => {
         this.replaceItem(updated);
         this.setActionLoading(username, false);
-        this.notice = `${updated.email ?? updated.username ?? 'User'} role updated to ${updated.role}.`;
+        this.notice.set(
+          `${updated.email ?? updated.username ?? 'User'} role updated to ${updated.role}.`,
+        );
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to update user role';
+        this.error.set(err?.error?.message || err?.message || 'Failed to update user role');
         this.setActionLoading(username, false);
       },
     });
@@ -324,65 +329,67 @@ export class Users implements OnInit {
   toggleStatus(user: AdminUser): void {
     const username = String(user.username ?? '').trim();
     if (!username) return;
-    if (this.actionLoadingByUsername[username]) return;
+    if (this.actionLoadingByUsername()[username]) return;
     const nextEnabled = !user.enabled;
 
     this.setActionLoading(username, true);
-    this.error = null;
-    this.notice = null;
+    this.error.set(null);
+    this.notice.set(null);
     this.usersApi.updateStatus(username, nextEnabled).subscribe({
       next: (updated) => {
         this.replaceItem(updated);
         this.setActionLoading(username, false);
-        this.notice = `${updated.email ?? updated.username ?? 'User'} ${updated.enabled ? 'enabled' : 'disabled'}.`;
+        this.notice.set(
+          `${updated.email ?? updated.username ?? 'User'} ${updated.enabled ? 'enabled' : 'disabled'}.`,
+        );
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to update user status';
+        this.error.set(err?.error?.message || err?.message || 'Failed to update user status');
         this.setActionLoading(username, false);
       },
     });
   }
 
-  resetUserTarget: AdminUser | null = null;
+  readonly resetUserTarget = signal<AdminUser | null>(null);
 
   sendPasswordReset(user: AdminUser): void {
     const username = String(user.username ?? '').trim();
     if (!username) return;
-    if (this.actionLoadingByUsername[username]) return;
-    this.resetUserTarget = user;
+    if (this.actionLoadingByUsername()[username]) return;
+    this.resetUserTarget.set(user);
   }
 
   resetUserTargetLabel(): string {
-    const u = this.resetUserTarget;
+    const u = this.resetUserTarget();
     if (!u) return '';
     return String(u.email ?? u.name ?? u.username ?? '').trim();
   }
 
   cancelResetUser(): void {
-    this.resetUserTarget = null;
+    this.resetUserTarget.set(null);
   }
 
   confirmResetUser(): void {
-    const user = this.resetUserTarget;
+    const user = this.resetUserTarget();
     if (!user) return;
     const username = String(user.username ?? '').trim();
     if (!username) return;
     const label = this.resetUserTargetLabel();
-    this.resetUserTarget = null;
+    this.resetUserTarget.set(null);
 
     this.setActionLoading(username, true);
-    this.error = null;
-    this.notice = null;
+    this.error.set(null);
+    this.notice.set(null);
     this.usersApi.resetPassword(username).subscribe({
       next: (res) => {
         if (res?.item) this.replaceItem(res.item);
         this.setActionLoading(username, false);
-        this.notice =
-          res?.message ||
-          `Password reset requested for ${label}.`;
+        this.notice.set(
+          res?.message || `Password reset requested for ${label}.`,
+        );
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to send password reset';
+        this.error.set(err?.error?.message || err?.message || 'Failed to send password reset');
         this.setActionLoading(username, false);
       },
     });
@@ -439,7 +446,7 @@ export class Users implements OnInit {
 
   isActionLoading(user: AdminUser): boolean {
     const username = String(user.username ?? '').trim();
-    return !!(username && this.actionLoadingByUsername[username]);
+    return !!(username && this.actionLoadingByUsername()[username]);
   }
 
   trackByUsername(_index: number, item: AdminUser): string {
@@ -447,10 +454,10 @@ export class Users implements OnInit {
   }
 
   private setActionLoading(username: string, loading: boolean): void {
-    this.actionLoadingByUsername = {
-      ...this.actionLoadingByUsername,
+    this.actionLoadingByUsername.update((current) => ({
+      ...current,
       [username]: loading,
-    };
+    }));
   }
 
   private replaceItem(updated: AdminUser): void {
