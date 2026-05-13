@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -16,6 +16,7 @@ import { HlmButton } from '../../../shared/ui/button';
   imports: [CommonModule, HlmAlert, HlmButton],
   templateUrl: './pay.html',
   styleUrl: './pay.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PublicPayPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
@@ -24,13 +25,13 @@ export class PublicPayPage implements OnInit, OnDestroy {
   private zone = inject(NgZone);
   private destroyRef = inject(DestroyRef);
 
-  loading = false;
-  preparing = false;
-  processing = false;
-  error: string | null = null;
-  notice: string | null = null;
-  session: CashAppSessionResponse | null = null;
-  result: CashAppChargeResponse | null = null;
+  readonly loading = signal(false);
+  readonly preparing = signal(false);
+  readonly processing = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly notice = signal<string | null>(null);
+  readonly session = signal<CashAppSessionResponse | null>(null);
+  readonly result = signal<CashAppChargeResponse | null>(null);
 
   eventDate = '';
   reservationId = '';
@@ -48,7 +49,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
         this.eventDate = String(params.get('eventDate') ?? '').trim();
         this.reservationId = String(params.get('reservationId') ?? '').trim();
         this.token = String(params.get('token') ?? '').trim();
-        this.result = null;
+        this.result.set(null);
         this.clearPrepareRetryTimer();
         void this.destroyCashAppWidget();
         this.loadSession();
@@ -61,7 +62,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
   }
 
   expiresAtLabel(): string {
-    const epoch = Number(this.session?.session?.expiresAt ?? 0);
+    const epoch = Number(this.session()?.session?.expiresAt ?? 0);
     if (!Number.isFinite(epoch) || epoch <= 0) return '—';
     return new Date(epoch * 1000).toLocaleString();
   }
@@ -80,7 +81,7 @@ export class PublicPayPage implements OnInit, OnDestroy {
   }
 
   refresh(): void {
-    this.result = null;
+    this.result.set(null);
     this.clearPrepareRetryTimer();
     void this.destroyCashAppWidget();
     this.loadSession();
@@ -88,24 +89,24 @@ export class PublicPayPage implements OnInit, OnDestroy {
 
   private loadSession(): void {
     if (!this.eventDate || !this.reservationId || !this.token) {
-      this.session = null;
-      this.error = 'This payment link is invalid. Missing token or reservation context.';
-      this.loading = false;
+      this.session.set(null);
+      this.error.set('This payment link is invalid. Missing token or reservation context.');
+      this.loading.set(false);
       return;
     }
-    this.loading = true;
-    this.error = null;
-    this.notice = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.notice.set(null);
     this.api.getSession(this.eventDate, this.reservationId, this.token).subscribe({
       next: (res) => {
-        this.session = res;
-        this.loading = false;
+        this.session.set(res);
+        this.loading.set(false);
         this.schedulePrepareCashAppWidget(0);
       },
       error: (err) => {
-        this.session = null;
-        this.loading = false;
-        this.error = err?.error?.message || err?.message || 'Unable to load payment link.';
+        this.session.set(null);
+        this.loading.set(false);
+        this.error.set(err?.error?.message || err?.message || 'Unable to load payment link.');
       },
     });
   }
@@ -139,17 +140,17 @@ export class PublicPayPage implements OnInit, OnDestroy {
   }
 
   private async prepareCashAppWidget(attempt = 0): Promise<void> {
-    const session = this.session;
+    const session = this.session();
     const host = this.cashAppHost?.nativeElement;
-    if (!session || this.result) return;
+    if (!session || this.result()) return;
     if (!host) {
       this.schedulePrepareCashAppWidget(attempt + 1);
       return;
     }
 
-    this.preparing = true;
-    this.notice = null;
-    this.error = null;
+    this.preparing.set(true);
+    this.notice.set(null);
+    this.error.set(null);
     try {
       await this.destroyCashAppWidget();
       const mounted = await this.squareWebPayments.mountCashAppPayButton({
@@ -162,19 +163,20 @@ export class PublicPayPage implements OnInit, OnDestroy {
         container: host,
         // Square's SDK fires these callbacks outside the Angular zone (it
         // doesn't know about us). Re-enter the zone so change detection
-        // picks up `processing` / `error` / `result` mutations cleanly,
-        // instead of relying on setTimeout(..., 0) as a side door.
+        // picks up `processing` / `error` / `result` signal writes
+        // cleanly. Signal writes alone mark the view dirty, but flush
+        // still needs a zone tick.
         onTokenized: (sourceId) => {
           this.zone.run(() => this.capturePayment(sourceId));
         },
         onError: (message) => {
           this.zone.run(() => {
-            this.error = message || 'Cash App Pay was not completed.';
+            this.error.set(message || 'Cash App Pay was not completed.');
           });
         },
       });
       this.cashAppDestroy = mounted.destroy;
-      this.notice = 'Payment options loaded. Complete payment on this page.';
+      this.notice.set('Payment options loaded. Complete payment on this page.');
     } catch (err: unknown) {
       const message =
         (err as { message?: string } | null | undefined)?.message ||
@@ -182,19 +184,19 @@ export class PublicPayPage implements OnInit, OnDestroy {
       if (attempt < this.maxPrepareAttempts && this.shouldRetryPrepareError(message)) {
         this.schedulePrepareCashAppWidget(attempt + 1);
       } else {
-        this.error = message;
+        this.error.set(message);
       }
     } finally {
-      this.preparing = this.prepareRetryTimer !== null;
+      this.preparing.set(this.prepareRetryTimer !== null);
     }
   }
 
   private capturePayment(sourceId: string): void {
-    const session = this.session;
-    if (!session || this.processing) return;
-    this.processing = true;
-    this.error = null;
-    this.notice = null;
+    const session = this.session();
+    if (!session || this.processing()) return;
+    this.processing.set(true);
+    this.error.set(null);
+    this.notice.set(null);
 
     this.api
       .charge({
@@ -205,14 +207,14 @@ export class PublicPayPage implements OnInit, OnDestroy {
       })
       .subscribe({
         next: (res) => {
-          this.result = res;
-          this.processing = false;
-          this.notice = 'Payment completed successfully.';
+          this.result.set(res);
+          this.processing.set(false);
+          this.notice.set('Payment completed successfully.');
           void this.destroyCashAppWidget();
         },
         error: (err) => {
-          this.processing = false;
-          this.error = err?.error?.message || err?.message || 'Payment failed. Please try again.';
+          this.processing.set(false);
+          this.error.set(err?.error?.message || err?.message || 'Payment failed. Please try again.');
         },
       });
   }
