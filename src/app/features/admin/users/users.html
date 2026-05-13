@@ -117,10 +117,8 @@
                 {{ item.name || item.username || '—' }}
               </td>
               <td hlmTd *ngIf="isColumnVisible('email')" class="text-brand-600">{{ item.email || '—' }}</td>
-              <td hlmTd *ngIf="isColumnVisible('role')">
-                <span hlmBadge size="sm" [variant]="roleBadgeVariant(item.role)" class="shrink-0">
-                  {{ item.role }}
-                </span>
+              <td hlmTd *ngIf="isColumnVisible('role')" class="text-brand-900">
+                {{ item.role }}
               </td>
               <td hlmTd *ngIf="isColumnVisible('status')">
                 <span hlmBadge size="sm" [variant]="statusBadgeVariant(item.enabled)">
@@ -186,9 +184,7 @@
             <p class="mt-1 break-words text-sm text-brand-700">{{ item.email || '—' }}</p>
           </div>
           <div class="flex items-center gap-2">
-            <span hlmBadge size="sm" [variant]="roleBadgeVariant(item.role)" class="shrink-0">
-              {{ item.role }}
-            </span>
+            <span class="shrink-0 text-sm font-medium text-brand-700">{{ item.role }}</span>
             <button
               hlmBtn variant="ghost" size="icon-sm"
               type="button"

@@ -421,13 +421,6 @@ export class Users implements OnInit {
     return this.table.getColumn(id);
   }
 
-  roleBadgeVariant(role: string | null | undefined): BadgeVariants['variant'] {
-    const normalized = String(role ?? '').trim().toUpperCase();
-    if (normalized === 'ADMIN') return 'danger';
-    if (normalized === 'STAFF') return 'success';
-    return 'secondary';
-  }
-
   statusBadgeVariant(enabled: boolean): BadgeVariants['variant'] {
     return enabled ? 'success' : 'secondary';
   }
