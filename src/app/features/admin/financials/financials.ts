@@ -36,6 +36,7 @@ import {
 import { TableLabelPipe } from '../../../shared/table-label.pipe';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmDateRangePicker } from '../../../shared/ui/date-picker';
 import { HlmInput } from '../../../shared/ui/input';
 import {
   HlmMenu,
@@ -160,6 +161,7 @@ interface PaymentLedgerRow {
     TableLabelPipe,
     HlmAlert,
     HlmButton,
+    HlmDateRangePicker,
     HlmInput,
     HlmMenu,
     HlmMenuCheckbox,
@@ -199,8 +201,8 @@ export class Financials implements OnInit, OnDestroy {
     refunds: 0,
   });
 
-  rangeFrom = new FormControl('', { nonNullable: true });
-  rangeTo = new FormControl('', { nonNullable: true });
+  rangeStart = signal<Date | undefined>(undefined);
+  rangeEnd = signal<Date | undefined>(undefined);
   eventStatus = new FormControl<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL', { nonNullable: true });
 
   summariesFilter = new FormControl('', { nonNullable: true });
@@ -715,8 +717,8 @@ export class Financials implements OnInit, OnDestroy {
     ).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(
       now.getMinutes()
     ).padStart(2, '0')}`;
-    const from = this.rangeFrom.value.trim().replace(/-/g, '');
-    const to = this.rangeTo.value.trim().replace(/-/g, '');
+    const from = this.formatYmd(this.rangeStart()).replace(/-/g, '');
+    const to = this.formatYmd(this.rangeEnd()).replace(/-/g, '');
     const rangeStamp = from && to ? `_${from}-${to}` : '';
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -856,11 +858,16 @@ export class Financials implements OnInit, OnDestroy {
     // Operator can narrow for monthly reconciliation as needed.
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-    const yyyy = thirtyDaysAgo.getFullYear();
-    const mm = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
-    const dd = String(thirtyDaysAgo.getDate()).padStart(2, '0');
-    this.rangeFrom.setValue(`${yyyy}-${mm}-${dd}`);
-    this.rangeTo.setValue('');
+    this.rangeStart.set(thirtyDaysAgo);
+    this.rangeEnd.set(undefined);
+  }
+
+  private formatYmd(date: Date | undefined): string {
+    if (!date) return '';
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   private loadReportForCurrentFilters(): void {
@@ -902,8 +909,8 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private filterEvents(events: EventItem[]): EventItem[] {
-    const from = this.rangeFrom.value.trim();
-    const to = this.rangeTo.value.trim();
+    const from = this.formatYmd(this.rangeStart());
+    const to = this.formatYmd(this.rangeEnd());
     const status = this.eventStatus.value;
 
     return [...events]

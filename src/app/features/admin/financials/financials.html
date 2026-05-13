@@ -14,16 +14,17 @@
       </button>
     </div>
 
-    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_180px_auto] lg:items-end">
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        From
-        <input type="date" hlmInput [formControl]="rangeFrom" />
+    <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
+      <label class="grid min-w-0 gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Date Range
+        <hlm-date-range-picker
+          [(startDate)]="rangeStart"
+          [(endDate)]="rangeEnd"
+          placeholder="Select date range"
+          openEndedLabel="Open-ended"
+        />
       </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-        To
-        <input type="date" hlmInput [formControl]="rangeTo" />
-      </label>
-      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+      <label class="grid min-w-0 gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
         Event Status
         <select hlmInput [formControl]="eventStatus">
           <option value="ALL">All</option>
@@ -31,7 +32,7 @@
           <option value="INACTIVE">Inactive</option>
         </select>
       </label>
-      <button hlmBtn type="button" (click)="applyFilters()">Apply</button>
+      <button hlmBtn type="button" (click)="applyFilters()" class="w-full sm:w-auto">Apply</button>
     </div>
 
     <p class="mt-3 text-xs text-brand-500">
