@@ -72,7 +72,7 @@
   </div>
 </header>
 
-<hlm-dialog *ngIf="isQuickActionsOpen" (close)="closeQuickActions()" size="sheet">
+<hlm-dialog *ngIf="isQuickActionsOpen" (close)="closeQuickActions()" size="sheet" [ariaLabel]="'Quick Actions'">
   <div class="flex items-center justify-between gap-3">
     <h3 class="text-sm font-semibold text-foreground">Quick Actions</h3>
     <button

@@ -55,7 +55,7 @@
     </div>
   </section>
 
-  <hlm-dialog *ngIf="showPastModal" (close)="showPastModal = false">
+  <hlm-dialog *ngIf="showPastModal" (close)="showPastModal = false" [ariaLabel]="'Past Events'">
     <div class="flex items-center justify-between gap-4">
       <h3 class="text-lg font-semibold text-brand-900">Past Events</h3>
       <button
@@ -620,6 +620,7 @@
     (close)="closeReservationModal()"
     size="full-on-mobile"
     panelClass="max-w-3xl pb-28"
+    [ariaLabel]="'Reservation Details'"
   >
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
@@ -1049,6 +1050,7 @@
   *ngIf="showReleaseConfirm"
   (close)="cancelReleasePrompt()"
   panelClass="w-[90vw] max-w-sm p-5 text-center"
+  [ariaLabel]="'Release hold'"
 >
   <h4 class="text-lg font-semibold text-brand-900">Release hold?</h4>
   <p class="mt-2 text-sm text-brand-600">

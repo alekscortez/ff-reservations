@@ -228,7 +228,7 @@
   (cancel)="cancelDeleteClient()"
 />
 
-<hlm-dialog *ngIf="frequentTarget" (close)="cancelAddToFrequent()" panelClass="max-w-md">
+<hlm-dialog *ngIf="frequentTarget" (close)="cancelAddToFrequent()" panelClass="max-w-md" [ariaLabel]="'Add to frequent clients'">
   <h3 class="text-lg font-semibold text-brand-900">Add to frequent clients</h3>
   <p class="mt-2 text-sm text-brand-600">{{ frequentTarget.name || frequentTarget.phone }}</p>
   <form [formGroup]="frequentForm" (ngSubmit)="confirmAddToFrequent()" class="mt-4 grid gap-3">

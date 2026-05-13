@@ -87,6 +87,8 @@ export type DialogVariants = VariantProps<typeof panelVariants>;
       (keydown.escape)="close.emit()"
       role="dialog"
       aria-modal="true"
+      [attr.aria-labelledby]="ariaLabelledBy() || null"
+      [attr.aria-label]="ariaLabel() || null"
     >
       <div class="absolute inset-0 bg-black/50" (click)="close.emit()"></div>
       <section [class]="panelClasses()">
@@ -99,6 +101,8 @@ export class HlmDialog implements OnDestroy {
   public readonly close = output<void>();
   public readonly size = input<DialogVariants['size']>('default');
   public readonly panelClass = input<string>('');
+  public readonly ariaLabelledBy = input<string>('');
+  public readonly ariaLabel = input<string>('');
 
   protected readonly wrapperClasses = computed(() =>
     wrapperVariants({ size: this.size() }),

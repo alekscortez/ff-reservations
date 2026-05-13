@@ -28,7 +28,7 @@ import { HlmDialog } from './hlm-dialog';
   imports: [CommonModule, HlmDialog, HlmButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <hlm-dialog (close)="cancel.emit()" panelClass="max-w-md">
+    <hlm-dialog (close)="cancel.emit()" panelClass="max-w-md" [ariaLabel]="title">
       <h3 class="text-lg font-semibold text-brand-900">{{ title }}</h3>
       <p class="mt-2 text-sm text-brand-600" *ngIf="message">{{ message }}</p>
       <div class="mt-4 flex flex-wrap justify-end gap-2">

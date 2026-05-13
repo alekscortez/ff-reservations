@@ -12,6 +12,8 @@ import { HlmDialog } from './hlm-dialog';
       *ngIf="open"
       [size]="size"
       [panelClass]="panelClass"
+      [ariaLabel]="ariaLabel"
+      [ariaLabelledBy]="ariaLabelledBy"
       (close)="onClose()"
     >
       <p>body</p>
@@ -22,6 +24,8 @@ class Host {
   open = true;
   size: 'default' | 'full-on-mobile' | 'sheet' = 'default';
   panelClass = '';
+  ariaLabel = '';
+  ariaLabelledBy = '';
   closeCount = 0;
   onClose() {
     this.closeCount += 1;
@@ -102,6 +106,25 @@ describe('HlmDialog', () => {
   it('renders projected content', () => {
     const f = createHost();
     expect(panelSection(f).textContent).toContain('body');
+  });
+
+  it('omits aria-labelledby + aria-label when neither input is set', () => {
+    const f = createHost();
+    const wrap = wrapperDiv(f);
+    expect(wrap.hasAttribute('aria-labelledby')).toBe(false);
+    expect(wrap.hasAttribute('aria-label')).toBe(false);
+    expect(wrap.getAttribute('role')).toBe('dialog');
+    expect(wrap.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('applies aria-labelledby when input is set', () => {
+    const f = createHost({ ariaLabelledBy: 'modal-title' });
+    expect(wrapperDiv(f).getAttribute('aria-labelledby')).toBe('modal-title');
+  });
+
+  it('applies aria-label when input is set', () => {
+    const f = createHost({ ariaLabel: 'Take Payment' });
+    expect(wrapperDiv(f).getAttribute('aria-label')).toBe('Take Payment');
   });
 
   it('locks html + body overflow while mounted + restores on destroy', () => {

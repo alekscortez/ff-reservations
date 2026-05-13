@@ -326,6 +326,7 @@
   *ngIf="showPaymentModal && paymentItem"
   (close)="closePayment()"
   panelClass="max-w-md"
+  [ariaLabel]="'Take Payment'"
 >
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-lg font-semibold text-brand-900">Take Payment</h3>
@@ -465,6 +466,7 @@
   *ngIf="cancelTarget"
   (close)="closeCancelDialog()"
   panelClass="max-w-md"
+  [ariaLabel]="'Cancel reservation'"
 >
   <h3 class="text-lg font-semibold text-brand-900">Cancel reservation?</h3>
   <p class="mt-2 text-sm text-brand-600">{{ cancelTarget | tableLabel }} · {{ cancelTarget.customerName }}</p>

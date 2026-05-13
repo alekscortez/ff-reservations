@@ -114,6 +114,7 @@
   *ngIf="showCreateModal"
   (close)="closeCreateModal()"
   panelClass="h-[92dvh] w-[94vw] max-w-3xl md:h-auto md:max-h-[92dvh]"
+  [ariaLabel]="'Create Event'"
 >
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-lg font-semibold text-brand-900">Create Event</h3>
@@ -204,6 +205,7 @@
   *ngIf="editingId"
   (close)="cancelEdit()"
   panelClass="h-[92dvh] w-[94vw] max-w-3xl md:h-auto md:max-h-[92dvh]"
+  [ariaLabel]="'Edit Event'"
 >
   <div class="flex items-center justify-between gap-3">
     <h3 class="text-lg font-semibold text-brand-900">Edit Event</h3>
