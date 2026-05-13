@@ -1064,7 +1064,13 @@ export function createReservationsService(
         : paymentMethodInput;
 
     const now = nowEpoch();
-    const reservationId = randomUUID();
+    // Accept a caller-supplied reservationId (anonymous public booking pre-
+    // generates one upfront so it can stamp the phone-slot, the Square
+    // hosted-checkout note, and the customer-return URL with the SAME id
+    // that this row will land under). Fall back to a fresh UUID for the
+    // staff/customer-app paths that don't pass one.
+    const callerReservationId = String(payload?.reservationId ?? "").trim();
+    const reservationId = callerReservationId || randomUUID();
     const payments =
       effectiveDeposit > 0 && effectivePaymentMethod
         ? [

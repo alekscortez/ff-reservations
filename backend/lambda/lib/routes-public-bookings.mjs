@@ -396,6 +396,12 @@ export async function handlePublicBookingsRoute(ctx) {
     try {
       createdReservation = await createReservation(
         {
+          // Caller-supplied reservationId so the row that lands in DDB
+          // matches the id we already used for the phone slot, Square
+          // payment-link note, and customer-return URL. Without this,
+          // createReservation generates its own id and the webhook-side
+          // payment recording can't find the reservation.
+          reservationId,
           eventDate,
           tableIds,
           holdIds,
@@ -498,15 +504,22 @@ export async function handlePublicBookingsRoute(ctx) {
 
     // Fire-and-forget CRM upsert. The phone is the join key — if the
     // customer later signs into the mobile app with the same phone, the
-    // history attaches to their CRM row.
+    // history attaches to their CRM row. Payload field names match the
+    // staff path (customerName, eventDate, tableIds) so lifetime metrics
+    // (totalSpend / totalReservations / totalTables) accumulate
+    // consistently across booking sources.
     if (typeof upsertCrmClient === "function") {
       try {
-        await upsertCrmClient({
-          phone: customerPhone,
-          name: customerNameRaw,
-          email: customerEmailRaw || null,
-          source: "anonymous-public",
-        });
+        await upsertCrmClient(
+          {
+            customerName: customerNameRaw,
+            phone: customerPhone,
+            depositAmount: 0,
+            eventDate,
+            tableIds,
+          },
+          ANON_ACTOR
+        );
       } catch (err) {
         console.warn("public_booking_crm_upsert_failed", {
           reservationId,
