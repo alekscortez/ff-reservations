@@ -22,7 +22,7 @@
           hlmBtn
           type="button"
           (click)="startScanner()"
-          [disabled]="!scannerSupported || scannerActive"
+          [disabled]="!scannerSupported() || scannerActive()"
         >
           Start Camera
         </button>
@@ -30,7 +30,7 @@
           hlmBtn variant="outline"
           type="button"
           (click)="stopScanner()"
-          [disabled]="!scannerActive"
+          [disabled]="!scannerActive()"
         >
           Stop
         </button>
@@ -38,21 +38,21 @@
           hlmBtn variant="outline"
           type="button"
           (click)="toggleCameraFacing()"
-          [disabled]="!scannerSupported"
+          [disabled]="!scannerSupported()"
         >
           Flip Camera
         </button>
         <span hlmBadge size="sm" [variant]="scannerStatusVariant()">
-          {{ scannerActive ? 'Camera Active' : 'Camera Off' }}
+          {{ scannerActive() ? 'Camera Active' : 'Camera Off' }}
         </span>
       </div>
 
-      <p class="text-xs text-brand-600" *ngIf="!scannerSupported">
+      <p class="text-xs text-brand-600" *ngIf="!scannerSupported()">
         Camera scanning is not supported on this browser. Use manual input below.
       </p>
-      <p class="text-xs text-danger-700" *ngIf="scannerError">{{ scannerError }}</p>
+      <p class="text-xs text-danger-700" *ngIf="scannerError() as err">{{ err }}</p>
 
-      <div class="overflow-hidden rounded-lg border border-brand-200 bg-black" *ngIf="scannerSupported">
+      <div class="overflow-hidden rounded-lg border border-brand-200 bg-black" *ngIf="scannerSupported()">
         <video
           #scannerVideo
           class="h-56 w-full object-cover md:h-72"
@@ -62,22 +62,22 @@
       </div>
     </div>
 
-    <div class="mt-3 rounded-xl border p-3 text-sm" *ngIf="verifyResult" [ngClass]="resultBadgeClass()">
+    <div class="mt-3 rounded-xl border p-3 text-sm" *ngIf="verifyResult() as result" [ngClass]="resultBadgeClass()">
       <div class="flex flex-wrap items-center gap-2">
-        <span hlmBadge variant="outline" size="sm">{{ verifyResult.code }}</span>
-        <span class="font-semibold">{{ verifyResult.message }}</span>
+        <span hlmBadge variant="outline" size="sm">{{ result.code }}</span>
+        <span class="font-semibold">{{ result.message }}</span>
       </div>
       <p class="mt-2 text-xs">
-        Reservation {{ verifyResult.reservation?.reservationId }} ·
-        {{ verifyResult.reservation | tableLabel }} ·
-        {{ verifyResult.reservation?.customerName }}
+        Reservation {{ result.reservation?.reservationId }} ·
+        {{ result.reservation | tableLabel }} ·
+        {{ result.reservation?.customerName }}
       </p>
-      <p class="mt-1 text-xs" *ngIf="verifyResult.pass?.usedAt">
-        Used at epoch {{ verifyResult.pass?.usedAt }} by {{ verifyResult.pass?.usedBy }}
+      <p class="mt-1 text-xs" *ngIf="result.pass?.usedAt">
+        Used at epoch {{ result.pass?.usedAt }} by {{ result.pass?.usedBy }}
       </p>
     </div>
   </article>
 
-  <hlm-alert variant="destructive" *ngIf="error">{{ error }}</hlm-alert>
-  <hlm-alert variant="success" *ngIf="notice">{{ notice }}</hlm-alert>
+  <hlm-alert variant="destructive" *ngIf="error() as err">{{ err }}</hlm-alert>
+  <hlm-alert variant="success" *ngIf="notice() as msg">{{ msg }}</hlm-alert>
 </section>

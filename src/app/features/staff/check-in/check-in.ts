@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, OnDestroy, ViewChild, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { CheckInService, CheckInVerifyResult } from '../../../core/http/check-in.service';
@@ -13,20 +13,21 @@ import { HlmAlert } from '../../../shared/ui/alert';
   imports: [CommonModule, FormsModule, TableLabelPipe, HlmButton, HlmBadge, HlmAlert],
   templateUrl: './check-in.html',
   styleUrl: './check-in.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckIn implements OnDestroy {
   private api = inject(CheckInService);
   @ViewChild('scannerVideo') scannerVideoRef?: ElementRef<HTMLVideoElement>;
 
   loadingVerify = false;
-  error: string | null = null;
-  notice: string | null = null;
-  scannerError: string | null = null;
+  readonly error = signal<string | null>(null);
+  readonly notice = signal<string | null>(null);
+  readonly scannerError = signal<string | null>(null);
 
-  verifyResult: CheckInVerifyResult | null = null;
+  readonly verifyResult = signal<CheckInVerifyResult | null>(null);
 
-  scannerSupported = this.hasScannerSupport();
-  scannerActive = false;
+  readonly scannerSupported = signal(this.hasScannerSupport());
+  readonly scannerActive = signal(false);
   scannerFacing: 'environment' | 'user' = 'environment';
 
   private qrReader: BrowserQRCodeReader | null = null;
@@ -42,41 +43,42 @@ export class CheckIn implements OnDestroy {
   private verifyToken(rawInput: string): void {
     const parsedToken = this.extractToken(rawInput);
     if (!parsedToken) {
-      this.error = 'No token detected. Try scanning again.';
+      this.error.set('No token detected. Try scanning again.');
       return;
     }
     this.loadingVerify = true;
-    this.error = null;
-    this.notice = null;
-    this.verifyResult = null;
+    this.error.set(null);
+    this.notice.set(null);
+    this.verifyResult.set(null);
     this.api.verifyToken(parsedToken, 'staff-web').subscribe({
       next: (result) => {
-        this.verifyResult = result ?? null;
-        this.notice = this.verifyResult?.ok ? 'Check-in accepted.' : null;
-        if (this.verifyResult?.ok) this.stopScanner();
+        const parsed = result ?? null;
+        this.verifyResult.set(parsed);
+        this.notice.set(parsed?.ok ? 'Check-in accepted.' : null);
+        if (parsed?.ok) this.stopScanner();
         this.loadingVerify = false;
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to verify pass.';
+        this.error.set(err?.error?.message || err?.message || 'Failed to verify pass.');
         this.loadingVerify = false;
       },
     });
   }
 
   async startScanner(): Promise<void> {
-    if (!this.scannerSupported) {
-      this.scannerError = 'Camera scanner is not supported on this browser/device.';
+    if (!this.scannerSupported()) {
+      this.scannerError.set('Camera scanner is not supported on this browser/device.');
       return;
     }
     if (this.scannerStartInFlight) return;
     const videoEl = this.scannerVideoRef?.nativeElement;
     if (!videoEl) {
-      this.scannerError = 'Scanner view is not ready yet.';
+      this.scannerError.set('Scanner view is not ready yet.');
       return;
     }
 
     this.scannerStartInFlight = true;
-    this.scannerError = null;
+    this.scannerError.set(null);
     this.stopScanner();
 
     try {
@@ -106,14 +108,14 @@ export class CheckIn implements OnDestroy {
             return;
           }
           if (decodeError && !this.isIgnorableDecodeError(decodeError)) {
-            this.scannerError = 'Scanner decode error. Adjust framing and lighting.';
+            this.scannerError.set('Scanner decode error. Adjust framing and lighting.');
           }
         }
       );
-      this.scannerActive = true;
+      this.scannerActive.set(true);
     } catch (err) {
       const message = String((err as any)?.message ?? '').trim();
-      this.scannerError = message || 'Unable to start camera scanner.';
+      this.scannerError.set(message || 'Unable to start camera scanner.');
       this.stopScanner();
     } finally {
       this.scannerStartInFlight = false;
@@ -134,25 +136,25 @@ export class CheckIn implements OnDestroy {
       videoEl.pause();
       videoEl.srcObject = null;
     }
-    this.scannerActive = false;
+    this.scannerActive.set(false);
   }
 
   async toggleCameraFacing(): Promise<void> {
     this.scannerFacing = this.scannerFacing === 'environment' ? 'user' : 'environment';
-    if (this.scannerActive) {
+    if (this.scannerActive()) {
       await this.startScanner();
     }
   }
 
   resultBadgeClass(): string {
-    const code = String(this.verifyResult?.code ?? '').toUpperCase();
+    const code = String(this.verifyResult()?.code ?? '').toUpperCase();
     if (code === 'CHECKED_IN') return 'bg-success-100 text-success-800 border-success-300';
     if (code === 'ALREADY_USED') return 'bg-warning-100 text-warning-800 border-warning-300';
     return 'bg-danger-100 text-danger-800 border-danger-300';
   }
 
   scannerStatusVariant(): BadgeVariants['variant'] {
-    return this.scannerActive ? 'success' : 'secondary';
+    return this.scannerActive() ? 'success' : 'secondary';
   }
 
   private onScannerValue(raw: string): void {
