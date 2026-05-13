@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/http/api-client';
@@ -10,6 +10,7 @@ import { toDataURL } from 'qrcode';
   imports: [CommonModule],
   templateUrl: './check-in-pass.html',
   styleUrl: './check-in-pass.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckInPassPage {
   private route = inject(ActivatedRoute);
