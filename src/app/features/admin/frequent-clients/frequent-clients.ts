@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   OnInit,
@@ -95,6 +96,7 @@ const PAGE_SIZE = 25;
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideX })],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FrequentClients implements OnInit {
   private clientsApi = inject(FrequentClientsService);
@@ -103,26 +105,27 @@ export class FrequentClients implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   readonly items = signal<FrequentClient[]>([]);
-  loading = false;
-  error: string | null = null;
-  editingId: string | null = null;
-  templateSections: string[] = [];
-  templateTablesBySection: Record<string, TableInfo[]> = {};
-  tableInfoById: Record<string, TableInfo> = {};
-  tablePriceById: Record<string, number> = {};
-  activeSection = '';
-  createSelectedTables = new Set<string>();
-  editSelectedTables = new Set<string>();
-  createTableSettings: Record<string, FrequentClientTableSetting> = {};
-  editTableSettings: Record<string, FrequentClientTableSetting> = {};
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly editingId = signal<string | null>(null);
+  readonly templateSections = signal<string[]>([]);
+  readonly templateTablesBySection = signal<Record<string, TableInfo[]>>({});
+  readonly tableInfoById = signal<Record<string, TableInfo>>({});
+  readonly tablePriceById = signal<Record<string, number>>({});
+  readonly activeSection = signal('');
+  readonly createSelectedTables = signal<Set<string>>(new Set());
+  readonly editSelectedTables = signal<Set<string>>(new Set());
+  readonly createTableSettings = signal<Record<string, FrequentClientTableSetting>>({});
+  readonly editTableSettings = signal<Record<string, FrequentClientTableSetting>>({});
   editSettings = new FormArray<FormGroup>([]);
-  showCreateForm = false;
+  readonly showCreateForm = signal(false);
   filterQuery = new FormControl('', { nonNullable: true });
   paymentStatuses: PaymentStatus[] = ['PENDING', 'PARTIAL', 'PAID', 'COURTESY'];
-  defaultDeadlineTime = '00:00';
-  defaultDeadlineTz = 'America/Chicago';
-  createPhoneCountry: 'US' | 'MX' = 'US';
-  editPhoneCountry: 'US' | 'MX' = 'US';
+  readonly defaultDeadlineTime = signal('00:00');
+  readonly defaultDeadlineTz = signal('America/Chicago');
+  readonly createPhoneCountry = signal<'US' | 'MX'>('US');
+  readonly editPhoneCountry = signal<'US' | 'MX'>('US');
+  readonly deleteTarget = signal<FrequentClient | null>(null);
 
   form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -263,17 +266,17 @@ export class FrequentClients implements OnInit {
   }
 
   load(): void {
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     this.clientsApi.list().subscribe({
       next: (items) => {
         this.items.set(items);
         this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load clients';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load clients');
+        this.loading.set(false);
       },
     });
   }
@@ -310,25 +313,31 @@ export class FrequentClients implements OnInit {
     this.tablesApi.getTemplate().subscribe({
       next: (template) => {
         const sections = Object.keys(template.sections ?? {}).sort();
-        this.templateSections = sections;
-        this.activeSection = sections[0] ?? '';
-        this.templateTablesBySection = sections.reduce((acc, s) => {
-          acc[s] = template.tables.filter((t) => t.section === s);
-          return acc;
-        }, {} as Record<string, TableInfo[]>);
-        this.tableInfoById = template.tables.reduce((acc, t) => {
-          acc[t.id] = t;
-          return acc;
-        }, {} as Record<string, TableInfo>);
-        this.tablePriceById = template.tables.reduce((acc, t) => {
-          acc[t.id] = t.price;
-          return acc;
-        }, {} as Record<string, number>);
+        this.templateSections.set(sections);
+        this.activeSection.set(sections[0] ?? '');
+        this.templateTablesBySection.set(
+          sections.reduce((acc, s) => {
+            acc[s] = template.tables.filter((t) => t.section === s);
+            return acc;
+          }, {} as Record<string, TableInfo[]>),
+        );
+        this.tableInfoById.set(
+          template.tables.reduce((acc, t) => {
+            acc[t.id] = t;
+            return acc;
+          }, {} as Record<string, TableInfo>),
+        );
+        this.tablePriceById.set(
+          template.tables.reduce((acc, t) => {
+            acc[t.id] = t.price;
+            return acc;
+          }, {} as Record<string, number>),
+        );
       },
       error: () => {
-        this.templateSections = [];
-        this.templateTablesBySection = {};
-        this.activeSection = '';
+        this.templateSections.set([]);
+        this.templateTablesBySection.set({});
+        this.activeSection.set('');
       },
     });
   }
@@ -345,21 +354,23 @@ export class FrequentClients implements OnInit {
   private applyGlobalDeadlineTimezone(timezone: string | null | undefined): void {
     const normalized = String(timezone ?? '').trim();
     if (!normalized) return;
-    this.defaultDeadlineTz = normalized;
+    this.defaultDeadlineTz.set(normalized);
 
-    for (const tableId of Object.keys(this.createTableSettings)) {
-      this.createTableSettings[tableId] = {
-        ...this.createTableSettings[tableId],
-        paymentDeadlineTz: normalized,
-      };
-    }
+    this.createTableSettings.update((current) => {
+      const next: Record<string, FrequentClientTableSetting> = { ...current };
+      for (const tableId of Object.keys(next)) {
+        next[tableId] = { ...next[tableId], paymentDeadlineTz: normalized };
+      }
+      return next;
+    });
 
-    for (const tableId of Object.keys(this.editTableSettings)) {
-      this.editTableSettings[tableId] = {
-        ...this.editTableSettings[tableId],
-        paymentDeadlineTz: normalized,
-      };
-    }
+    this.editTableSettings.update((current) => {
+      const next: Record<string, FrequentClientTableSetting> = { ...current };
+      for (const tableId of Object.keys(next)) {
+        next[tableId] = { ...next[tableId], paymentDeadlineTz: normalized };
+      }
+      return next;
+    });
 
     for (const group of this.editSettings.controls) {
       group.controls['paymentDeadlineTz'].setValue(normalized, { emitEvent: false });
@@ -368,70 +379,73 @@ export class FrequentClients implements OnInit {
 
   create(): void {
     if (this.form.invalid) return;
+    const country = this.createPhoneCountry();
     const phone = normalizePhoneToE164(
       this.form.controls.phone.value.trim(),
-      normalizePhoneCountry(this.createPhoneCountry)
+      normalizePhoneCountry(country)
     );
     if (!phone) {
-      this.error = 'Phone must be a valid US or MX number.';
+      this.error.set('Phone must be a valid US or MX number.');
       return;
     }
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
+    const selected = this.createSelectedTables();
     this.clientsApi
       .create({
         name: this.form.controls.name.value.trim(),
         phone,
-        phoneCountry: this.createPhoneCountry,
-        defaultTableIds: Array.from(this.createSelectedTables),
-        tableSettings: this.serializeSettings(this.createSelectedTables, this.createTableSettings),
+        phoneCountry: country,
+        defaultTableIds: Array.from(selected),
+        tableSettings: this.serializeSettings(selected, this.createTableSettings()),
         notes: this.form.controls.notes.value.trim(),
       })
       .subscribe({
         next: (item) => {
           this.items.update((list) => [item, ...list]);
           this.form.reset({ name: '', phone: '', defaultTableIds: '', notes: '' });
-          this.createPhoneCountry = 'US';
-          this.createSelectedTables.clear();
-          this.createTableSettings = {};
-          this.showCreateForm = false;
-          this.loading = false;
+          this.createPhoneCountry.set('US');
+          this.createSelectedTables.set(new Set());
+          this.createTableSettings.set({});
+          this.showCreateForm.set(false);
+          this.loading.set(false);
         },
         error: (err) => {
-          this.error = err?.error?.message || err?.message || 'Failed to create client';
-          this.loading = false;
+          this.error.set(err?.error?.message || err?.message || 'Failed to create client');
+          this.loading.set(false);
         },
       });
   }
 
   startEdit(item: FrequentClient): void {
-    this.editingId = item.clientId;
-    this.loading = true;
+    this.editingId.set(item.clientId);
+    this.loading.set(true);
     this.clientsApi.get(item.clientId).subscribe({
       next: (full) => {
         this.applyEditClient(full);
-        this.loading = false;
+        this.loading.set(false);
       },
       error: () => {
         this.applyEditClient(item);
-        this.loading = false;
+        this.loading.set(false);
       },
     });
   }
 
   private applyEditClient(item: FrequentClient): void {
     const selected = this.normalizeTableList(item.defaultTableIds ?? item.defaultTableId);
-    this.editSelectedTables = new Set(selected);
-    this.editTableSettings = {};
+    this.editSelectedTables.set(new Set(selected));
+    const nextSettings: Record<string, FrequentClientTableSetting> = {};
     (item.tableSettings ?? []).forEach((setting) => {
       const key = String(setting.tableId ?? '').trim().toUpperCase();
       if (!key) return;
-      this.editTableSettings[key] = this.normalizeSetting({ ...setting, tableId: key });
+      nextSettings[key] = this.normalizeSetting({ ...setting, tableId: key });
     });
+    this.editTableSettings.set(nextSettings);
     this.editSettings.clear();
-    this.editSelectedTables.forEach((tableId) => {
+    this.editSelectedTables().forEach((tableId) => {
       this.ensureEditSetting(tableId);
-      const setting = this.editTableSettings[tableId];
+      const setting = this.editTableSettings()[tableId];
       if (setting) {
         const group = this.buildSettingGroup(setting);
         group.controls['paymentStatus'].valueChanges
@@ -446,8 +460,8 @@ export class FrequentClients implements OnInit {
             {
               amountDue: next.amountDue,
               amountPaid: next.amountPaid ?? 0,
-              paymentDeadlineTime: next.paymentDeadlineTime ?? this.defaultDeadlineTime,
-              paymentDeadlineTz: next.paymentDeadlineTz ?? this.defaultDeadlineTz,
+              paymentDeadlineTime: next.paymentDeadlineTime ?? this.defaultDeadlineTime(),
+              paymentDeadlineTz: next.paymentDeadlineTz ?? this.defaultDeadlineTz(),
             },
             { emitEvent: false }
           );
@@ -462,28 +476,31 @@ export class FrequentClients implements OnInit {
       notes: item.notes ?? '',
       status: item.status ?? 'ACTIVE',
     });
-    this.editPhoneCountry =
+    this.editPhoneCountry.set(
       inferPhoneCountryFromE164(item.phone) ??
-      normalizePhoneCountry(item.phoneCountry ?? 'US');
+        normalizePhoneCountry(item.phoneCountry ?? 'US'),
+    );
   }
 
   cancelEdit(): void {
-    this.editingId = null;
+    this.editingId.set(null);
   }
 
   saveEdit(): void {
-    if (!this.editingId) return;
+    const editingId = this.editingId();
+    if (!editingId) return;
     if (this.editForm.invalid) return;
+    const country = this.editPhoneCountry();
     const phone = normalizePhoneToE164(
       this.editForm.controls.phone.value.trim(),
-      normalizePhoneCountry(this.editPhoneCountry)
+      normalizePhoneCountry(country)
     );
     if (!phone) {
-      this.error = 'Phone must be a valid US or MX number.';
+      this.error.set('Phone must be a valid US or MX number.');
       return;
     }
-    this.loading = true;
-    this.error = null;
+    this.loading.set(true);
+    this.error.set(null);
     const settings = this.editSettings.controls.map((group) => {
       const raw = group.getRawValue() as FrequentClientTableSetting;
       return this.applyRules({
@@ -499,101 +516,117 @@ export class FrequentClients implements OnInit {
     const patch = {
       name: this.editForm.controls.name.value.trim(),
       phone,
-      phoneCountry: this.editPhoneCountry,
+      phoneCountry: country,
       defaultTableIds: tableIds,
       tableSettings: settings,
       notes: this.editForm.controls.notes.value.trim(),
       status: this.editForm.controls.status.value,
     };
-    this.clientsApi.update(this.editingId, patch).subscribe({
+    this.clientsApi.update(editingId, patch).subscribe({
       next: (item) => {
         this.items.update((list) =>
           list.map((x) => (x.clientId === item.clientId ? item : x)),
         );
-        this.editingId = null;
+        this.editingId.set(null);
         this.load();
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to update client';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to update client');
+        this.loading.set(false);
       },
     });
   }
 
-  deleteTarget: FrequentClient | null = null;
-
   delete(item: FrequentClient): void {
-    this.deleteTarget = item;
+    this.deleteTarget.set(item);
   }
 
   cancelDelete(): void {
-    this.deleteTarget = null;
+    this.deleteTarget.set(null);
   }
 
   confirmDelete(): void {
-    const item = this.deleteTarget;
+    const item = this.deleteTarget();
     if (!item) return;
-    this.deleteTarget = null;
-    this.loading = true;
-    this.error = null;
+    this.deleteTarget.set(null);
+    this.loading.set(true);
+    this.error.set(null);
     this.clientsApi.delete(item.clientId).subscribe({
       next: () => {
         this.items.update((list) => list.filter((x) => x.clientId !== item.clientId));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to delete client';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to delete client');
+        this.loading.set(false);
       },
     });
   }
 
   toggleCreateForm(): void {
-    this.showCreateForm = !this.showCreateForm;
+    this.showCreateForm.update((v) => !v);
   }
 
   toggleSection(section: string): void {
-    this.activeSection = section;
+    this.activeSection.set(section);
   }
 
   toggleCreateTable(id: string): void {
-    if (this.createSelectedTables.has(id)) {
-      this.createSelectedTables.delete(id);
-      delete this.createTableSettings[id];
+    const current = this.createSelectedTables();
+    if (current.has(id)) {
+      const next = new Set(current);
+      next.delete(id);
+      this.createSelectedTables.set(next);
+      this.createTableSettings.update((settings) => {
+        const { [id]: _omit, ...rest } = settings;
+        return rest;
+      });
     } else {
-      this.createSelectedTables.add(id);
+      const next = new Set(current);
+      next.add(id);
+      this.createSelectedTables.set(next);
       this.ensureCreateSetting(id);
     }
-    this.form.controls.defaultTableIds.setValue(Array.from(this.createSelectedTables).join(', '));
+    this.form.controls.defaultTableIds.setValue(
+      Array.from(this.createSelectedTables()).join(', '),
+    );
   }
 
   toggleEditTable(id: string): void {
-    if (this.editSelectedTables.has(id)) {
-      this.editSelectedTables.delete(id);
-      delete this.editTableSettings[id];
+    const current = this.editSelectedTables();
+    if (current.has(id)) {
+      const next = new Set(current);
+      next.delete(id);
+      this.editSelectedTables.set(next);
+      this.editTableSettings.update((settings) => {
+        const { [id]: _omit, ...rest } = settings;
+        return rest;
+      });
       const idx = this.findEditSettingIndex(id);
       if (idx >= 0) this.editSettings.removeAt(idx);
     } else {
-      this.editSelectedTables.add(id);
+      const next = new Set(current);
+      next.add(id);
+      this.editSelectedTables.set(next);
       this.ensureEditSetting(id);
-      const setting = this.editTableSettings[id];
+      const setting = this.editTableSettings()[id];
       if (setting) {
         const group = this.buildSettingGroup(setting);
         group.controls['paymentStatus'].valueChanges
           .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe((status) => {
-          const current = group.getRawValue() as FrequentClientTableSetting;
-          const next = this.applyRules({
-            ...current,
+          const groupCurrent = group.getRawValue() as FrequentClientTableSetting;
+          const nextSetting = this.applyRules({
+            ...groupCurrent,
             paymentStatus: status as PaymentStatus,
           });
           group.patchValue(
             {
-              amountDue: next.amountDue,
-              amountPaid: next.amountPaid ?? 0,
-              paymentDeadlineTime: next.paymentDeadlineTime ?? this.defaultDeadlineTime,
-              paymentDeadlineTz: next.paymentDeadlineTz ?? this.defaultDeadlineTz,
+              amountDue: nextSetting.amountDue,
+              amountPaid: nextSetting.amountPaid ?? 0,
+              paymentDeadlineTime: nextSetting.paymentDeadlineTime ?? this.defaultDeadlineTime(),
+              paymentDeadlineTz: nextSetting.paymentDeadlineTz ?? this.defaultDeadlineTz(),
             },
             { emitEvent: false }
           );
@@ -601,29 +634,49 @@ export class FrequentClients implements OnInit {
         this.editSettings.push(group);
       }
     }
-    this.editForm.controls.defaultTableIds.setValue(Array.from(this.editSelectedTables).join(', '));
+    this.editForm.controls.defaultTableIds.setValue(
+      Array.from(this.editSelectedTables()).join(', '),
+    );
   }
 
   isCreateSelected(id: string): boolean {
-    return this.createSelectedTables.has(id);
+    return this.createSelectedTables().has(id);
   }
 
   isEditSelected(id: string): boolean {
-    return this.editSelectedTables.has(id);
+    return this.editSelectedTables().has(id);
   }
 
   removeCreateTable(id: string): void {
-    this.createSelectedTables.delete(id);
-    delete this.createTableSettings[id];
-    this.form.controls.defaultTableIds.setValue(Array.from(this.createSelectedTables).join(', '));
+    this.createSelectedTables.update((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    this.createTableSettings.update((settings) => {
+      const { [id]: _omit, ...rest } = settings;
+      return rest;
+    });
+    this.form.controls.defaultTableIds.setValue(
+      Array.from(this.createSelectedTables()).join(', '),
+    );
   }
 
   removeEditTable(id: string): void {
-    this.editSelectedTables.delete(id);
-    delete this.editTableSettings[id];
+    this.editSelectedTables.update((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+    this.editTableSettings.update((settings) => {
+      const { [id]: _omit, ...rest } = settings;
+      return rest;
+    });
     const idx = this.findEditSettingIndex(id);
     if (idx >= 0) this.editSettings.removeAt(idx);
-    this.editForm.controls.defaultTableIds.setValue(Array.from(this.editSelectedTables).join(', '));
+    this.editForm.controls.defaultTableIds.setValue(
+      Array.from(this.editSelectedTables()).join(', '),
+    );
   }
 
   formatTables(item: FrequentClient): string {
@@ -649,46 +702,55 @@ export class FrequentClients implements OnInit {
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  get createSelectedList(): string[] {
-    return Array.from(this.createSelectedTables).sort();
-  }
-
-  get editSelectedList(): string[] {
-    return Array.from(this.editSelectedTables).sort();
-  }
+  readonly createSelectedList = computed(() =>
+    Array.from(this.createSelectedTables()).sort(),
+  );
+  readonly editSelectedList = computed(() =>
+    Array.from(this.editSelectedTables()).sort(),
+  );
 
   getTableInfo(id: string): TableInfo | undefined {
-    return this.tableInfoById[id];
+    return this.tableInfoById()[id];
   }
 
   getCreateSetting(tableId: string): FrequentClientTableSetting {
     this.ensureCreateSetting(tableId);
-    return this.createTableSettings[tableId];
+    return this.createTableSettings()[tableId];
   }
 
   getEditSetting(tableId: string): FrequentClientTableSetting {
     this.ensureEditSetting(tableId);
-    return this.editTableSettings[tableId];
+    return this.editTableSettings()[tableId];
   }
 
   updateCreateSetting(tableId: string, patch: Partial<FrequentClientTableSetting>): void {
-    const current = this.getCreateSetting(tableId);
-    this.createTableSettings[tableId] = this.applyRules({ ...current, ...patch });
+    this.createTableSettings.update((current) => {
+      const existing = current[tableId] ?? this.buildDefaultSetting(tableId);
+      return { ...current, [tableId]: this.applyRules({ ...existing, ...patch }) };
+    });
   }
 
   updateEditSetting(tableId: string, patch: Partial<FrequentClientTableSetting>): void {
-    const current = this.getEditSetting(tableId);
-    this.editTableSettings[tableId] = this.applyRules({ ...current, ...patch });
+    this.editTableSettings.update((current) => {
+      const existing = current[tableId] ?? this.buildDefaultSetting(tableId);
+      return { ...current, [tableId]: this.applyRules({ ...existing, ...patch }) };
+    });
   }
 
   private ensureCreateSetting(tableId: string): void {
-    if (this.createTableSettings[tableId]) return;
-    this.createTableSettings[tableId] = this.buildDefaultSetting(tableId);
+    if (this.createTableSettings()[tableId]) return;
+    this.createTableSettings.update((current) => ({
+      ...current,
+      [tableId]: this.buildDefaultSetting(tableId),
+    }));
   }
 
   private ensureEditSetting(tableId: string): void {
-    if (this.editTableSettings[tableId]) return;
-    this.editTableSettings[tableId] = this.buildDefaultSetting(tableId);
+    if (this.editTableSettings()[tableId]) return;
+    this.editTableSettings.update((current) => ({
+      ...current,
+      [tableId]: this.buildDefaultSetting(tableId),
+    }));
   }
 
   private buildSettingGroup(setting: FrequentClientTableSetting): FormGroup {
@@ -697,10 +759,10 @@ export class FrequentClients implements OnInit {
       paymentStatus: new FormControl(setting.paymentStatus, { nonNullable: true }),
       amountDue: new FormControl(setting.amountDue, { nonNullable: true }),
       amountPaid: new FormControl(setting.amountPaid ?? 0, { nonNullable: true }),
-      paymentDeadlineTime: new FormControl(setting.paymentDeadlineTime ?? this.defaultDeadlineTime, {
+      paymentDeadlineTime: new FormControl(setting.paymentDeadlineTime ?? this.defaultDeadlineTime(), {
         nonNullable: true,
       }),
-      paymentDeadlineTz: new FormControl(setting.paymentDeadlineTz ?? this.defaultDeadlineTz, {
+      paymentDeadlineTz: new FormControl(setting.paymentDeadlineTz ?? this.defaultDeadlineTz(), {
         nonNullable: true,
       }),
     });
@@ -732,14 +794,14 @@ export class FrequentClients implements OnInit {
 
   private buildDefaultSetting(tableId: string): FrequentClientTableSetting {
     const normalized = String(tableId ?? '').trim().toUpperCase();
-    const amountDue = this.tablePriceById[normalized] ?? 0;
+    const amountDue = this.tablePriceById()[normalized] ?? 0;
     return {
       tableId: normalized,
       paymentStatus: 'PENDING',
       amountDue,
       amountPaid: 0,
-      paymentDeadlineTime: this.defaultDeadlineTime,
-      paymentDeadlineTz: this.defaultDeadlineTz,
+      paymentDeadlineTime: this.defaultDeadlineTime(),
+      paymentDeadlineTz: this.defaultDeadlineTz(),
     };
   }
 
@@ -747,14 +809,14 @@ export class FrequentClients implements OnInit {
     setting: FrequentClientTableSetting
   ): FrequentClientTableSetting {
     const tableId = String(setting.tableId ?? '').trim().toUpperCase();
-    const amountDue = Number(setting.amountDue ?? this.tablePriceById[tableId] ?? 0);
+    const amountDue = Number(setting.amountDue ?? this.tablePriceById()[tableId] ?? 0);
     const base: FrequentClientTableSetting = {
       tableId,
       paymentStatus: (setting.paymentStatus ?? 'PENDING') as PaymentStatus,
       amountDue,
       amountPaid: setting.amountPaid ?? 0,
-      paymentDeadlineTime: setting.paymentDeadlineTime ?? this.defaultDeadlineTime,
-      paymentDeadlineTz: setting.paymentDeadlineTz ?? this.defaultDeadlineTz,
+      paymentDeadlineTime: setting.paymentDeadlineTime ?? this.defaultDeadlineTime(),
+      paymentDeadlineTz: setting.paymentDeadlineTz ?? this.defaultDeadlineTz(),
     };
     return this.applyRules(base);
   }
@@ -775,15 +837,15 @@ export class FrequentClients implements OnInit {
     }
     if (next.paymentStatus === 'PENDING') {
       next.amountPaid = 0;
-      if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime;
-      next.paymentDeadlineTz = this.defaultDeadlineTz;
+      if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime();
+      next.paymentDeadlineTz = this.defaultDeadlineTz();
       return next;
     }
     if (next.paymentStatus === 'PARTIAL') {
       const paid = Number(next.amountPaid ?? 0);
       next.amountPaid = Number.isFinite(paid) ? Math.max(0, paid) : 0;
-      if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime;
-      next.paymentDeadlineTz = this.defaultDeadlineTz;
+      if (!next.paymentDeadlineTime) next.paymentDeadlineTime = this.defaultDeadlineTime();
+      next.paymentDeadlineTz = this.defaultDeadlineTz();
       return next;
     }
     return next;
@@ -808,11 +870,11 @@ export class FrequentClients implements OnInit {
               : Number(setting.amountPaid ?? 0),
         paymentDeadlineTime:
           setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PARTIAL'
-            ? setting.paymentDeadlineTime ?? this.defaultDeadlineTime
+            ? setting.paymentDeadlineTime ?? this.defaultDeadlineTime()
             : undefined,
         paymentDeadlineTz:
           setting.paymentStatus === 'PENDING' || setting.paymentStatus === 'PARTIAL'
-            ? setting.paymentDeadlineTz ?? this.defaultDeadlineTz
+            ? setting.paymentDeadlineTz ?? this.defaultDeadlineTz()
             : undefined,
       }));
   }

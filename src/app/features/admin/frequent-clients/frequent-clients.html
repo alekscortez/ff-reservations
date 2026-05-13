@@ -41,14 +41,14 @@
       </ng-template>
     </div>
 
-    <div *ngIf="loading" class="text-sm text-brand-500">Loading…</div>
-    <div *ngIf="!loading && items().length === 0" class="text-sm text-brand-500">No clients yet.</div>
-    <div *ngIf="!loading && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500">No matches.</div>
+    <div *ngIf="loading()" class="text-sm text-brand-500">Loading…</div>
+    <div *ngIf="!loading() && items().length === 0" class="text-sm text-brand-500" aria-live="polite">No clients yet.</div>
+    <div *ngIf="!loading() && items().length > 0 && totalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">No matches.</div>
 
-    <section class="mt-4 overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/40 p-4 md:p-5" *ngIf="editingId">
+    <section class="mt-4 overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/40 p-4 md:p-5" *ngIf="editingId()">
       <div class="flex items-center justify-between gap-3">
         <h3 class="text-base font-semibold text-brand-900">Edit Frequent Client</h3>
-        <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading">
+        <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading()">
           Close
         </button>
       </div>
@@ -60,8 +60,8 @@
             <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
               <select
                 hlmInput class="min-w-0 px-2"
-                [value]="editPhoneCountry"
-                (change)="editPhoneCountry = $any($event.target).value"
+                [value]="editPhoneCountry()"
+                (change)="editPhoneCountry.set($any($event.target).value)"
               >
                 <option value="US">🇺🇸 +1</option>
                 <option value="MX">🇲🇽 +52</option>
@@ -85,9 +85,9 @@
           <div class="mb-2 flex flex-wrap gap-2">
             <button
               type="button"
-              *ngFor="let s of templateSections"
+              *ngFor="let s of templateSections()"
               hlmToggle variant="outline"
-              [active]="activeSection === s"
+              [active]="activeSection() === s"
               (click)="toggleSection(s)"
             >
               Section {{ s }}
@@ -97,7 +97,7 @@
             <button
               type="button"
               hlmToggle variant="outline"
-              *ngFor="let t of templateTablesBySection[activeSection]"
+              *ngFor="let t of templateTablesBySection()[activeSection()]"
               [active]="isEditSelected(t.id)"
               (click)="toggleEditTable(t.id)"
             >
@@ -146,7 +146,7 @@
 
                 <div class="grid min-w-0 gap-1" *ngIf="isEditPendingOrPartial(i)">
                   <input type="time" formControlName="paymentDeadlineTime" hlmInput class="min-w-0" />
-                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz }} (global setting)</p>
+                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz() }} (global setting)</p>
                 </div>
           </div>
         </div>
@@ -166,10 +166,10 @@
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <button hlmBtn type="submit" [disabled]="editForm.invalid || loading">
+          <button hlmBtn type="submit" [disabled]="editForm.invalid || loading()">
             Save
           </button>
-          <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading">
+          <button hlmBtn variant="outline" type="button" (click)="cancelEdit()" [disabled]="loading()">
             Cancel
           </button>
         </div>
@@ -291,10 +291,11 @@
   </section>
 
   <hlm-dialog
-    *ngIf="showCreateForm"
+    *ngIf="showCreateForm()"
     (close)="toggleCreateForm()"
     size="full-on-mobile"
     panelClass="max-w-5xl pb-24"
+    [ariaLabel]="'Add Frequent Client'"
   >
       <div class="grid gap-4">
         <div class="flex items-center justify-between gap-4">
@@ -319,8 +320,8 @@
               <div class="grid min-w-0 grid-cols-[110px_minmax(0,1fr)] gap-2">
                 <select
                   hlmInput class="min-w-0 px-2"
-                  [value]="createPhoneCountry"
-                  (change)="createPhoneCountry = $any($event.target).value"
+                  [value]="createPhoneCountry()"
+                  (change)="createPhoneCountry.set($any($event.target).value)"
                 >
                   <option value="US">🇺🇸 +1</option>
                   <option value="MX">🇲🇽 +52</option>
@@ -343,7 +344,7 @@
               <div class="flex flex-wrap items-center gap-2">
                 <span
                   class="cursor-pointer rounded-full border border-brand-200 px-2 py-1 text-xs text-brand-700"
-                  *ngFor="let t of createSelectedTables"
+                  *ngFor="let t of createSelectedList()"
                   (click)="removeCreateTable(t)"
                 >
                   {{ t }}
@@ -356,9 +357,9 @@
             <div class="mb-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                *ngFor="let s of templateSections"
+                *ngFor="let s of templateSections()"
                 hlmToggle variant="outline"
-                [active]="activeSection === s"
+                [active]="activeSection() === s"
                 (click)="toggleSection(s)"
               >
                 Section {{ s }}
@@ -368,7 +369,7 @@
               <button
                 type="button"
                 hlmToggle variant="outline"
-                *ngFor="let t of templateTablesBySection[activeSection]"
+                *ngFor="let t of templateTablesBySection()[activeSection()]"
                 [active]="isCreateSelected(t.id)"
                 (click)="toggleCreateTable(t.id)"
               >
@@ -377,7 +378,7 @@
             </div>
           </div>
 
-          <div class="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/40 p-3" *ngIf="createSelectedList.length > 0">
+          <div class="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/40 p-3" *ngIf="createSelectedList().length > 0">
             <div class="hidden grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] gap-2 text-[11px] uppercase tracking-[0.12em] text-brand-500 lg:grid">
               <span>Table</span>
               <span>Payment Status</span>
@@ -388,7 +389,7 @@
 
             <div
               class="grid min-w-0 gap-2 rounded-lg border border-brand-100 bg-white p-3 lg:grid-cols-[1.1fr_1.2fr_1fr_1fr_1.4fr] lg:items-center"
-              *ngFor="let tableId of createSelectedList"
+              *ngFor="let tableId of createSelectedList()"
             >
               <ng-container *ngIf="getCreateSetting(tableId) as setting">
                 <div class="grid min-w-0 gap-1">
@@ -439,7 +440,7 @@
                     [value]="setting.paymentDeadlineTime"
                     (input)="updateCreateSetting(tableId, { paymentDeadlineTime: $any($event.target).value })"
                   />
-                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz }} (global setting)</p>
+                  <p class="text-xs text-brand-500">Timezone: {{ defaultDeadlineTz() }} (global setting)</p>
                 </div>
               </ng-container>
             </div>
@@ -450,7 +451,7 @@
             <input type="text" formControlName="notes" hlmInput class="min-w-0" />
           </label>
 
-          <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
+          <hlm-alert *ngIf="error()" variant="destructive">{{ error() }}</hlm-alert>
 
           <div class="sticky bottom-0 -mx-4 border-t border-brand-100 bg-white px-4 py-3 md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
             <div class="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
@@ -458,14 +459,14 @@
                 type="button"
                 class="h-11 rounded-lg border border-brand-200 px-4 text-sm font-semibold text-brand-700"
                 (click)="toggleCreateForm()"
-                [disabled]="loading"
+                [disabled]="loading()"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 class="h-11 rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white disabled:opacity-50"
-                [disabled]="form.invalid || loading"
+                [disabled]="form.invalid || loading()"
               >
                 Create
               </button>
@@ -476,13 +477,14 @@
 </hlm-dialog>
 </section>
 
-<hlm-confirm-dialog
-  *ngIf="deleteTarget"
-  title="Delete frequent client?"
-  [message]="'Remove ' + (deleteTarget.name || '') + ' from the recurring guest list.'"
-  confirmText="Delete"
-  loadingText="Deleting…"
-  [destructive]="true"
-  (confirm)="confirmDelete()"
-  (cancel)="cancelDelete()"
-/>
+<ng-container *ngIf="deleteTarget() as target">
+  <hlm-confirm-dialog
+    title="Delete frequent client?"
+    [message]="'Remove ' + (target.name || '') + ' from the recurring guest list.'"
+    confirmText="Delete"
+    loadingText="Deleting…"
+    [destructive]="true"
+    (confirm)="confirmDelete()"
+    (cancel)="cancelDelete()"
+  />
+</ng-container>
