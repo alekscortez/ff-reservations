@@ -45,7 +45,9 @@
     <div class="mt-4 flex justify-end">
       <button
         type="button"
-        hlmInput
+        hlmBtn
+        variant="outline"
+        size="sm"
         (click)="showPastModal = true"
       >
         Search past events
@@ -312,6 +314,13 @@
         <p class="text-xs text-brand-500">{{ filteredTablesCache.length }} results</p>
       </div>
       <div class="compact-list-body grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 md:grid-cols-4">
+      <p
+        *ngIf="filteredTablesCache.length === 0"
+        class="col-span-full p-3 text-center text-xs text-brand-500"
+        aria-live="polite"
+      >
+        No tables match these filters.
+      </p>
       <button
         class="rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
         [ngClass]="{
@@ -520,6 +529,13 @@
             <p class="text-xs text-brand-500">{{ filteredTablesCache.length }} results</p>
           </div>
           <div class="desktop-table-list min-h-0 flex-1 space-y-2 pr-1">
+            <p
+              *ngIf="filteredTablesCache.length === 0"
+              class="p-3 text-center text-xs text-brand-500"
+              aria-live="polite"
+            >
+              No tables match these filters.
+            </p>
             <button
               class="w-full rounded-xl border border-brand-200 bg-white p-2 text-left shadow-sm"
               [ngClass]="{

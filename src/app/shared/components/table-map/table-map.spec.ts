@@ -139,12 +139,12 @@ describe('TableMap', () => {
       expect(el.hasAttribute('aria-label')).toBe(false);
       expect(el.getAttribute('data-clickable')).toBe('false');
     }
-    expect(fixture.nativeElement.querySelector('.ff-map-sr-only')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('.sr-only')).toBeFalsy();
   });
 
   it('interactive=true renders the visually-hidden keyboard hint', async () => {
     const fixture = await setup({ tables: [makeTable('A01')] });
-    const hint = fixture.nativeElement.querySelector('.ff-map-sr-only') as HTMLElement | null;
+    const hint = fixture.nativeElement.querySelector('.sr-only') as HTMLElement | null;
     expect(hint).toBeTruthy();
     expect(hint!.textContent ?? '').toContain('arrow keys');
     expect(hint!.textContent ?? '').toContain('Enter');
