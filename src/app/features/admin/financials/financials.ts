@@ -836,12 +836,20 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private setDefaultRange(): void {
+    // Venue takes forward bookings — almost every reservation is for a
+    // future event date. The old default of From=first-of-month, To=today
+    // showed zero events whenever the month had no past events yet, which
+    // is the common case at the start of every month. Default now: last
+    // 30 days through everything in the future (no upper bound), so the
+    // operator sees recent completed events + all upcoming obligations.
+    // Operator can narrow for monthly reconciliation as needed.
     const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    this.rangeFrom.setValue(`${yyyy}-${mm}-01`);
-    this.rangeTo.setValue(`${yyyy}-${mm}-${dd}`);
+    const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    const yyyy = thirtyDaysAgo.getFullYear();
+    const mm = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+    const dd = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+    this.rangeFrom.setValue(`${yyyy}-${mm}-${dd}`);
+    this.rangeTo.setValue('');
   }
 
   private loadReportForCurrentFilters(): void {
