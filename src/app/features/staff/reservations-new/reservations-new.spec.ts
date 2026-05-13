@@ -1,8 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
+import { vi } from 'vitest';
 
 import { HoldsService } from '../../../core/http/holds.service';
+import { ReservationsService } from '../../../core/http/reservations.service';
 import { TablesService } from '../../../core/http/tables.service';
 import { ReservationsNew } from './reservations-new';
 
@@ -204,5 +206,101 @@ describe('ReservationsNew', () => {
       component.form.controls.receiptNumber.setValue('42');
       expect(component.shouldShowCashReceiptError()).toBe(false);
     });
+  });
+
+  describe('releaseHold empty-entries cleanup (B3)', () => {
+    it('clears local hold flags + closes modal when no entries to release', () => {
+      component.eventDate = '2026-05-09';
+      component.selectedTables = [];
+      component.holdEntries = [];
+      component.selectedTable = null;
+      component.holdId = 'stale-id';
+      component.holdExpiresAt = 1700000000;
+      component.holdCountdown = 42;
+      component.holdExpired = true;
+      component.holdCreatedByMe = true;
+      component.showReleaseConfirm = true;
+      component.showReservationModal = true;
+
+      component.releaseHold();
+
+      // Empty-entries branch must STILL clear local state — otherwise the
+      // user clicks Release and sees no UI feedback (silent no-op bug).
+      expect(component.holdId).toBeNull();
+      expect(component.holdExpiresAt).toBeNull();
+      expect(component.holdExpired).toBe(false);
+      expect(component.holdCreatedByMe).toBe(false);
+      expect(component.holdCountdown).toBe(0);
+      expect(component.showReleaseConfirm).toBe(false);
+      expect(component.showReservationModal).toBe(false);
+    });
+  });
+});
+
+describe('ReservationsNew confirmReservation double-fire guard (C1)', () => {
+  let component: ReservationsNew;
+  let fixture: ComponentFixture<ReservationsNew>;
+  let createSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    createSpy = vi.fn(() => NEVER);
+    const reservationsStub: Partial<ReservationsService> = {
+      create: createSpy as any,
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [ReservationsNew],
+      providers: [
+        provideRouter([]),
+        { provide: HoldsService, useValue: makeHoldsStub() },
+        { provide: TablesService, useValue: makeTablesStub() },
+        { provide: ReservationsService, useValue: reservationsStub },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParamMap: of(convertToParamMap({})),
+            paramMap: of(convertToParamMap({})),
+            snapshot: {
+              queryParamMap: convertToParamMap({}),
+              paramMap: convertToParamMap({}),
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(ReservationsNew);
+    component = fixture.componentInstance;
+    await fixture.whenStable();
+  });
+
+  it('fires ReservationsService.create exactly once on rapid double-click', () => {
+    // Seed enough state to bypass all the synchronous validation gates
+    // in confirmReservation so we reach the actual POST.
+    const tableA = { id: 'A1', price: 100, section: 'A', status: 'HOLD' } as any;
+    component.eventDate = '2026-05-09';
+    component.selectedTable = tableA;
+    component.selectedTableId = 'A1';
+    component.selectedTables = [tableA];
+    component.holdId = 'h-a1';
+    component.holdExpiresAt = Math.floor(Date.now() / 1000) + 300;
+    component.holdEntries = [
+      { tableId: 'A1', holdId: 'h-a1', holdExpiresAt: component.holdExpiresAt, holdCreatedByMe: true },
+    ];
+    component.holdCreatedByMe = true;
+    component.form.controls.customerName.setValue('Test');
+    component.form.controls.phone.setValue('5125551212');
+    component.form.controls.amountDue.setValue(100);
+    component.form.controls.depositAmount.setValue(100);
+    component.form.controls.paymentStatus.setValue('PAID');
+    component.form.controls.paymentMethod.setValue('cash');
+
+    // Two rapid invocations — the second must be a no-op because the
+    // backend's idempotency replay still triggers FE state churn through
+    // the next: callback (the bug C1 addresses).
+    component.confirmReservation();
+    component.confirmReservation();
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
   });
 });

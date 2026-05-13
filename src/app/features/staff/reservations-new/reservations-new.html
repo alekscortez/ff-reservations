@@ -22,12 +22,12 @@
 
     <div
       class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
-      *ngIf="!eventsLoading && upcomingEvents().length > 0"
+      *ngIf="!eventsLoading && upcomingEventsCache.length > 0"
     >
       <button
         type="button"
         class="rounded-2xl border border-brand-100 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-900"
-        *ngFor="let e of upcomingEvents()"
+        *ngFor="let e of upcomingEventsCache; trackBy: trackByEventDate"
         [ngClass]="{ 'ring-2 ring-brand-900': isThisWeek(e.eventDate) }"
         (click)="selectEvent(e.eventDate!)"
       >
@@ -82,14 +82,14 @@
       <button
         type="button"
         class="grid grid-cols-[120px_1fr_auto] items-center gap-3 rounded-xl border border-brand-100 px-3 py-3 text-left text-sm"
-        *ngFor="let e of pastEvents()"
+        *ngFor="let e of pastEventsCache; trackBy: trackByEventDate"
         (click)="selectEvent(e.eventDate!)"
       >
         <span class="font-semibold text-brand-900">{{ e.eventDate }}</span>
         <span class="text-brand-700">{{ e.eventName }}</span>
         <span class="text-[11px] uppercase tracking-[0.2em] text-brand-500">{{ e.status || 'ACTIVE' }}</span>
       </button>
-      <div class="text-sm text-brand-500" *ngIf="pastEvents().length === 0">No past events found.</div>
+      <div class="text-sm text-brand-500" *ngIf="pastEventsCache.length === 0">No past events found.</div>
     </div>
   </hlm-dialog>
 
@@ -263,7 +263,7 @@
             <button
               type="button"
               hlmToggle variant="outline" class="w-full"
-              *ngFor="let s of sections"
+              *ngFor="let s of sections; trackBy: trackBySection"
               [active]="filterSection.value === s"
               (click)="setFilterSection(s)"
             >
@@ -309,7 +309,7 @@
     >
       <div class="compact-list-header flex items-center justify-between gap-2 px-3 py-2">
         <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
-        <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+        <p class="text-xs text-brand-500">{{ filteredTablesCache.length }} results</p>
       </div>
       <div class="compact-list-body grid grid-cols-2 gap-2 p-2 sm:grid-cols-3 md:grid-cols-4">
       <button
@@ -321,7 +321,7 @@
           'border-danger-400 bg-danger-50': t.status === 'RESERVED',
           'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
         }"
-        *ngFor="let t of filteredTables()"
+        *ngFor="let t of filteredTablesCache; trackBy: trackByTableId"
         type="button"
         (click)="selectTable(t)"
         [disabled]="t.status !== 'AVAILABLE'"
@@ -494,7 +494,7 @@
                   <button
                     type="button"
                     hlmToggle variant="outline" class="w-full"
-                    *ngFor="let s of sections"
+                    *ngFor="let s of sections; trackBy: trackBySection"
                     [active]="filterSection.value === s"
                     (click)="setFilterSection(s)"
                   >
@@ -517,7 +517,7 @@
 
           <div class="mb-2 flex shrink-0 items-center justify-between">
             <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Table List</p>
-            <p class="text-xs text-brand-500">{{ filteredTables().length }} results</p>
+            <p class="text-xs text-brand-500">{{ filteredTablesCache.length }} results</p>
           </div>
           <div class="desktop-table-list min-h-0 flex-1 space-y-2 pr-1">
             <button
@@ -529,7 +529,7 @@
                 'border-danger-400 bg-danger-50': t.status === 'RESERVED',
                 'border-brand-200 bg-brand-50 text-brand-400': t.status === 'DISABLED'
               }"
-              *ngFor="let t of filteredTables()"
+              *ngFor="let t of filteredTablesCache; trackBy: trackByTableId"
               type="button"
               (click)="selectTable(t)"
               [disabled]="t.status !== 'AVAILABLE'"
@@ -649,7 +649,7 @@
           </div>
           <div class="flex flex-wrap gap-2">
             <span
-              *ngFor="let t of selectedTables"
+              *ngFor="let t of selectedTables; trackBy: trackByTableId"
               class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-sm text-brand-800"
             >
               Table {{ t.id }} · ${{ t.price }}
@@ -721,7 +721,7 @@
               <button
                 class="mt-2 flex w-full items-center justify-between rounded-lg border border-brand-100 px-3 py-2 text-left text-sm"
                 type="button"
-                *ngFor="let c of clientMatches"
+                *ngFor="let c of clientMatches; trackBy: trackByClientPhone"
                 [ngClass]="{ 'border-brand-900': isExactMatch(c) }"
                 (click)="selectClient(c)"
               >
@@ -763,7 +763,7 @@
                       formControlName="creditId"
                     >
                       <option value="" disabled>Select reservation credit</option>
-                      <option *ngFor="let credit of clientCredits" [value]="credit.creditId">
+                      <option *ngFor="let credit of clientCredits; trackBy: trackByCreditId" [value]="credit.creditId">
                         {{ clientCreditLabel(credit) }}
                       </option>
                     </select>

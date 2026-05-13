@@ -229,6 +229,15 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   clientCreditsError: string | null = null;
   private creditsLookupKey: string | null = null;
   private creditsLookupSeq = 0;
+  // Cached derivatives of `events` / `tables` + form-control filters.
+  // Bound directly in the template (instead of method calls in *ngFor)
+  // so change detection doesn't re-run filter logic + slice on every CD
+  // cycle — that was the iOS Chrome touch-drop pattern flagged in memory
+  // feedback_ngfor_no_template_methods.md. Recomputed only when the
+  // underlying inputs change.
+  upcomingEventsCache: EventItem[] = [];
+  pastEventsCache: EventItem[] = [];
+  filteredTablesCache: TableForEvent[] = [];
   creatingPaymentLink = false;
   paymentLinkError: string | null = null;
   paymentLinkNotice: string | null = null;
@@ -386,6 +395,25 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.clientLoading = false;
         },
       });
+
+    // Cache invalidation for the template-bound *-Cache arrays. Each
+    // filter control mutation triggers a single recompute instead of the
+    // previous "method-in-*ngFor → CD re-runs every cycle" pattern.
+    this.filterQuery.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.recomputeFilteredTables());
+    this.filterStatus.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.recomputeFilteredTables());
+    this.filterSection.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.recomputeFilteredTables());
+    this.pastFilterDate.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.recomputePastEvents());
+    this.pastFilterName.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.recomputePastEvents());
   }
 
   ngAfterViewInit(): void {
@@ -432,6 +460,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.filterSection.setValue('ALL');
           this.saveFilters();
         }
+        this.recomputeFilteredTables();
         if (this.selectedTableId) {
           this.selectedTable = this.tables.find((t) => t.id === this.selectedTableId) ?? null;
         } else {
@@ -495,6 +524,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         this.events = (items ?? []).sort((a, b) =>
           (a.eventDate || '').localeCompare(b.eventDate || '')
         );
+        this.recomputeUpcomingEvents();
+        this.recomputePastEvents();
         this.eventsLoading = false;
       },
       error: (err) => {
@@ -516,6 +547,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.eventDate = null;
     this.event = null;
     this.tables = [];
+    this.recomputeFilteredTables();
     this.selectedTable = null;
     this.selectedTableId = null;
     this.selectedTables = [];
@@ -536,22 +568,47 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.compactSectionBottomPaddingPx = null;
   }
 
-  upcomingEvents(): EventItem[] {
-    return this.events
+  private recomputeUpcomingEvents(): void {
+    this.upcomingEventsCache = this.events
       .filter((e) => (e.eventDate || '') >= this.businessDate)
       .slice(0, 4);
   }
 
-  pastEvents(): EventItem[] {
+  private recomputePastEvents(): void {
     const dateFilter = this.pastFilterDate.value.trim();
     const nameFilter = this.pastFilterName.value.trim().toLowerCase();
-    return this.events
+    this.pastEventsCache = this.events
       .filter((e) => (e.eventDate || '') < this.businessDate)
       .filter((e) => (dateFilter ? e.eventDate === dateFilter : true))
       .filter((e) =>
         nameFilter ? (e.eventName || '').toLowerCase().includes(nameFilter) : true
       )
       .reverse();
+  }
+
+  private recomputeFilteredTables(): void {
+    this.filteredTablesCache = applyTableFilters(
+      this.tables,
+      this.filterQuery.value,
+      this.filterStatus.value,
+      this.filterSection.value
+    );
+  }
+
+  trackByEventDate(_: number, e: EventItem): string {
+    return e.eventDate ?? '';
+  }
+  trackByTableId(_: number, t: TableForEvent): string {
+    return t.id;
+  }
+  trackBySection(_: number, s: string): string {
+    return s;
+  }
+  trackByClientPhone(_: number, c: CrmClient): string {
+    return c.phone ?? '';
+  }
+  trackByCreditId(_: number, c: RescheduleCredit): string {
+    return c.creditId ?? '';
   }
 
   // Template-bound helpers: keep on `this` so the .html bindings can find
@@ -1682,15 +1739,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.loading;
   }
 
-  filteredTables(): TableForEvent[] {
-    return applyTableFilters(
-      this.tables,
-      this.filterQuery.value,
-      this.filterStatus.value,
-      this.filterSection.value
-    );
-  }
-
   setTableViewMode(mode: 'MAP' | 'LIST'): void {
     this.tableViewMode.setValue(mode);
     if (mode === 'MAP') {
@@ -1959,6 +2007,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.eventsApi.getCurrentContext().subscribe({
       next: (ctx) => {
         this.businessDate = String(ctx?.businessDate ?? '').trim() || todayString();
+        // businessDate is the upcoming/past split point — recompute both
+        // event caches now that we know its real value.
+        this.recomputeUpcomingEvents();
+        this.recomputePastEvents();
         this.paymentDeadlineTz = String(ctx?.settings?.operatingTz ?? '').trim() || 'America/Chicago';
         this.defaultPaymentDeadlineHour = normalizeHour(
           ctx?.settings?.defaultPaymentDeadlineHour,
