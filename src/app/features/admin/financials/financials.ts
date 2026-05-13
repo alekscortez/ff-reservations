@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import {
+  ChangeDetectionStrategy,
   Component,
   OnDestroy,
   OnInit,
@@ -176,6 +177,7 @@ interface PaymentLedgerRow {
   providers: [provideIcons({ lucideArrowRight, lucideChevronDown })],
   templateUrl: './financials.html',
   styleUrl: './financials.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Financials implements OnInit, OnDestroy {
   private eventsApi = inject(EventsService);
@@ -183,13 +185,19 @@ export class Financials implements OnInit, OnDestroy {
 
   private snapshotSub: Subscription | null = null;
 
-  events: EventItem[] = [];
-  filteredEvents: EventItem[] = [];
-  rows: FinancialRow[] = [];
+  readonly events = signal<EventItem[]>([]);
+  readonly filteredEvents = signal<EventItem[]>([]);
+  readonly rows = signal<FinancialRow[]>([]);
   readonly receivables = signal<FinancialRow[]>([]);
   readonly ledgerRows = signal<PaymentLedgerRow[]>([]);
   readonly eventSummaries = signal<EventFinancialSummary[]>([]);
-  methodTotals: MethodTotals = { cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 };
+  readonly methodTotals = signal<MethodTotals>({
+    cash: 0,
+    square: 0,
+    cashapp: 0,
+    credit: 0,
+    refunds: 0,
+  });
 
   rangeFrom = new FormControl('', { nonNullable: true });
   rangeTo = new FormControl('', { nonNullable: true });
@@ -548,7 +556,7 @@ export class Financials implements OnInit, OnDestroy {
     });
   }
 
-  overview: OverviewKpis = {
+  readonly overview = signal<OverviewKpis>({
     eventsInRange: 0,
     reservations: 0,
     confirmed: 0,
@@ -560,11 +568,11 @@ export class Financials implements OnInit, OnDestroy {
     courtesyValue: 0,
     refunded: 0,
     netCollected: 0,
-  };
+  });
 
-  loading = false;
-  error: string | null = null;
-  warnings: string[] = [];
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly warnings = signal<string[]>([]);
 
   ngOnInit(): void {
     this.setDefaultRange();
@@ -577,20 +585,22 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   refresh(): void {
-    this.loading = true;
-    this.error = null;
-    this.warnings = [];
+    this.loading.set(true);
+    this.error.set(null);
+    this.warnings.set([]);
 
     this.eventsApi.listEvents().subscribe({
       next: (events) => {
-        this.events = [...(events ?? [])].sort((a, b) =>
-          (b.eventDate || '').localeCompare(a.eventDate || '')
+        this.events.set(
+          [...(events ?? [])].sort((a, b) =>
+            (b.eventDate || '').localeCompare(a.eventDate || '')
+          ),
         );
         this.loadReportForCurrentFilters();
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load events';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load events');
+        this.loading.set(false);
       },
     });
   }
@@ -600,7 +610,8 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   exportCsv(): void {
-    if (this.rows.length === 0) return;
+    const rows = this.rows();
+    if (rows.length === 0) return;
 
     const headers = [
       'event_date',
@@ -621,9 +632,9 @@ export class Financials implements OnInit, OnDestroy {
       'payment_deadline',
     ];
 
-    const eventByDate = new Map(this.filteredEvents.map((e) => [e.eventDate, e]));
+    const eventByDate = new Map(this.filteredEvents().map((e) => [e.eventDate, e]));
 
-    const body = this.rows.map((row) => {
+    const body = rows.map((row) => {
       const event = eventByDate.get(row.eventDate);
       const tableList = row.tableIds.length > 0 ? row.tableIds.join(' | ') : row.tableId;
       return [
@@ -853,35 +864,39 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private loadReportForCurrentFilters(): void {
-    this.error = null;
-    this.warnings = [];
-    this.filteredEvents = this.filterEvents(this.events);
+    this.error.set(null);
+    this.warnings.set([]);
+    const filtered = this.filterEvents(this.events());
+    this.filteredEvents.set(filtered);
 
-    if (this.filteredEvents.length === 0) {
+    if (filtered.length === 0) {
       this.clearReport();
-      this.loading = false;
+      this.loading.set(false);
       return;
     }
 
-    this.loading = true;
+    this.loading.set(true);
     this.snapshotSub?.unsubscribe();
-    this.snapshotSub = this.loadReservationsForEvents(this.filteredEvents).subscribe({
+    this.snapshotSub = this.loadReservationsForEvents(filtered).subscribe({
       next: (snapshots) => {
-        this.rows = this.buildRows(snapshots);
-        const receivables = this.buildReceivables(this.rows);
+        const rows = this.buildRows(snapshots);
+        this.rows.set(rows);
+        const receivables = this.buildReceivables(rows);
         this.receivables.set(receivables);
         this.ledgerRows.set(this.buildPaymentLedger(snapshots));
-        this.eventSummaries.set(this.buildEventSummaries(this.filteredEvents, this.rows, receivables));
-        this.overview = this.buildOverview(this.filteredEvents, this.rows, receivables);
-        this.methodTotals = this.buildMethodTotals(snapshots);
+        this.eventSummaries.set(this.buildEventSummaries(filtered, rows, receivables));
+        this.overview.set(this.buildOverview(filtered, rows, receivables));
+        this.methodTotals.set(this.buildMethodTotals(snapshots));
         this.summariesPagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.receivablesPagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.ledgerPagination.update((s) => ({ ...s, pageIndex: 0 }));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load financial report';
-        this.loading = false;
+        this.error.set(
+          err?.error?.message || err?.message || 'Failed to load financial report',
+        );
+        this.loading.set(false);
       },
     });
   }
@@ -908,7 +923,7 @@ export class Financials implements OnInit, OnDestroy {
         catchError((err) => {
           const msg =
             err?.error?.message || err?.message || `Failed to load reservations for ${event.eventDate}`;
-          this.warnings.push(`${event.eventDate}: ${msg}`);
+          this.warnings.update((current) => [...current, `${event.eventDate}: ${msg}`]);
           return of({ event, reservations: [] });
         })
       )
@@ -1316,12 +1331,12 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private clearReport(): void {
-    this.rows = [];
+    this.rows.set([]);
     this.receivables.set([]);
     this.ledgerRows.set([]);
     this.eventSummaries.set([]);
-    this.methodTotals = { cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 };
-    this.overview = {
+    this.methodTotals.set({ cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 });
+    this.overview.set({
       eventsInRange: 0,
       reservations: 0,
       confirmed: 0,
@@ -1333,7 +1348,7 @@ export class Financials implements OnInit, OnDestroy {
       courtesyValue: 0,
       refunded: 0,
       netCollected: 0,
-    };
+    });
   }
 
   private parseDeadlineMs(deadlineAt?: string | null): number | null {
