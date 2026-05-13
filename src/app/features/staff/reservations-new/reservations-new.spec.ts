@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 
+import { HoldsService } from '../../../core/http/holds.service';
+import { TablesService } from '../../../core/http/tables.service';
 import { ReservationsNew } from './reservations-new';
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
@@ -20,6 +22,29 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   });
 }
 
+const SEED_TABLES = [
+  { id: 'A1', price: 100, section: 'A', status: 'HOLD' },
+  { id: 'B2', price: 150, section: 'B', status: 'HOLD' },
+  { id: 'C3', price: 200, section: 'C', status: 'HOLD' },
+];
+
+function makeHoldsStub(): Partial<HoldsService> {
+  return {
+    releaseHold: () => of(undefined as unknown as void),
+    listLocks: () => of([]),
+  };
+}
+
+function makeTablesStub(): Partial<TablesService> {
+  return {
+    getForEvent: () =>
+      of({
+        tables: SEED_TABLES,
+        lastUpdated: 0,
+      } as any),
+  };
+}
+
 describe('ReservationsNew', () => {
   let component: ReservationsNew;
   let fixture: ComponentFixture<ReservationsNew>;
@@ -29,6 +54,8 @@ describe('ReservationsNew', () => {
       imports: [ReservationsNew],
       providers: [
         provideRouter([]),
+        { provide: HoldsService, useValue: makeHoldsStub() },
+        { provide: TablesService, useValue: makeTablesStub() },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -41,8 +68,7 @@ describe('ReservationsNew', () => {
           },
         },
       ],
-    })
-    .compileComponents();
+    }).compileComponents();
 
     fixture = TestBed.createComponent(ReservationsNew);
     component = fixture.componentInstance;
@@ -51,5 +77,132 @@ describe('ReservationsNew', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('removeSelectedTable', () => {
+    function seedMultiTableState() {
+      component.eventDate = '2026-05-09';
+      const tableA = { id: 'A1', price: 100, section: 'A', status: 'HOLD' } as any;
+      const tableB = { id: 'B2', price: 150, section: 'B', status: 'HOLD' } as any;
+      const tableC = { id: 'C3', price: 200, section: 'C', status: 'HOLD' } as any;
+      component.tables = [tableA, tableB, tableC];
+      component.selectedTables = [tableA, tableB, tableC];
+      component.holdEntries = [
+        { tableId: 'A1', holdId: 'h-a1', holdExpiresAt: 1700000600, holdCreatedByMe: true },
+        { tableId: 'B2', holdId: 'h-b2', holdExpiresAt: 1700000700, holdCreatedByMe: true },
+        { tableId: 'C3', holdId: 'h-c3', holdExpiresAt: 1700000800, holdCreatedByMe: true },
+      ];
+      // Scalars mirror the primary (first entry).
+      component.selectedTable = tableA;
+      component.selectedTableId = 'A1';
+      component.holdId = 'h-a1';
+      component.holdExpiresAt = 1700000600;
+      component.holdCreatedByMe = true;
+      component.form.controls.amountDue.setValue(450);
+    }
+
+    it('promotes the next hold to primary when the primary table is removed', () => {
+      seedMultiTableState();
+
+      component.removeSelectedTable('A1');
+
+      expect(component.selectedTables.map((t) => t.id)).toEqual(['B2', 'C3']);
+      expect(component.holdEntries.map((h) => h.tableId)).toEqual(['B2', 'C3']);
+      // Scalars must point at the new primary, not the deleted A1.
+      expect(component.selectedTableId).toBe('B2');
+      expect(component.selectedTable?.id).toBe('B2');
+      expect(component.holdId).toBe('h-b2');
+      expect(component.holdExpiresAt).toBe(1700000700);
+      expect(component.holdCreatedByMe).toBe(true);
+    });
+
+    it('leaves the primary alone when removing a non-primary table', () => {
+      seedMultiTableState();
+
+      component.removeSelectedTable('B2');
+
+      expect(component.selectedTables.map((t) => t.id)).toEqual(['A1', 'C3']);
+      expect(component.holdEntries.map((h) => h.tableId)).toEqual(['A1', 'C3']);
+      // Primary scalars untouched.
+      expect(component.selectedTableId).toBe('A1');
+      expect(component.selectedTable?.id).toBe('A1');
+      expect(component.holdId).toBe('h-a1');
+      expect(component.holdExpiresAt).toBe(1700000600);
+    });
+
+    it('refuses to remove the last remaining table', () => {
+      component.eventDate = '2026-05-09';
+      const tableA = { id: 'A1', price: 100, section: 'A', status: 'HOLD' } as any;
+      component.selectedTables = [tableA];
+      component.holdEntries = [
+        { tableId: 'A1', holdId: 'h-a1', holdExpiresAt: 1700000600, holdCreatedByMe: true },
+      ];
+      component.selectedTable = tableA;
+      component.selectedTableId = 'A1';
+      component.holdId = 'h-a1';
+
+      component.removeSelectedTable('A1');
+
+      // No-op: still one table, still primary.
+      expect(component.selectedTables).toHaveLength(1);
+      expect(component.selectedTableId).toBe('A1');
+      expect(component.holdId).toBe('h-a1');
+    });
+  });
+
+  describe('isCashReceiptRequired (credit + cash-remainder)', () => {
+    function seedCreditCashRemainder() {
+      // Force credit-on state with a remainder > 0 collected as cash.
+      // The form's amountDue is 200; we apply a credit that covers $50,
+      // leaving a $150 remainder to be paid in cash.
+      component.form.controls.amountDue.setValue(200);
+      component.form.controls.useCredit.setValue(true);
+      component.form.controls.creditId.setValue('credit-1');
+      component.form.controls.remainingMethod.setValue('cash');
+      component.clientCredits = [
+        { creditId: 'credit-1', remainingAmount: 50 } as any,
+      ];
+    }
+
+    it('returns true when credit is applied with cash remainder', () => {
+      component.cashReceiptNumberRequired = true;
+      seedCreditCashRemainder();
+      expect(component.isCashReceiptRequired()).toBe(true);
+    });
+
+    it('returns false when the settings flag disables receipt requirement', () => {
+      component.cashReceiptNumberRequired = false;
+      seedCreditCashRemainder();
+      expect(component.isCashReceiptRequired()).toBe(false);
+    });
+
+    it('returns false when the remainder is paid by Square or Cash App', () => {
+      component.cashReceiptNumberRequired = true;
+      seedCreditCashRemainder();
+      component.form.controls.remainingMethod.setValue('square');
+      expect(component.isCashReceiptRequired()).toBe(false);
+      component.form.controls.remainingMethod.setValue('client');
+      expect(component.isCashReceiptRequired()).toBe(false);
+    });
+
+    it('returns false when credit is not in use', () => {
+      component.cashReceiptNumberRequired = true;
+      component.form.controls.useCredit.setValue(false);
+      component.form.controls.remainingMethod.setValue('cash');
+      expect(component.isCashReceiptRequired()).toBe(false);
+    });
+
+    it('shouldShowCashReceiptError is gated on submit attempt', () => {
+      component.cashReceiptNumberRequired = true;
+      seedCreditCashRemainder();
+      component.form.controls.receiptNumber.setValue('');
+
+      expect(component.shouldShowCashReceiptError()).toBe(false);
+      component.confirmSubmitAttempted = true;
+      expect(component.shouldShowCashReceiptError()).toBe(true);
+
+      component.form.controls.receiptNumber.setValue('42');
+      expect(component.shouldShowCashReceiptError()).toBe(false);
+    });
   });
 });

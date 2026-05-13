@@ -97,9 +97,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
   styleUrl: './reservations-new.scss',
 })
 export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
-  private readonly sidebarModalLockClass = 'reservations-new-modal-open';
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
-  private sidebarModalLockActive = false;
   private workspaceLockActive = false;
   private activeHoldSession: ActiveHoldSession | null = null;
   private holdRestoreInFlight = false;
@@ -136,6 +134,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   holdId: string | null = null;
   holdExpiresAt: number | null = null;
   holdCountdown = 0;
+  // Set when the per-second timer ticks to zero. Cleared when a fresh hold
+  // is created or the modal is reset. Drives the in-modal "hold expired"
+  // banner and prevents confirmReservation from firing a doomed POST.
+  holdExpired = false;
   private holdTimer: ReturnType<typeof setInterval> | null = null;
   holdCreatedByMe = false;
   showReleaseConfirm = false;
@@ -195,7 +197,18 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     remainingMethod: new FormControl<'cash' | 'square' | 'client'>('cash', {
       nonNullable: true,
     }),
+    receiptNumber: new FormControl('', { nonNullable: true }),
   });
+  // Mirrors the settings-driven cashReceiptNumberRequired flag used by
+  // the staff Reservations page; populated in loadRuntimeContext. Defaults
+  // to true to match backend's resolveCashReceiptNumberRequired() fallback.
+  cashReceiptNumberRequired = true;
+  confirmSubmitAttempted = false;
+  // In-flight guards: prevent a rapid double-click from firing the same
+  // POST twice. Backend idempotency replays the second create, but the
+  // FE's `next:` callback would run twice and churn modal/hold state.
+  private creatingHold = false;
+  private confirmingReservation = false;
 
   filterQuery = new FormControl('', { nonNullable: true });
   filterStatus = new FormControl<TableFilterStatus>('ALL', {
@@ -381,7 +394,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   ngOnDestroy(): void {
-    this.syncSidebarModalLock(true);
     this.syncWorkspaceScrollLock(true);
     this.detachVisualViewportListeners();
     this.stopPolling();
@@ -393,7 +405,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   }
 
   ngDoCheck(): void {
-    this.syncSidebarModalLock();
     this.syncWorkspaceScrollLock();
     if (this.eventDate || this.desktopSplitHeightPx !== null || this.compactPanelHeightPx !== null) {
       this.scheduleDesktopSplitLayout();
@@ -512,6 +523,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.holdId = null;
     this.holdExpiresAt = null;
     this.holdCountdown = 0;
+    this.holdExpired = false;
     this.clearHoldTimer();
     this.addAnotherTablePending = false;
     this.addAnotherTableError = null;
@@ -559,6 +571,22 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.addAnotherTable(t);
       return;
     }
+    // Guard: if we own a live hold (or a multi-table booking in progress),
+    // surface the modal with an explanation instead of silently clobbering
+    // the local hold map. Without this, addAnotherTable-fail + subsequent
+    // map-click would orphan the existing server-side holds until the cron
+    // sweep — staff would see them as PENDING_PAYMENT until release.
+    if (
+      this.holdId &&
+      this.holdCreatedByMe &&
+      this.selectedTables.length > 0 &&
+      !this.selectedTables.some((existing) => existing.id === t.id)
+    ) {
+      this.addAnotherTableError =
+        'Release the current booking or click "+ Add another table" before picking a different table.';
+      this.showReservationModal = true;
+      return;
+    }
     this.addAnotherTablePending = false;
     this.addAnotherTableError = null;
     this.clearActiveHoldSession();
@@ -570,6 +598,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.holdId = null;
     this.holdExpiresAt = null;
     this.holdCountdown = 0;
+    this.holdExpired = false;
     this.clearHoldTimer();
     this.holdCreatedByMe = false;
     this.showReleaseConfirm = false;
@@ -678,8 +707,26 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.loading = true;
     this.holdsApi.releaseHold(this.eventDate, tableId).subscribe({
       next: () => {
+        const wasPrimary = this.selectedTableId === tableId;
         this.selectedTables = this.selectedTables.filter((t) => t.id !== tableId);
         this.holdEntries = this.holdEntries.filter((h) => h.tableId !== tableId);
+        // If we just removed the primary table, promote the new first
+        // holdEntry to primary. Otherwise the scalars (selectedTable,
+        // holdId, holdExpiresAt, holdCreatedByMe) would stay pointed at
+        // the deleted table — loadTables would null out selectedTable,
+        // the modal would close silently, and the remaining holds would
+        // sit on the server until the cron sweep.
+        if (wasPrimary) {
+          const nextPrimary = this.holdEntries[0] ?? null;
+          this.selectedTable = nextPrimary
+            ? this.selectedTables.find((t) => t.id === nextPrimary.tableId) ?? null
+            : null;
+          this.selectedTableId = nextPrimary?.tableId ?? null;
+          this.holdId = nextPrimary?.holdId ?? null;
+          this.holdExpiresAt = nextPrimary?.holdExpiresAt ?? null;
+          this.holdCreatedByMe = nextPrimary?.holdCreatedByMe ?? false;
+          this.startHoldTimer();
+        }
         // Rebalance amountDue: deduct the removed table's price.
         const removed = entry && this.tables.find((t) => t.id === tableId);
         const extraPrice = Number(removed?.price ?? 0);
@@ -724,10 +771,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   createHold(openModal = false): void {
     if (!this.eventDate || !this.selectedTable) return;
+    if (this.creatingHold) return;
     const phone = normalizePhoneToE164(
       this.form.controls.phone.value,
       normalizePhoneCountry(this.phoneCountry)
     );
+    this.creatingHold = true;
     this.loading = true;
     this.error = null;
     const primaryTable = this.selectedTable;
@@ -744,6 +793,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.holdId = item.holdId;
           this.holdExpiresAt = item.expiresAt ?? null;
           this.holdCreatedByMe = true;
+          this.holdExpired = false;
           // Sync the multi-table mirrors. createHold owns the primary
           // entry; addAnotherTable owns subsequent entries.
           this.selectedTables = [primaryTable];
@@ -757,12 +807,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           ];
           this.startHoldTimer();
           this.saveActiveHoldSessionIfNeeded();
+          this.creatingHold = false;
           this.loading = false;
           this.loadTables(this.eventDate!);
           if (openModal) this.openReservationModal();
         },
         error: (err) => {
           this.error = err?.error?.message || err?.message || 'Failed to hold table';
+          this.creatingHold = false;
           this.loading = false;
         },
       });
@@ -784,7 +836,24 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
             } as ActiveHoldEntry,
           ]
         : [];
-    if (entries.length === 0) return;
+    if (entries.length === 0) {
+      // Nothing to release server-side, but the user clicked Release in
+      // a state where local hold flags were stale (e.g. timer expired
+      // mid-action). Clear everything locally so the modal closes
+      // cleanly instead of looking broken.
+      this.selectedTables = [];
+      this.holdEntries = [];
+      this.holdId = null;
+      this.holdExpiresAt = null;
+      this.holdCountdown = 0;
+      this.holdExpired = false;
+      this.clearHoldTimer();
+      this.holdCreatedByMe = false;
+      this.showReleaseConfirm = false;
+      this.showReservationModal = false;
+      this.clearActiveHoldSession();
+      return;
+    }
     this.loading = true;
     this.error = null;
     // Release every hold in parallel. Individual releaseHold rejections
@@ -808,6 +877,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.holdId = null;
       this.holdExpiresAt = null;
       this.holdCountdown = 0;
+      this.holdExpired = false;
       this.clearHoldTimer();
       this.holdCreatedByMe = false;
       this.showReleaseConfirm = false;
@@ -830,6 +900,8 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.finishReservationFlow();
       return;
     }
+    if (this.confirmingReservation) return;
+    this.confirmSubmitAttempted = true;
     if (!this.eventDate || !this.selectedTable) {
       this.error = 'Select an event and table first.';
       return;
@@ -843,6 +915,11 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.error = this.formErrorMessage();
       return;
     }
+    if (this.isCashReceiptRequired() && !this.normalizedReceiptNumber()) {
+      this.error = 'Receipt number is required when the remaining balance is paid with cash.';
+      return;
+    }
+    this.confirmingReservation = true;
     this.loading = true;
     this.error = null;
     const depositAmount = this.form.controls.depositAmount.value;
@@ -945,6 +1022,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.holdId = null;
           this.holdExpiresAt = null;
           this.holdCountdown = 0;
+          this.holdExpired = false;
           this.clearHoldTimer();
           this.holdCreatedByMe = false;
           this.showReleaseConfirm = false;
@@ -959,6 +1037,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
           if (!reservationId) {
             this.error = 'Reservation created but reservation id was missing.';
+            this.confirmingReservation = false;
             this.loading = false;
             return;
           }
@@ -988,6 +1067,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                 next: () => {
                   if (creditRemainingAmount > 0) {
                     if (remainingMethod === 'square' || remainingMethod === 'client') {
+                      this.confirmingReservation = false;
                       this.loading = false;
                       this.generatePaymentLinkForCurrentFlow();
                       return;
@@ -1000,9 +1080,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                         amount: creditRemainingAmount,
                         method: remainingMethod,
                         note: 'Remaining balance after credit',
+                        receiptNumber:
+                          remainingMethod === 'cash' ? this.normalizedReceiptNumber() : '',
                       })
                       .subscribe({
                         next: () => {
+                          this.confirmingReservation = false;
                           this.loading = false;
                           this.finishReservationFlow();
                         },
@@ -1011,12 +1094,14 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                             err?.error?.message ||
                             err?.message ||
                             `Credit applied, but remaining payment failed. Reservation ID: ${reservationId}`;
+                          this.confirmingReservation = false;
                           this.loading = false;
                         },
                       });
                     return;
                   }
 
+                  this.confirmingReservation = false;
                   this.loading = false;
                   this.finishReservationFlow();
                 },
@@ -1025,6 +1110,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
                     err?.error?.message ||
                     err?.message ||
                     `Reservation created, but credit apply failed. Reservation ID: ${reservationId}`;
+                  this.confirmingReservation = false;
                   this.loading = false;
                 },
               });
@@ -1033,6 +1119,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
           if (paymentMethod === 'square') {
             if (autoSquareLinkSms?.sent) {
+              this.confirmingReservation = false;
               this.loading = false;
               this.finishReservationFlow();
               return;
@@ -1047,6 +1134,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               amount: amountDue,
               linkMode: 'square',
             };
+            this.confirmingReservation = false;
             this.loading = false;
             this.generatePaymentLinkForCurrentFlow();
             return;
@@ -1054,6 +1142,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
           if (paymentMethod === 'client') {
             if (autoSquareLinkSms?.sent) {
+              this.confirmingReservation = false;
               this.loading = false;
               this.finishReservationFlow();
               return;
@@ -1068,17 +1157,20 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
               amount: amountDue,
               linkMode: 'client',
             };
+            this.confirmingReservation = false;
             this.loading = false;
             this.generatePaymentLinkForCurrentFlow();
             return;
           }
 
+          this.confirmingReservation = false;
           this.loading = false;
           this.finishReservationFlow();
         },
         error: (err) => {
           this.error =
             err?.error?.message || err?.message || 'Failed to confirm reservation';
+          this.confirmingReservation = false;
           this.loading = false;
         },
       });
@@ -1101,7 +1193,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.saveActiveHoldSessionIfNeeded();
       return;
     }
+    // No live hold (or hold expired): just close the modal and clear the
+    // expired flag so it doesn't surface again the next time the modal opens.
     this.showReservationModal = false;
+    this.holdExpired = false;
     this.saveActiveHoldSessionIfNeeded();
   }
 
@@ -1130,6 +1225,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           if (this.holdCountdown <= 0) {
             this.clearHoldTimer();
             this.clearActiveHoldSession();
+            // Surface the expiry to the UI: null the scalars so the
+            // countdown chip disappears, drop the multi-table holds (they
+            // share the same TTL), and flag holdExpired so the modal can
+            // render a "hold expired" banner instead of a stuck 0:00.
+            // confirmReservation already short-circuits on !holdId.
+            this.holdExpired = true;
+            this.holdId = null;
+            this.holdExpiresAt = null;
+            this.holdEntries = [];
+            this.holdCreatedByMe = false;
           }
         });
       }, 1000);
@@ -1248,6 +1353,33 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.clientCreditRemainingAmount() > 0 &&
       this.form.controls.remainingMethod.value !== 'cash'
     );
+  }
+
+  // True when the credit-applied remainder will be collected as cash and
+  // the venue's settings require a receipt number for cash payments.
+  // Backend services-payment-recording.mjs:578 rejects method:'cash' without
+  // a receiptNumber when resolveCashReceiptNumberRequired() is true (default).
+  isCashReceiptRequired(): boolean {
+    if (!this.cashReceiptNumberRequired) return false;
+    return (
+      this.isUsingClientCredit() &&
+      this.clientCreditRemainingAmount() > 0 &&
+      this.form.controls.remainingMethod.value === 'cash'
+    );
+  }
+
+  shouldShowCashReceiptError(): boolean {
+    return (
+      this.confirmSubmitAttempted &&
+      this.isCashReceiptRequired() &&
+      !this.normalizedReceiptNumber()
+    );
+  }
+
+  private normalizedReceiptNumber(): string {
+    return String(this.form.controls.receiptNumber.value ?? '')
+      .replace(/\D+/g, '')
+      .trim();
   }
 
   toggleCustomDeposit(): void {
@@ -1388,6 +1520,16 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return this.createdReservation?.linkMode ?? this.currentLinkModeFromForm();
   }
 
+  private newIdempotencyKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Fallback for non-secure contexts where crypto.randomUUID is missing
+    // (e.g. older Safari, http://localhost without secure context). Random
+    // enough for an idempotency token; not used for any security boundary.
+    return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   generatePaymentLinkForCurrentFlow(): void {
     if (!this.createdReservation) return;
     const linkMode = this.currentLinkMode();
@@ -1397,6 +1539,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.creatingPaymentLink = true;
     this.paymentLinkError = null;
     this.paymentLinkNotice = null;
+    // Square's create-link route accepts an idempotencyKey; a per-attempt
+    // UUID makes rapid double-clicks and component re-mount races collapse
+    // onto a single Square link instead of minting orphans. The Cash App
+    // link route mints a fresh token per call regardless, so no key needed
+    // there.
+    const idempotencyKey = this.newIdempotencyKey();
 
     if (linkMode === 'client') {
       this.reservationsApi
@@ -1436,6 +1584,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           formatBookingTablesLabel(this.createdReservation.tableIds) ||
           `table ${this.createdReservation.tableId}`
         }`,
+        idempotencyKey,
       })
       .subscribe({
         next: (res) => {
@@ -1471,7 +1620,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     if (!this.createdReservation || !this.paymentLinkUrl) return;
     const body = buildShareMessage(this.createdReservation, this.paymentLinkUrl);
     const recipient = toSmsRecipient(this.createdReservation.phone);
-    const target = recipient ? `sms:${recipient}?&body=${encodeURIComponent(body)}` : `sms:?&body=${encodeURIComponent(body)}`;
+    const target = recipient ? `sms:${recipient}?body=${encodeURIComponent(body)}` : `sms:?body=${encodeURIComponent(body)}`;
     window.open(target, '_blank');
   }
 
@@ -1672,7 +1821,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       useCredit: false,
       creditId: '',
       remainingMethod: 'cash',
+      receiptNumber: '',
     });
+    this.confirmSubmitAttempted = false;
+    this.holdExpired = false;
     this.phoneCountry = 'US';
     this.clearClientCreditsState();
   }
@@ -1770,21 +1922,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     return counts;
   }
 
-  private syncSidebarModalLock(forceUnlock = false): void {
-    if (typeof document === 'undefined') return;
-
-    const shouldLock = !forceUnlock && (
-      this.showPastModal ||
-      this.showReservationModal ||
-      this.showReleaseConfirm
-    );
-
-    if (shouldLock === this.sidebarModalLockActive) return;
-
-    document.body.classList.toggle(this.sidebarModalLockClass, shouldLock);
-    this.sidebarModalLockActive = shouldLock;
-  }
-
   private syncWorkspaceScrollLock(forceUnlock = false): void {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     const shouldLock =
@@ -1837,6 +1974,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           10
         );
         this.tableSectionColors = normalizeSectionMapColors(ctx?.settings?.sectionMapColors);
+        const cashReceiptSetting = ctx?.settings?.cashReceiptNumberRequired;
+        this.cashReceiptNumberRequired =
+          typeof cashReceiptSetting === 'boolean' ? cashReceiptSetting : true;
         if (this.eventDate) {
           this.startPolling();
           return;
@@ -1993,6 +2133,7 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         this.holdId = primary.holdId;
         this.holdExpiresAt = primary.holdExpiresAt ?? null;
         this.holdCreatedByMe = primary.holdCreatedByMe !== false;
+        this.holdExpired = false;
         this.showReservationModal = session.showReservationModal !== false;
         this.showReleaseConfirm = false;
         this.startHoldTimer();

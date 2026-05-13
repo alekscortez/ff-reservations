@@ -620,6 +620,9 @@
             <span
               class="rounded-full border border-brand-200 px-3 py-1 text-xs font-semibold text-brand-700"
               *ngIf="holdId"
+              role="timer"
+              aria-live="polite"
+              aria-label="Hold expires in"
             >
               {{ holdCountdownLabel }}
             </span>
@@ -633,6 +636,10 @@
             </button>
           </div>
         </div>
+        <hlm-alert variant="warning" *ngIf="holdExpired">
+          <strong>Hold expired.</strong>
+          Close this dialog and pick a table again to start a fresh hold.
+        </hlm-alert>
         <div
           class="rounded-xl border border-brand-100 bg-brand-50 p-3"
           *ngIf="!createdReservation && (selectedTables.length > 0 || holdId)"
@@ -781,6 +788,21 @@
                       <option value="client">Cash App</option>
                     </select>
                   </label>
+                  <label class="grid gap-1 text-xs text-brand-600" *ngIf="isCashReceiptRequired()">
+                    Remaining Cash Receipt Number
+                    <input
+                      type="text"
+                      hlmInput
+                      formControlName="receiptNumber"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      maxlength="64"
+                      placeholder="Receipt number"
+                    />
+                    <span class="text-xs text-danger-700" *ngIf="shouldShowCashReceiptError()">
+                      Receipt number is required when the remaining balance is paid with cash.
+                    </span>
+                  </label>
                 </ng-container>
               </div>
             </div>
@@ -794,6 +816,8 @@
                   class="rounded-lg h-10 font-semibold touch-manipulation"
                   *ngFor="let method of paymentMethodOptions; trackBy: trackByPaymentMethodOption"
                   [active]="isPaymentMethod(method.value)"
+                  [attr.aria-pressed]="isPaymentMethod(method.value)"
+                  [attr.aria-label]="'Payment method: ' + method.label"
                   (mousedown)="onPaymentMethodButtonClick($event, method.value)"
                   (click)="onPaymentMethodButtonClick($event, method.value)"
                 >
