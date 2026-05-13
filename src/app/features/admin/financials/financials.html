@@ -187,10 +187,10 @@
       />
 
       <div *ngIf="loading" class="text-sm text-brand-500">Loading report…</div>
-      <div *ngIf="!loading && eventSummaries().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+      <div *ngIf="!loading && eventSummaries().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
         No events found for the selected filters.
       </div>
-      <div *ngIf="!loading && eventSummaries().length > 0 && summariesTotalFiltered() === 0" class="text-sm text-brand-500">
+      <div *ngIf="!loading && eventSummaries().length > 0 && summariesTotalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">
         No matches.
       </div>
 
@@ -304,10 +304,10 @@
     />
 
     <div *ngIf="loading" class="text-sm text-brand-500">Loading report…</div>
-    <div *ngIf="!loading && receivables().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+    <div *ngIf="!loading && receivables().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
       No receivables in this filter range.
     </div>
-    <div *ngIf="!loading && receivables().length > 0 && receivablesTotalFiltered() === 0" class="text-sm text-brand-500">
+    <div *ngIf="!loading && receivables().length > 0 && receivablesTotalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">
       No matches.
     </div>
 
@@ -443,10 +443,10 @@
     </div>
 
     <div *ngIf="loading" class="text-sm text-brand-500">Loading ledger…</div>
-    <div *ngIf="!loading && ledgerRows().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+    <div *ngIf="!loading && ledgerRows().length === 0" class="rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
       No payments recorded in this filter range.
     </div>
-    <div *ngIf="!loading && ledgerRows().length > 0 && ledgerTotalFiltered() === 0" class="text-sm text-brand-500">
+    <div *ngIf="!loading && ledgerRows().length > 0 && ledgerTotalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">
       No matches.
     </div>
 

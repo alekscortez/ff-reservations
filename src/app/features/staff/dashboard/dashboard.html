@@ -61,7 +61,7 @@
       </div>
 
       <div *ngIf="loadingSnapshot" class="mt-3 text-sm text-brand-500">Updating…</div>
-      <div *ngIf="!loadingSnapshot && urgentPayments.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+      <div *ngIf="!loadingSnapshot && urgentPayments.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
         No pending or partial reservations due soon.
       </div>
 
@@ -187,7 +187,7 @@
     </div>
 
     <div *ngIf="loadingSnapshot" class="mt-3 text-sm text-brand-500">Updating…</div>
-    <div *ngIf="!loadingSnapshot && recentActivity.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600">
+    <div *ngIf="!loadingSnapshot && recentActivity.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
       No recent reservation activity for this event.
     </div>
 

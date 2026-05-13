@@ -38,7 +38,7 @@
   </div>
 
   <div *ngIf="loading()" class="text-sm text-brand-500">Loading…</div>
-  <div *ngIf="!loading() && totalFiltered() === 0" class="text-sm text-brand-500">
+  <div *ngIf="!loading() && totalFiltered() === 0" class="text-sm text-brand-500" aria-live="polite">
     No clients.
   </div>
   <hlm-alert variant="destructive" *ngIf="error()">{{ error() }}</hlm-alert>
