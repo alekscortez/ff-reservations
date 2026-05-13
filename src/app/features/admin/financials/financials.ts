@@ -61,7 +61,7 @@ interface FinancialRow {
   eventDate: string;
   reservationId: string;
   status: 'CONFIRMED' | 'CANCELLED';
-  paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | null;
+  paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | 'REFUNDED' | null;
   tableId: string;
   tableIds: string[];
   customerName: string;
@@ -70,6 +70,7 @@ interface FinancialRow {
   paid: number;
   balance: number;
   tablePrice: number;
+  refundedAmount: number;
   paymentMethod: PaymentMethod | null;
   paymentDeadlineAt: string | null;
   deadlineMs: number | null;
@@ -103,6 +104,8 @@ interface OverviewKpis {
   overdue: number;
   dueSoon: number;
   courtesyValue: number;
+  refunded: number;
+  netCollected: number;
 }
 
 interface EventReservationsSnapshot {
@@ -113,7 +116,17 @@ interface EventReservationsSnapshot {
 interface MethodTotals {
   cash: number;
   square: number;
+  cashapp: number;
+  credit: number;
+  refunds: number;
 }
+
+type LedgerSource =
+  | 'manual'
+  | 'square-direct'
+  | 'square-webhook'
+  | 'reschedule-credit'
+  | 'square-refund';
 
 interface PaymentLedgerRow {
   paymentId: string;
@@ -125,7 +138,7 @@ interface PaymentLedgerRow {
   customerName: string;
   amount: number;
   method: PaymentMethod;
-  source: string;
+  source: LedgerSource;
   createdAt: number;
   createdBy: string | null;
   providerPaymentId: string | null;
@@ -133,6 +146,7 @@ interface PaymentLedgerRow {
   providerStatus: string | null;
   receiptUrl: string | null;
   isFallback: boolean;
+  isRefund: boolean;
 }
 
 @Component({
@@ -174,7 +188,7 @@ export class Financials implements OnInit, OnDestroy {
   readonly receivables = signal<FinancialRow[]>([]);
   readonly ledgerRows = signal<PaymentLedgerRow[]>([]);
   readonly eventSummaries = signal<EventFinancialSummary[]>([]);
-  methodTotals: MethodTotals = { cash: 0, square: 0 };
+  methodTotals: MethodTotals = { cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 };
 
   rangeFrom = new FormControl('', { nonNullable: true });
   rangeTo = new FormControl('', { nonNullable: true });
@@ -535,6 +549,8 @@ export class Financials implements OnInit, OnDestroy {
     overdue: 0,
     dueSoon: 0,
     courtesyValue: 0,
+    refunded: 0,
+    netCollected: 0,
   };
 
   loading = false;
@@ -687,6 +703,7 @@ export class Financials implements OnInit, OnDestroy {
     if (normalized === 'square-direct') return 'bg-brand-100 text-brand-700';
     if (normalized === 'reschedule-credit') return 'bg-warm-100 text-warm-800';
     if (normalized === 'manual') return 'bg-warm-100 text-warm-800';
+    if (normalized === 'square-refund') return 'bg-danger-100 text-danger-700';
     return 'bg-brand-50 text-brand-600';
   }
 
@@ -712,6 +729,7 @@ export class Financials implements OnInit, OnDestroy {
     if (normalized === 'square-direct') return 'Square Charged by Staff';
     if (normalized === 'reschedule-credit') return 'Applied Reservation Credit';
     if (normalized === 'manual') return 'Recorded Manually';
+    if (normalized === 'square-refund') return 'Square Refund';
     return normalized
       .replace(/[_-]+/g, ' ')
       .split(' ')
@@ -851,7 +869,7 @@ export class Financials implements OnInit, OnDestroy {
             Array.isArray(reservation.tableIds) && reservation.tableIds.length > 0
               ? reservation.tableIds
               : [reservation.tableId];
-          return {
+          const row: FinancialRow = {
             eventId: event.eventId,
             eventName: event.eventName,
             eventDate: event.eventDate,
@@ -866,13 +884,15 @@ export class Financials implements OnInit, OnDestroy {
             paid,
             balance,
             tablePrice,
+            refundedAmount: Number(reservation.refundedAmount ?? 0),
             paymentMethod: reservation.paymentMethod ?? null,
             paymentDeadlineAt: reservation.paymentDeadlineAt ?? null,
             deadlineMs,
             isOverdue,
             isDueSoon,
             createdAt: Number(reservation.createdAt ?? 0),
-          } as FinancialRow;
+          };
+          return row;
         })
       )
       .sort((a, b) => {
@@ -947,11 +967,15 @@ export class Financials implements OnInit, OnDestroy {
     receivables: FinancialRow[]
   ): OverviewKpis {
     const confirmed = rows.filter((row) => row.status === 'CONFIRMED');
+    const collected = this.sum(confirmed.map((x) => x.paid));
+    const refunded = this.sum(
+      rows.filter((row) => row.paymentStatus === 'REFUNDED').map((row) => row.refundedAmount)
+    );
     return {
       eventsInRange: events.length,
       reservations: rows.length,
       confirmed: confirmed.length,
-      collected: this.sum(confirmed.map((x) => x.paid)),
+      collected,
       expected: this.sum(confirmed.map((x) => x.amountDue)),
       outstanding: this.sum(receivables.map((x) => x.balance)),
       overdue: this.sum(receivables.filter((x) => x.isOverdue).map((x) => x.balance)),
@@ -959,44 +983,54 @@ export class Financials implements OnInit, OnDestroy {
       courtesyValue: this.sum(
         confirmed.filter((x) => x.paymentStatus === 'COURTESY').map((x) => x.tablePrice)
       ),
+      refunded,
+      netCollected: collected - refunded,
     };
   }
 
   private buildMethodTotals(snapshots: EventReservationsSnapshot[]): MethodTotals {
-    const totals: MethodTotals = { cash: 0, square: 0 };
+    const totals: MethodTotals = { cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 };
 
     for (const { reservations } of snapshots) {
       for (const reservation of reservations) {
-        if (reservation.status !== 'CONFIRMED') continue;
-
-        const payments = reservation.payments ?? [];
-        if (payments.length > 0) {
-          for (const payment of payments) {
-            const method = String((payment as { method?: unknown } | null | undefined)?.method ?? '')
+        if (reservation.status === 'CONFIRMED') {
+          const payments = reservation.payments ?? [];
+          if (payments.length > 0) {
+            for (const payment of payments) {
+              const method = String((payment as { method?: unknown } | null | undefined)?.method ?? '')
+                .trim()
+                .toLowerCase();
+              const amount = Number(payment.amount ?? 0);
+              if (method === 'cash') totals.cash += amount;
+              else if (method === 'square') totals.square += amount;
+              else if (method === 'cashapp') totals.cashapp += amount;
+              else if (method === 'credit') totals.credit += amount;
+            }
+          } else {
+            const fallbackMethod = String(
+              (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
+            )
               .trim()
               .toLowerCase();
-            const amount = Number(payment.amount ?? 0);
-            if (method === 'cash') {
-              totals.cash += amount;
-            } else if (method === 'square' || method === 'cashapp') {
-              totals.square += amount;
+            const fallbackAmount = Number(reservation.depositAmount ?? 0);
+            if (fallbackAmount > 0) {
+              if (fallbackMethod === 'cash') totals.cash += fallbackAmount;
+              else if (fallbackMethod === 'square') totals.square += fallbackAmount;
+              else if (fallbackMethod === 'cashapp') totals.cashapp += fallbackAmount;
+              else if (fallbackMethod === 'credit') totals.credit += fallbackAmount;
             }
           }
-          continue;
         }
 
-        const fallbackMethod = String(
-          (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
-        )
-          .trim()
-          .toLowerCase();
-        const fallbackAmount = Number(reservation.depositAmount ?? 0);
+        // Refunds — counted regardless of current reservation.status so the
+        // operator can reconcile against Square. paymentStatus=REFUNDED is
+        // the canonical refund marker; refundedAmount is the total dollar
+        // value rolled across all successful refunds on the booking.
         if (
-          fallbackAmount > 0 &&
-          (fallbackMethod === 'cash' || fallbackMethod === 'square' || fallbackMethod === 'cashapp')
+          String(reservation.paymentStatus ?? '').toUpperCase() === 'REFUNDED' &&
+          Number(reservation.refundedAmount ?? 0) > 0
         ) {
-          if (fallbackMethod === 'cash') totals.cash += fallbackAmount;
-          else totals.square += fallbackAmount;
+          totals.refunds += Number(reservation.refundedAmount);
         }
       }
     }
@@ -1036,39 +1070,83 @@ export class Financials implements OnInit, OnDestroy {
             });
             if (mapped) rows.push(mapped);
           }
-          continue;
+        } else {
+          const fallbackAmount = Number(reservation.depositAmount ?? 0);
+          const fallbackMethodRaw = String(
+            (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
+          )
+            .trim()
+            .toLowerCase();
+          if (
+            fallbackAmount > 0 &&
+            (fallbackMethodRaw === 'cash' ||
+              fallbackMethodRaw === 'square' ||
+              fallbackMethodRaw === 'cashapp' ||
+              fallbackMethodRaw === 'credit')
+          ) {
+            const fallbackMethod = fallbackMethodRaw as PaymentMethod;
+            rows.push({
+              paymentId: `fallback-${reservationId}`,
+              eventDate,
+              eventName,
+              reservationId,
+              tableId,
+              tableIds,
+              customerName,
+              amount: fallbackAmount,
+              method: fallbackMethod,
+              source: fallbackMethod === 'credit' ? 'reschedule-credit' : 'manual',
+              createdAt: Number(reservation.createdAt ?? 0),
+              createdBy: String(reservation.createdBy ?? '').trim() || null,
+              providerPaymentId: null,
+              orderId: null,
+              providerStatus: null,
+              receiptUrl: null,
+              isFallback: true,
+              isRefund: false,
+            });
+          }
         }
 
-        const fallbackAmount = Number(reservation.depositAmount ?? 0);
-        const fallbackMethod = String(
-          (reservation as { paymentMethod?: unknown } | null | undefined)?.paymentMethod ?? ''
-        )
-          .trim()
-          .toLowerCase();
-        if (
-          fallbackAmount > 0 &&
-          (fallbackMethod === 'cash' || fallbackMethod === 'square' || fallbackMethod === 'cashapp')
-        ) {
-          const normalizedFallbackMethod: PaymentMethod =
-            fallbackMethod === 'cash' ? 'cash' : 'square';
+        // Refund rows — appear as negative-amount entries so a refunded
+        // reservation's charge + refund nets to zero in the ledger. Drives
+        // operator reconciliation against Square.
+        const refunds = Array.isArray(reservation.refunds) ? reservation.refunds : [];
+        const refundedAt = Number(
+          (reservation as { refundedAt?: unknown } | null | undefined)?.refundedAt ?? 0
+        );
+        const refundedBy = String(
+          (reservation as { refundedBy?: unknown } | null | undefined)?.refundedBy ?? ''
+        ).trim();
+        for (const refund of refunds) {
+          if (!refund || refund.success === false) continue;
+          const refundAmount = Number(refund.amount ?? 0);
+          if (!Number.isFinite(refundAmount) || refundAmount <= 0) continue;
+          const refundMethodRaw = String(refund?.method ?? '').trim().toLowerCase();
+          const refundMethod: PaymentMethod =
+            refundMethodRaw === 'cashapp' ? 'cashapp' : 'square';
+          const refundProviderId =
+            String(refund?.refundId ?? refund?.providerPaymentId ?? '').trim() || null;
           rows.push({
-            paymentId: `fallback-${reservationId}`,
+            paymentId:
+              `refund-${reservationId}-${String(refund?.paymentLocalId ?? refundProviderId ?? rows.length).trim()}`,
             eventDate,
             eventName,
             reservationId,
             tableId,
             tableIds,
             customerName,
-            amount: fallbackAmount,
-            method: normalizedFallbackMethod,
-            source: 'manual',
-            createdAt: Number(reservation.createdAt ?? 0),
-            createdBy: String(reservation.createdBy ?? '').trim() || null,
-            providerPaymentId: null,
+            amount: -refundAmount,
+            method: refundMethod,
+            source: 'square-refund',
+            createdAt: refundedAt || Number(reservation.updatedAt ?? reservation.createdAt ?? 0),
+            createdBy: refundedBy || null,
+            providerPaymentId: refundProviderId,
             orderId: null,
-            providerStatus: null,
+            providerStatus: String(refund?.refundStatus ?? '').trim() || null,
             receiptUrl: null,
-            isFallback: true,
+            isFallback: false,
+            isRefund: true,
           });
         }
       }
@@ -1098,12 +1176,19 @@ export class Financials implements OnInit, OnDestroy {
   }): PaymentLedgerRow | null {
     const { eventDate, eventName, reservationId, tableId, tableIds, customerName, reservation, payment } = input;
     const rawMethod = String(payment?.method ?? '').trim().toLowerCase();
-    if (rawMethod !== 'cash' && rawMethod !== 'cashapp' && rawMethod !== 'square') return null;
-    const method: PaymentMethod = rawMethod === 'cash' ? 'cash' : 'square';
+    if (
+      rawMethod !== 'cash' &&
+      rawMethod !== 'cashapp' &&
+      rawMethod !== 'square' &&
+      rawMethod !== 'credit'
+    ) {
+      return null;
+    }
+    const method = rawMethod as PaymentMethod;
 
     const provider = payment?.provider && typeof payment.provider === 'object' ? payment.provider : null;
-    const source = String(payment?.source ?? '').trim().toLowerCase();
-    const normalizedSource = source || (method === 'square' ? 'square-direct' : 'manual');
+    const rawSource = String(payment?.source ?? '').trim().toLowerCase();
+    const normalizedSource = this.normalizeLedgerSource(rawSource, method);
 
     return {
       paymentId: String(payment?.paymentId ?? '').trim() || `payment-${reservationId}`,
@@ -1123,7 +1208,22 @@ export class Financials implements OnInit, OnDestroy {
       providerStatus: String(provider?.providerStatus ?? '').trim() || null,
       receiptUrl: String(provider?.receiptUrl ?? '').trim() || null,
       isFallback: false,
+      isRefund: false,
     };
+  }
+
+  private normalizeLedgerSource(rawSource: string, method: PaymentMethod): LedgerSource {
+    const allowed: LedgerSource[] = [
+      'manual',
+      'square-direct',
+      'square-webhook',
+      'reschedule-credit',
+      'square-refund',
+    ];
+    if ((allowed as string[]).includes(rawSource)) return rawSource as LedgerSource;
+    if (method === 'cash') return 'manual';
+    if (method === 'credit') return 'reschedule-credit';
+    return 'square-direct';
   }
 
   private clearReport(): void {
@@ -1131,7 +1231,7 @@ export class Financials implements OnInit, OnDestroy {
     this.receivables.set([]);
     this.ledgerRows.set([]);
     this.eventSummaries.set([]);
-    this.methodTotals = { cash: 0, square: 0 };
+    this.methodTotals = { cash: 0, square: 0, cashapp: 0, credit: 0, refunds: 0 };
     this.overview = {
       eventsInRange: 0,
       reservations: 0,
@@ -1142,6 +1242,8 @@ export class Financials implements OnInit, OnDestroy {
       overdue: 0,
       dueSoon: 0,
       courtesyValue: 0,
+      refunded: 0,
+      netCollected: 0,
     };
   }
 
