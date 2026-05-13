@@ -450,6 +450,31 @@ describe('Financials', () => {
       expect(s.collected).toBe(150);
       expect(s.outstanding).toBe(50);
       expect(s.overdue).toBe(50);
+      expect(s.refunded).toBe(0);
+    });
+
+    it('rolls refundedAmount per event', () => {
+      const event = makeEvent();
+      const paid = makeReservation({
+        reservationId: 'paid',
+        depositAmount: 100,
+        amountDue: 100,
+        paymentStatus: 'PAID',
+      });
+      const refunded = makeReservation({
+        reservationId: 'refunded',
+        status: 'CANCELLED',
+        paymentStatus: 'REFUNDED',
+        depositAmount: 80,
+        amountDue: 80,
+        refundedAmount: 80,
+      });
+      const rows = (component as any).buildRows([
+        { event, reservations: [paid, refunded] },
+      ]);
+      const receivables = (component as any).buildReceivables(rows);
+      const summaries = (component as any).buildEventSummaries([event], rows, receivables);
+      expect(summaries[0].refunded).toBe(80);
     });
   });
 
@@ -459,6 +484,24 @@ describe('Financials', () => {
     it('formats square-refund as "Square Refund" with danger badge', () => {
       expect(component.formatSourceLabel('square-refund')).toBe('Square Refund');
       expect(component.sourceBadgeClass('square-refund')).toContain('danger');
+    });
+  });
+
+  describe('formatLedgerActor', () => {
+    it('returns "Staff (Unknown)" for refund rows missing an actor', () => {
+      const row = {
+        source: 'square-refund',
+        createdBy: null,
+      } as any;
+      expect(component.formatLedgerActor(row)).toBe('Staff (Unknown)');
+    });
+
+    it('returns the staff email when refundedBy is a real user', () => {
+      const row = {
+        source: 'square-refund',
+        createdBy: 'admin@example.com',
+      } as any;
+      expect(component.formatLedgerActor(row)).toBe('admin@example.com');
     });
   });
 

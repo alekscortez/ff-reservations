@@ -92,6 +92,7 @@ interface EventFinancialSummary {
   outstanding: number;
   overdue: number;
   courtesyValue: number;
+  refunded: number;
 }
 
 interface OverviewKpis {
@@ -276,6 +277,12 @@ export class Financials implements OnInit, OnDestroy {
     {
       id: 'overdue',
       accessorFn: (r) => Number(r.overdue ?? 0),
+      enableSorting: true,
+      sortingFn: 'basic',
+    },
+    {
+      id: 'refunded',
+      accessorFn: (r) => Number(r.refunded ?? 0),
       enableSorting: true,
       sortingFn: 'basic',
     },
@@ -602,12 +609,13 @@ export class Financials implements OnInit, OnDestroy {
       'reservation_id',
       'reservation_status',
       'payment_status',
-      'table_id',
+      'tables',
       'customer_name',
       'phone',
       'amount_due',
       'paid',
       'balance',
+      'refunded_amount',
       'table_price',
       'payment_method',
       'payment_deadline',
@@ -617,6 +625,7 @@ export class Financials implements OnInit, OnDestroy {
 
     const body = this.rows.map((row) => {
       const event = eventByDate.get(row.eventDate);
+      const tableList = row.tableIds.length > 0 ? row.tableIds.join(' | ') : row.tableId;
       return [
         row.eventDate,
         row.eventName,
@@ -624,18 +633,70 @@ export class Financials implements OnInit, OnDestroy {
         row.reservationId,
         row.status,
         row.paymentStatus ?? '',
-        row.tableId,
+        tableList,
         row.customerName,
         row.phone,
         row.amountDue.toFixed(2),
         row.paid.toFixed(2),
         row.balance.toFixed(2),
+        Number(row.refundedAmount || 0).toFixed(2),
         row.tablePrice.toFixed(2),
         row.paymentMethod ?? '',
         row.paymentDeadlineAt ?? '',
       ].map((x) => this.escapeCsv(x));
     });
 
+    this.downloadCsv(headers, body, 'financials');
+  }
+
+  exportLedgerCsv(): void {
+    const rows = this.ledgerRows();
+    if (rows.length === 0) return;
+
+    const headers = [
+      'paid_at',
+      'event_date',
+      'event_name',
+      'reservation_id',
+      'tables',
+      'customer_name',
+      'amount',
+      'method',
+      'source',
+      'square_txn_id',
+      'order_id',
+      'provider_status',
+      'receipt_url',
+      'actor',
+      'is_refund',
+    ];
+
+    const body = rows.map((row) => {
+      const tableList = row.tableIds.length > 0 ? row.tableIds.join(' | ') : row.tableId;
+      const paidAt = row.createdAt > 0 ? new Date(row.createdAt * 1000).toISOString() : '';
+      return [
+        paidAt,
+        row.eventDate,
+        row.eventName,
+        row.reservationId,
+        tableList,
+        row.customerName,
+        row.amount.toFixed(2),
+        this.formatMethodLabel(row.method),
+        this.formatSourceLabel(row.source),
+        row.providerPaymentId ?? '',
+        row.orderId ?? '',
+        row.providerStatus ?? '',
+        row.receiptUrl ?? '',
+        this.formatLedgerActor(row),
+        row.isRefund ? 'true' : 'false',
+      ].map((x) => this.escapeCsv(x));
+    });
+
+    this.downloadCsv(headers, body, 'payment-ledger');
+  }
+
+  private downloadCsv(headers: string[], body: string[][], baseName: string): void {
     const csv = [headers.join(','), ...body.map((line) => line.join(','))].join('\n');
     const now = new Date();
     const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
@@ -651,7 +712,7 @@ export class Financials implements OnInit, OnDestroy {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `financials${rangeStamp}-${stamp}.csv`;
+    a.download = `${baseName}${rangeStamp}-${stamp}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -760,7 +821,10 @@ export class Financials implements OnInit, OnDestroy {
     const actor = String(row?.createdBy ?? '').trim();
     const isSystemActor = actor.toLowerCase().startsWith('system:');
 
-    if ((source === 'square-direct' || source === 'manual') && (!actor || isSystemActor)) {
+    if (
+      (source === 'square-direct' || source === 'manual' || source === 'square-refund') &&
+      (!actor || isSystemActor)
+    ) {
       return 'Staff (Unknown)';
     }
 
@@ -954,6 +1018,11 @@ export class Financials implements OnInit, OnDestroy {
       const courtesyValue = this.sum(
         confirmed.filter((x) => x.paymentStatus === 'COURTESY').map((x) => x.tablePrice)
       );
+      const refunded = this.sum(
+        eventRows
+          .filter((x) => x.paymentStatus === 'REFUNDED')
+          .map((x) => Number(x.refundedAmount || 0))
+      );
 
       return {
         eventId: event.eventId,
@@ -968,6 +1037,7 @@ export class Financials implements OnInit, OnDestroy {
         outstanding,
         overdue,
         courtesyValue,
+        refunded,
       };
     });
   }

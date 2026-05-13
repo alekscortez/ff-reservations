@@ -215,6 +215,9 @@
                   <hlm-table-sort-header [column]="summariesColumn('overdue')!" label="Overdue" class="-mr-3 ml-auto flex" />
                 </th>
                 <th hlmTh class="text-right">
+                  <hlm-table-sort-header [column]="summariesColumn('refunded')!" label="Refunded" class="-mr-3 ml-auto flex" />
+                </th>
+                <th hlmTh class="text-right">
                   <hlm-table-sort-header [column]="summariesColumn('confirmed')!" label="Confirmed" class="-mr-3 ml-auto flex" />
                 </th>
               </tr>
@@ -233,6 +236,13 @@
                 <td hlmTd class="text-right tabular-nums">{{ formatCurrency(summary.collected) }}</td>
                 <td hlmTd class="text-right tabular-nums">{{ formatCurrency(summary.outstanding) }}</td>
                 <td hlmTd class="text-right tabular-nums">{{ formatCurrency(summary.overdue) }}</td>
+                <td
+                  hlmTd
+                  class="text-right tabular-nums"
+                  [ngClass]="summary.refunded > 0 ? 'text-danger-700' : 'text-brand-500'"
+                >
+                  {{ summary.refunded > 0 ? '−' + formatCurrency(summary.refunded) : formatCurrency(0) }}
+                </td>
                 <td hlmTd class="text-right tabular-nums">{{ summary.confirmed }} / {{ summary.reservations }}</td>
               </tr>
             </tbody>
@@ -259,6 +269,12 @@
             <div class="rounded-lg border border-brand-100 bg-brand-50 px-2 py-1">
               <p class="text-[11px] text-brand-500">Outstanding</p>
               <p class="font-semibold text-brand-900 tabular-nums">{{ formatCurrency(summary.outstanding) }}</p>
+            </div>
+            <div *ngIf="summary.refunded > 0" class="col-span-2 rounded-lg border border-danger-200 bg-danger-50 px-2 py-1">
+              <p class="text-[11px] text-danger-700">Refunded</p>
+              <p class="font-semibold text-danger-700 tabular-nums">
+                −{{ formatCurrency(summary.refunded) }}
+              </p>
             </div>
           </div>
         </article>
@@ -388,18 +404,28 @@
         hlmInput
         class="w-full sm:w-80"
         [formControl]="ledgerFilter"
-        placeholder="Filter payments by customer, event, txn, or order…"
+        placeholder="Filter payments by customer, event, txn, source…"
         aria-label="Filter payment ledger"
       />
-      <button
-        hlmBtn variant="outline"
-        type="button"
-        [hlmMenuTriggerFor]="ledgerColumnsMenu"
-        aria-label="Show or hide columns"
-      >
-        Columns
-        <ng-icon name="lucideChevronDown" size="14" class="ml-2 opacity-70" />
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          hlmBtn variant="outline"
+          type="button"
+          (click)="exportLedgerCsv()"
+          [disabled]="ledgerRows().length === 0 || loading"
+        >
+          Export Ledger
+        </button>
+        <button
+          hlmBtn variant="outline"
+          type="button"
+          [hlmMenuTriggerFor]="ledgerColumnsMenu"
+          aria-label="Show or hide columns"
+        >
+          Columns
+          <ng-icon name="lucideChevronDown" size="14" class="ml-2 opacity-70" />
+        </button>
+      </div>
       <ng-template #ledgerColumnsMenu>
         <div hlmMenu class="min-w-[10rem]">
           <ng-container *ngFor="let id of ledgerHidableColumnIds">
