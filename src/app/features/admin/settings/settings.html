@@ -4,9 +4,9 @@
   </header>
 
   <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
-    <div *ngIf="loading" class="text-sm text-brand-500">Loading settings…</div>
+    <div *ngIf="loading()" class="text-sm text-brand-500">Loading settings…</div>
 
-    <div *ngIf="!loading" class="grid gap-4 xl:grid-cols-2">
+    <div *ngIf="!loading()" class="grid gap-4 xl:grid-cols-2">
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4" open>
         <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Operations</summary>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
@@ -276,22 +276,22 @@
         <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Integrations</summary>
         <div class="mt-3 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-700">
           Square environment:
-          <span class="font-semibold text-brand-900">{{ squareEnvMode || 'unknown' }}</span>
+          <span class="font-semibold text-brand-900">{{ squareEnvMode() || 'unknown' }}</span>
         </div>
       </details>
     </div>
 
-    <hlm-alert *ngIf="error" variant="destructive" class="mt-3">{{ error }}</hlm-alert>
-    <hlm-alert *ngIf="notice" variant="success" class="mt-3">{{ notice }}</hlm-alert>
+    <hlm-alert *ngIf="error()" variant="destructive" class="mt-3">{{ error() }}</hlm-alert>
+    <hlm-alert *ngIf="notice()" variant="success" class="mt-3">{{ notice() }}</hlm-alert>
 
     <div class="mt-4 flex justify-end">
       <button
         type="button"
         hlmBtn size="lg"
         (click)="save()"
-        [disabled]="loading || saving || form.invalid"
+        [disabled]="loading() || saving() || form.invalid"
       >
-        {{ saving ? 'Saving…' : 'Save Settings' }}
+        {{ saving() ? 'Saving…' : 'Save Settings' }}
       </button>
     </div>
   </section>

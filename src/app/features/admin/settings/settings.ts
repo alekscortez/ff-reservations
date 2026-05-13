@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AppSettings, SettingsService } from '../../../core/http/settings.service';
 import { HlmAlert } from '../../../shared/ui/alert';
@@ -11,16 +11,17 @@ import { HlmInput } from '../../../shared/ui/input';
   imports: [CommonModule, ReactiveFormsModule, HlmAlert, HlmButton, HlmInput],
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminSettings implements OnInit {
   private settingsApi = inject(SettingsService);
   private readonly hexColorPattern = /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/;
 
-  loading = false;
-  saving = false;
-  error: string | null = null;
-  notice: string | null = null;
-  squareEnvMode: 'sandbox' | 'production' | null = null;
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly notice = signal<string | null>(null);
+  readonly squareEnvMode = signal<'sandbox' | 'production' | null>(null);
 
   form = new FormGroup({
     operatingTz: new FormControl('America/Chicago', {
@@ -113,17 +114,17 @@ export class AdminSettings implements OnInit {
   }
 
   load(): void {
-    this.loading = true;
-    this.error = null;
-    this.notice = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.notice.set(null);
     this.settingsApi.getAdminSettings().subscribe({
       next: (item) => {
         this.applySettings(item);
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to load settings';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to load settings');
+        this.loading.set(false);
       },
     });
   }
@@ -133,19 +134,19 @@ export class AdminSettings implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
-    this.saving = true;
-    this.error = null;
-    this.notice = null;
+    this.saving.set(true);
+    this.error.set(null);
+    this.notice.set(null);
 
     this.settingsApi.updateAdminSettings(this.toPatch()).subscribe({
       next: (item) => {
         this.applySettings(item);
-        this.saving = false;
-        this.notice = 'Settings saved.';
+        this.saving.set(false);
+        this.notice.set('Settings saved.');
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to save settings';
-        this.saving = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to save settings');
+        this.saving.set(false);
       },
     });
   }
@@ -179,7 +180,7 @@ export class AdminSettings implements OnInit {
       allowPastEventPayments: Boolean(item.allowPastEventPayments),
       auditVerboseLogging: Boolean(item.auditVerboseLogging),
     });
-    this.squareEnvMode = item.squareEnvMode ?? null;
+    this.squareEnvMode.set(item.squareEnvMode ?? null);
   }
 
   private toPatch(): Partial<AppSettings> {
