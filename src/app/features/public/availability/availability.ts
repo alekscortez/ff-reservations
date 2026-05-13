@@ -201,9 +201,11 @@ export class PublicAvailability implements OnInit, OnDestroy {
       return;
     }
     if (current.length >= this.maxTables()) {
-      this.selectionLimitNotice.set(
-        `Maximum ${this.maxTables()} tables per booking.`
-      );
+      // Cap reached. Re-open the modal so the customer sees the
+      // in-context "Up to N tables — for larger parties, call/whatsapp"
+      // card next to their existing selection. The modal owns the cap
+      // messaging; no page-level notice needed.
+      this.modalOpen.set(true);
       return;
     }
     this.selectedIds.set([...current, table.id]);

@@ -23,7 +23,7 @@
   <div class="grid gap-4 p-4">
     <section class="grid gap-2">
       <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">
-        Selected ({{ selectedTables().length }} of {{ maxTables() }})
+        Selected
       </p>
       <ul class="grid gap-2">
         <li
@@ -50,12 +50,43 @@
         (click)="onAddAnother()"
         [disabled]="submitting()"
       >+ Add another table</button>
-      <p
+
+      <!-- Cap reached. Reveal the cap (so the customer knows it's not
+           a glitch) plus the staff-handoff CTAs for larger parties.
+           Hidden entirely if no contact phone is configured — the bare
+           "max reached" copy replaces it. -->
+      <div
         *ngIf="!canAddAnother()"
-        class="text-xs text-brand-500"
+        class="grid gap-2 rounded-lg border border-warm-200 bg-warm-50 p-3 text-sm text-warm-900"
       >
-        Maximum {{ maxTables() }} tables per booking.
-      </p>
+        <p class="font-medium">
+          Up to {{ maxTables() }} tables per online booking.
+        </p>
+        <ng-container *ngIf="hasContactPhone(); else capNoContact">
+          <p class="text-xs text-warm-800">
+            For a larger party, reach out and we'll set it up directly.
+          </p>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <a
+              hlmBtn size="sm"
+              [href]="telHref()"
+              aria-label="Call Famoso Fuego for a larger party"
+            >Call us</a>
+            <a
+              hlmBtn variant="outline" size="sm"
+              [href]="whatsappHref()"
+              target="_blank"
+              rel="noopener"
+              aria-label="WhatsApp Famoso Fuego for a larger party"
+            >WhatsApp</a>
+          </div>
+        </ng-container>
+        <ng-template #capNoContact>
+          <p class="text-xs text-warm-800">
+            For a larger party, please contact us at the venue.
+          </p>
+        </ng-template>
+      </div>
     </section>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3">

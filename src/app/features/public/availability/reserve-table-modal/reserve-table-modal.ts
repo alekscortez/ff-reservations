@@ -258,6 +258,11 @@ export class ReserveTableModal implements OnDestroy {
   readonly selectedTables = input<PublicAvailabilityTable[]>([]);
   readonly maxTables = input<number>(4);
   readonly turnstileSiteKey = input<string | null>(null);
+  // Optional E.164 phone for the "larger party" fallback CTA. When the
+  // customer hits the per-booking cap, the modal swaps "+ Add another
+  // table" for a friendlier "we'll help directly" card with Call /
+  // WhatsApp buttons. Hidden entirely when no contact phone is set.
+  readonly contactPhone = input<string | null>(null);
 
   @Output() closed = new EventEmitter<void>();
   @Output() addAnother = new EventEmitter<void>();
@@ -296,6 +301,22 @@ export class ReserveTableModal implements OnDestroy {
   readonly hasTurnstile = computed(() =>
     Boolean(String(this.turnstileSiteKey() ?? '').trim())
   );
+
+  readonly hasContactPhone = computed(() =>
+    Boolean(String(this.contactPhone() ?? '').trim())
+  );
+
+  readonly telHref = computed(() => {
+    const p = String(this.contactPhone() ?? '').trim();
+    return p ? `tel:${p}` : '';
+  });
+
+  readonly whatsappHref = computed(() => {
+    const p = String(this.contactPhone() ?? '').trim();
+    if (!p) return '';
+    const digits = p.replace(/[^\d]/g, '');
+    return digits ? `https://wa.me/${digits}` : '';
+  });
 
   onClose(): void {
     if (this.submitting()) return;

@@ -57,6 +57,23 @@ export class ReservationStatus implements OnInit, OnDestroy {
   readonly walletDownloading = signal(false);
   readonly walletError = signal<string | null>(null);
 
+  // Apple's official "Add to Apple Wallet" badge — locale-aware. Uses the
+  // Spanish (Mexico) variant for `es-*` browsers, English elsewhere. Apple
+  // ships 46+ locales but EN + ES-MX cover FF's McAllen audience.
+  readonly walletBadgeSrc = computed(() => {
+    const lang = (typeof navigator !== 'undefined' ? navigator.language : '')
+      .toLowerCase();
+    return lang.startsWith('es')
+      ? '/assets/wallet/add-to-apple-wallet-es-mx.svg'
+      : '/assets/wallet/add-to-apple-wallet-en.svg';
+  });
+
+  readonly walletBadgeLabel = computed(() =>
+    this.walletBadgeSrc().includes('es-mx')
+      ? 'Agregar a Apple Wallet'
+      : 'Add to Apple Wallet'
+  );
+
   private reservationId = '';
   private customerToken = '';
   private eventDate = '';
