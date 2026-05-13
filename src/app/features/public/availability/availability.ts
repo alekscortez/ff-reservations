@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
@@ -20,6 +20,7 @@ import { HlmAlert } from '../../../shared/ui/alert';
   imports: [CommonModule, ReactiveFormsModule, TableMap, HlmInput, HlmToggle, HlmAlert],
   templateUrl: './availability.html',
   styleUrl: './availability.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PublicAvailability implements OnInit, OnDestroy {
   private api = inject(PublicAvailabilityService);
@@ -34,13 +35,22 @@ export class PublicAvailability implements OnInit, OnDestroy {
     E: '#711411',
   };
 
-  loading = false;
-  error: string | null = null;
-  data: PublicAvailabilityResponse | null = null;
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly data = signal<PublicAvailabilityResponse | null>(null);
 
   viewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
   search = new FormControl('', { nonNullable: true });
   availableOnly = new FormControl(true, { nonNullable: true });
+
+  // Form-control values as signals so the computed lists below stay
+  // reactive without manual recompute.
+  private readonly searchSignal = toSignal(this.search.valueChanges, {
+    initialValue: this.search.value,
+  });
+  private readonly availableOnlySignal = toSignal(this.availableOnly.valueChanges, {
+    initialValue: this.availableOnly.value,
+  });
 
   private pollSub: Subscription | null = null;
   private pollingSeconds = 0;
@@ -79,18 +89,22 @@ export class PublicAvailability implements OnInit, OnDestroy {
     return this.viewMode.value === mode;
   }
 
-  filteredTables(): PublicAvailabilityTable[] {
-    const rows = this.data?.tables ?? [];
-    const query = this.search.value.trim().toLowerCase();
-    const availableOnly = this.availableOnly.value;
+  // Memoized derivations of `data` + form-control filters. Computed
+  // signals re-evaluate only when their inputs change instead of on
+  // every CD cycle, so the template can keep its invocation-form
+  // bindings (`filteredTables()`, `mapTables()`, `sectionLegend()`).
+  readonly filteredTables = computed<PublicAvailabilityTable[]>(() => {
+    const rows = this.data()?.tables ?? [];
+    const query = (this.searchSignal() ?? '').trim().toLowerCase();
+    const availableOnly = this.availableOnlySignal() ?? true;
     return rows
       .filter((item) => (availableOnly ? item.available : true))
       .filter((item) => (query ? item.id.toLowerCase().includes(query) : true))
       .sort((a, b) => this.compareTableId(a.id, b.id));
-  }
+  });
 
-  mapTables(): TableForEvent[] {
-    const source = this.data?.tables ?? [];
+  readonly mapTables = computed<TableForEvent[]>(() => {
+    const source = this.data()?.tables ?? [];
     return source.map((item) => ({
       id: item.id,
       number: item.number,
@@ -99,10 +113,10 @@ export class PublicAvailability implements OnInit, OnDestroy {
       status: item.available ? 'AVAILABLE' : 'DISABLED',
       disabled: !item.available,
     }));
-  }
+  });
 
   asOfLabel(): string {
-    const epoch = Number(this.data?.asOfEpoch ?? 0);
+    const epoch = Number(this.data()?.asOfEpoch ?? 0);
     if (!Number.isFinite(epoch) || epoch <= 0) return '—';
     return new Date(epoch * 1000).toLocaleTimeString([], {
       hour: 'numeric',
@@ -110,8 +124,8 @@ export class PublicAvailability implements OnInit, OnDestroy {
     });
   }
 
-  sectionLegend(): Array<{ section: string; color: string; priceLabel: string }> {
-    const rows = this.data?.tables ?? [];
+  readonly sectionLegend = computed<Array<{ section: string; color: string; priceLabel: string }>>(() => {
+    const rows = this.data()?.tables ?? [];
     if (!rows.length) return [];
 
     const sectionPriceMap = new Map<string, number[]>();
@@ -133,12 +147,12 @@ export class PublicAvailability implements OnInit, OnDestroy {
         color: sectionColors[section] ?? '#94a3b8',
         priceLabel: this.priceLabelForSection(sectionPriceMap.get(section) ?? []),
       }));
-  }
+  });
 
   private loadAvailability(eventDate?: string, silent = false): void {
     if (!silent) {
-      this.loading = true;
-      this.error = null;
+      this.loading.set(true);
+      this.error.set(null);
     }
     this.api.getAvailability(eventDate).subscribe({
       next: (res) => {
@@ -146,19 +160,20 @@ export class PublicAvailability implements OnInit, OnDestroy {
         // every tick stalls the main thread on iOS Chrome — enough to
         // stutter the native share/copy menu. Skip the assignment (and
         // therefore the SVG re-parse) when availability is unchanged.
-        const changed = !this.isSameAvailability(this.data, res);
+        const changed = !this.isSameAvailability(this.data(), res);
         if (changed) {
-          this.data = res;
+          this.data.set(res);
         }
-        this.loading = false;
-        this.error = null;
+        this.loading.set(false);
+        this.error.set(null);
         this.syncUrlDate(res.event?.eventDate);
         this.ensurePolling(res.refreshSeconds);
       },
       error: (err) => {
-        this.loading = false;
-        this.error =
-          err?.error?.message || err?.message || 'Unable to load table availability right now.';
+        this.loading.set(false);
+        this.error.set(
+          err?.error?.message || err?.message || 'Unable to load table availability right now.'
+        );
       },
     });
   }
@@ -241,7 +256,7 @@ export class PublicAvailability implements OnInit, OnDestroy {
   }
 
   private resolvedSectionColors(): Record<string, string> {
-    const custom = this.data?.sectionMapColors ?? {};
+    const custom = this.data()?.sectionMapColors ?? {};
     const resolved: Record<string, string> = { ...this.defaultSectionColors };
     for (const [sectionRaw, colorRaw] of Object.entries(custom)) {
       const section = String(sectionRaw ?? '').trim().toUpperCase();
