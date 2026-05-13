@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   OnDestroy,
   OnInit,
@@ -82,6 +83,7 @@ const PAGE_SIZE = 25;
   providers: [provideIcons({ lucideEllipsis, lucideX })],
   templateUrl: './events.html',
   styleUrl: './events.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Events implements OnInit, OnDestroy {
   private eventsApi = inject(EventsService);
@@ -89,19 +91,19 @@ export class Events implements OnInit, OnDestroy {
   private frequentApi = inject(FrequentClientsService);
 
   readonly items = signal<EventItem[]>([]);
-  loading = false;
-  error: string | null = null;
-  conflictDate: string | null = null;
-  editingId: string | null = null;
-  showCreateModal = false;
-  templateSections: SectionKey[] = [];
-  templateTablesBySection: Record<string, TableInfo[]> = {};
+  readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
+  readonly conflictDate = signal<string | null>(null);
+  readonly editingId = signal<string | null>(null);
+  readonly showCreateModal = signal(false);
+  readonly templateSections = signal<SectionKey[]>([]);
+  readonly templateTablesBySection = signal<Record<string, TableInfo[]>>({});
 
-  createDisabled = new Set<string>();
-  editDisabled = new Set<string>();
-  frequentClients: FrequentClient[] = [];
-  createDisabledClients = new Set<string>();
-  editDisabledClients = new Set<string>();
+  readonly createDisabled = signal<Set<string>>(new Set());
+  readonly editDisabled = signal<Set<string>>(new Set());
+  readonly frequentClients = signal<FrequentClient[]>([]);
+  readonly createDisabledClients = signal<Set<string>>(new Set());
+  readonly editDisabledClients = signal<Set<string>>(new Set());
 
   form = new FormGroup({
     eventName: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -233,20 +235,20 @@ export class Events implements OnInit, OnDestroy {
   }
 
   loadEvents(): void {
-    this.loading = true;
-    this.error = null;
-    this.conflictDate = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.conflictDate.set(null);
     this.eventsApi.listEvents().subscribe({
       next: (items) => {
         this.items.set(
           [...items].sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
         );
         this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.message || 'Failed to load events';
-        this.loading = false;
+        this.error.set(err?.message || 'Failed to load events');
+        this.loading.set(false);
       },
     });
   }
@@ -255,11 +257,13 @@ export class Events implements OnInit, OnDestroy {
     this.tablesApi.getTemplate().subscribe({
       next: (template) => {
         const sections = Object.keys(template.sections ?? {}).sort() as SectionKey[];
-        this.templateSections = sections;
-        this.templateTablesBySection = sections.reduce((acc, s) => {
-          acc[s] = template.tables.filter((t) => t.section === s);
-          return acc;
-        }, {} as Record<string, TableInfo[]>);
+        this.templateSections.set(sections);
+        this.templateTablesBySection.set(
+          sections.reduce((acc, s) => {
+            acc[s] = template.tables.filter((t) => t.section === s);
+            return acc;
+          }, {} as Record<string, TableInfo[]>),
+        );
 
         for (const s of sections) {
           const price = template.sections[s] ?? 0;
@@ -276,27 +280,27 @@ export class Events implements OnInit, OnDestroy {
   loadFrequentClients(): void {
     this.frequentApi.list().subscribe({
       next: (items) => {
-        this.frequentClients = items;
+        this.frequentClients.set(items);
       },
       error: () => {
-        this.frequentClients = [];
+        this.frequentClients.set([]);
       },
     });
   }
 
   createEvent(): void {
     if (this.form.invalid) return;
-    this.loading = true;
-    this.error = null;
-    this.conflictDate = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.conflictDate.set(null);
 
     const payload: CreateEventPayload = {
       eventName: this.form.controls.eventName.value.trim(),
       eventDate: this.form.controls.eventDate.value,
       minDeposit: this.form.controls.minDeposit.value,
       sectionPricing: this.sectionPricingValue(this.createSectionPricing.value),
-      disabledTables: Array.from(this.createDisabled),
-      disabledClients: Array.from(this.createDisabledClients),
+      disabledTables: Array.from(this.createDisabled()),
+      disabledClients: Array.from(this.createDisabledClients()),
     };
 
     this.eventsApi.createEvent(payload).subscribe({
@@ -305,34 +309,34 @@ export class Events implements OnInit, OnDestroy {
           [item, ...list].sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
         );
         this.form.reset({ eventName: '', eventDate: '', minDeposit: 0 });
-        this.createDisabled.clear();
-        this.createDisabledClients.clear();
-        this.showCreateModal = false;
+        this.createDisabled.set(new Set());
+        this.createDisabledClients.set(new Set());
+        this.showCreateModal.set(false);
         this.syncSidebarModalLock();
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to create event';
+        this.error.set(err?.error?.message || err?.message || 'Failed to create event');
         if (err?.status === 409) {
-          this.conflictDate = payload.eventDate;
+          this.conflictDate.set(payload.eventDate);
         }
-        this.loading = false;
+        this.loading.set(false);
       },
     });
   }
 
   startEdit(item: EventItem): void {
-    this.editingId = item.eventId;
-    this.error = null;
-    this.conflictDate = null;
+    this.editingId.set(item.eventId);
+    this.error.set(null);
+    this.conflictDate.set(null);
     this.editForm.setValue({
       eventName: item.eventName ?? '',
       eventDate: item.eventDate ?? '',
       minDeposit: item.minDeposit ?? 0,
       status: item.status ?? 'ACTIVE',
     });
-    this.editDisabled = new Set(item.disabledTables ?? []);
-    this.editDisabledClients = new Set(item.disabledClients ?? []);
+    this.editDisabled.set(new Set(item.disabledTables ?? []));
+    this.editDisabledClients.set(new Set(item.disabledClients ?? []));
     const sp = item.sectionPricing ?? {};
     for (const s of Object.keys(this.editSectionPricing.controls) as SectionKey[]) {
       const current = this.editSectionPricing.controls[s].value;
@@ -343,30 +347,31 @@ export class Events implements OnInit, OnDestroy {
   }
 
   cancelEdit(): void {
-    if (this.loading) return;
-    this.editingId = null;
+    if (this.loading()) return;
+    this.editingId.set(null);
     this.syncSidebarModalLock();
   }
 
   openCreateModal(): void {
-    this.showCreateModal = true;
-    this.error = null;
-    this.conflictDate = null;
+    this.showCreateModal.set(true);
+    this.error.set(null);
+    this.conflictDate.set(null);
     this.syncSidebarModalLock();
   }
 
   closeCreateModal(): void {
-    this.showCreateModal = false;
+    this.showCreateModal.set(false);
     this.syncSidebarModalLock();
   }
 
   saveEdit(): void {
-    if (!this.editingId) return;
+    const editingId = this.editingId();
+    if (!editingId) return;
     if (this.editForm.invalid) return;
 
-    this.loading = true;
-    this.error = null;
-    this.conflictDate = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.conflictDate.set(null);
 
     const patch: Partial<EventItem> = {
       eventName: this.editForm.controls.eventName.value.trim(),
@@ -374,95 +379,98 @@ export class Events implements OnInit, OnDestroy {
       minDeposit: this.editForm.controls.minDeposit.value,
       status: this.editForm.controls.status.value,
       sectionPricing: this.sectionPricingValue(this.editSectionPricing.value),
-      disabledTables: Array.from(this.editDisabled),
-      disabledClients: Array.from(this.editDisabledClients),
+      disabledTables: Array.from(this.editDisabled()),
+      disabledClients: Array.from(this.editDisabledClients()),
     };
 
-    this.eventsApi.updateEvent(this.editingId, patch).subscribe({
+    this.eventsApi.updateEvent(editingId, patch).subscribe({
       next: (item) => {
         this.items.update((list) =>
           list
             .map((x) => (x.eventId === item.eventId ? item : x))
             .sort((a, b) => (a.eventDate || '').localeCompare(b.eventDate || '')),
         );
-        this.editingId = null;
-        this.loading = false;
+        this.editingId.set(null);
+        this.loading.set(false);
         this.syncSidebarModalLock();
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to update event';
+        this.error.set(err?.error?.message || err?.message || 'Failed to update event');
         if (err?.status === 409) {
-          this.conflictDate = patch.eventDate ?? null;
+          this.conflictDate.set(patch.eventDate ?? null);
         }
-        this.loading = false;
+        this.loading.set(false);
       },
     });
   }
 
-  deleteTarget: EventItem | null = null;
+  readonly deleteTarget = signal<EventItem | null>(null);
 
   deleteEvent(item: EventItem): void {
-    this.deleteTarget = item;
+    this.deleteTarget.set(item);
   }
 
   cancelDeleteEvent(): void {
-    this.deleteTarget = null;
+    this.deleteTarget.set(null);
   }
 
   confirmDeleteEvent(): void {
-    const item = this.deleteTarget;
+    const item = this.deleteTarget();
     if (!item) return;
-    this.deleteTarget = null;
+    this.deleteTarget.set(null);
 
-    this.loading = true;
-    this.error = null;
-    this.conflictDate = null;
+    this.loading.set(true);
+    this.error.set(null);
+    this.conflictDate.set(null);
     this.eventsApi.deleteEvent(item.eventId).subscribe({
       next: () => {
         this.items.update((list) => list.filter((x) => x.eventId !== item.eventId));
-        this.loading = false;
+        this.loading.set(false);
       },
       error: (err) => {
-        this.error = err?.error?.message || err?.message || 'Failed to delete event';
-        this.loading = false;
+        this.error.set(err?.error?.message || err?.message || 'Failed to delete event');
+        this.loading.set(false);
       },
     });
   }
 
   toggleCreateDisabled(id: string): void {
-    if (this.createDisabled.has(id)) this.createDisabled.delete(id);
-    else this.createDisabled.add(id);
+    this.createDisabled.update((current) => this.toggleSetEntry(current, id));
   }
 
   toggleEditDisabled(id: string): void {
-    if (this.editDisabled.has(id)) this.editDisabled.delete(id);
-    else this.editDisabled.add(id);
+    this.editDisabled.update((current) => this.toggleSetEntry(current, id));
   }
 
   isCreateDisabled(id: string): boolean {
-    return this.createDisabled.has(id);
+    return this.createDisabled().has(id);
   }
 
   isEditDisabled(id: string): boolean {
-    return this.editDisabled.has(id);
+    return this.editDisabled().has(id);
   }
 
   toggleCreateDisabledClient(id: string): void {
-    if (this.createDisabledClients.has(id)) this.createDisabledClients.delete(id);
-    else this.createDisabledClients.add(id);
+    this.createDisabledClients.update((current) => this.toggleSetEntry(current, id));
   }
 
   toggleEditDisabledClient(id: string): void {
-    if (this.editDisabledClients.has(id)) this.editDisabledClients.delete(id);
-    else this.editDisabledClients.add(id);
+    this.editDisabledClients.update((current) => this.toggleSetEntry(current, id));
   }
 
   isCreateDisabledClient(id: string): boolean {
-    return this.createDisabledClients.has(id);
+    return this.createDisabledClients().has(id);
   }
 
   isEditDisabledClient(id: string): boolean {
-    return this.editDisabledClients.has(id);
+    return this.editDisabledClients().has(id);
+  }
+
+  private toggleSetEntry(current: Set<string>, id: string): Set<string> {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
   }
 
   formatClientTables(client: FrequentClient): string {
@@ -485,7 +493,7 @@ export class Events implements OnInit, OnDestroy {
 
   private syncSidebarModalLock(forceClear = false): void {
     if (typeof document === 'undefined') return;
-    const isLocked = forceClear ? false : this.showCreateModal || !!this.editingId;
+    const isLocked = forceClear ? false : this.showCreateModal() || !!this.editingId();
     document.body.classList.toggle('events-modal-open', isLocked);
   }
 
