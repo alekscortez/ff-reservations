@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  DoCheck,
   ElementRef,
   HostListener,
   NgZone,
@@ -11,6 +10,7 @@ import {
   OnInit,
   ViewChild,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -100,7 +100,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
   styleUrl: './reservations-new.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewInit {
+export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   private readonly workspaceLockClass = 'reservations-new-workspace-lock';
   private workspaceLockActive = false;
   private activeHoldSession: ActiveHoldSession | null = null;
@@ -118,6 +118,25 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private clientsApi = inject(ClientsService);
   private destroyRef = inject(DestroyRef);
   private ngZone = inject(NgZone);
+
+  constructor() {
+    // Replaces the previous ngDoCheck-based syncWorkspaceScrollLock +
+    // scheduleDesktopSplitLayout pair. The effect tracks the signals
+    // read inside syncWorkspaceScrollLock (eventDate, showPastModal,
+    // showReservationModal, showReleaseConfirm) plus the two layout
+    // dimensions; it re-runs only when one of those changes instead
+    // of on every CD cycle.
+    effect(() => {
+      this.syncWorkspaceScrollLock();
+      if (
+        this._eventDate() ||
+        this._desktopSplitHeightPx() !== null ||
+        this._compactPanelHeightPx() !== null
+      ) {
+        this.scheduleDesktopSplitLayout();
+      }
+    });
+  }
   @ViewChild('desktopSplitPanel') desktopSplitPanel?: ElementRef<HTMLElement>;
   @ViewChild('compactMapShell') compactMapShell?: ElementRef<HTMLElement>;
   @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
@@ -554,12 +573,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     }
   }
 
-  ngDoCheck(): void {
-    this.syncWorkspaceScrollLock();
-    if (this.eventDate || this.desktopSplitHeightPx !== null || this.compactPanelHeightPx !== null) {
-      this.scheduleDesktopSplitLayout();
-    }
-  }
 
   loadTables(date: string, opts: { silent?: boolean } = {}): void {
     const silent = opts.silent === true;
