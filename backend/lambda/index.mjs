@@ -644,9 +644,14 @@ export const handler = async (event) => {
       verifyTurnstileToken: turnstileService.verifyTurnstileToken,
       loadTurnstileSecret,
       getReservationById: reservationsHoldsService.getReservationById,
+      lookupReservationBySlug: reservationsHoldsService.lookupReservationBySlug,
+      lookupReservationByConfirmationCode:
+        reservationsHoldsService.lookupReservationByConfirmationCode,
       upsertCrmClient: clientsService.upsertCrmClient,
       appendReservationHistory: reservationsHoldsService.appendReservationHistory,
       getAppSettings: settingsService.getAppSettings,
+      ddb,
+      tableNames: { RES_TABLE },
       // wallet pass — token-gated /public/.../wallet-pass route
       getActivePassForReservation: checkInPassesService.getActivePassForReservation,
       issuePassForReservation: checkInPassesService.issuePassForReservation,
@@ -829,6 +834,8 @@ export const handler = async (event) => {
       verifySquareWebhookSignature: squarePaymentsService.verifyWebhookSignature,
       processSquareWebhookEvent: squarePaymentsService.processSquareWebhookEvent,
       addReservationPayment: reservationsHoldsService.addReservationPayment,
+      lookupReservationByConfirmationCode:
+        reservationsHoldsService.lookupReservationByConfirmationCode,
     });
     if (squareWebhookRouteResponse) return squareWebhookRouteResponse;
 

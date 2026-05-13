@@ -44,6 +44,11 @@ export async function handleSquareWebhookRoute(ctx) {
     verifySquareWebhookSignature,
     processSquareWebhookEvent,
     addReservationPayment,
+    // Optional CODE-lookup so the webhook can resolve a confirmation
+    // code in payment.note (the friendlier receipt format) back to a
+    // {reservationId, eventDate}. When missing, the new note format
+    // gracefully degrades to `ignored: code_lookup_unavailable`.
+    lookupReservationByConfirmationCode,
   } = ctx;
 
   if (method === "GET" && /^\/admin\/square\/webhook-health\/?$/.test(path)) {
@@ -75,6 +80,7 @@ export async function handleSquareWebhookRoute(ctx) {
     const result = await processSquareWebhookEvent({
       webhookEvent: payload,
       addReservationPayment,
+      lookupReservationByConfirmationCode,
     });
     const audit = {
       handledAs: result?.processed ? "processed" : "ignored",

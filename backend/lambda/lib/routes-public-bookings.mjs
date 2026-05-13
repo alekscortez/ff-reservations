@@ -18,11 +18,50 @@
 //   5. Per-event hold TTL (10 min default, settings-driven)
 
 import { randomBytes } from "node:crypto";
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import {
   getReservationTableIds,
   formatTablesLabel,
   MAX_TABLES_PER_RESERVATION,
 } from "./services-reservations-shared.mjs";
+import {
+  buildCodeLookupKey,
+  buildSlugLookupKey,
+  formatPublicConfirmationCode,
+  generateConfirmationCode,
+  generatePublicSlug,
+} from "./services-reservation-codes.mjs";
+
+const MAX_MINT_ATTEMPTS = 5;
+
+// Pre-flight collision check for the confirmation code. With 887M
+// combinations this is essentially never going to retry, but the
+// check protects us against the bizarre worst case where two
+// concurrent bookings pick the same code (the TransactWrite
+// ConditionExpression on PK="CODE" would then reject one of them).
+async function mintUniqueConfirmationCode(ddb, tableName) {
+  for (let attempt = 0; attempt < MAX_MINT_ATTEMPTS; attempt += 1) {
+    const code = generateConfirmationCode(randomBytes);
+    if (!ddb || !tableName) return code; // unit-test fallback
+    const existing = await ddb.send(
+      new GetCommand({ TableName: tableName, Key: buildCodeLookupKey(code) })
+    );
+    if (!existing?.Item) return code;
+  }
+  throw new Error("Could not mint a unique confirmation code");
+}
+
+async function mintUniquePublicSlug(ddb, tableName) {
+  for (let attempt = 0; attempt < MAX_MINT_ATTEMPTS; attempt += 1) {
+    const slug = generatePublicSlug(randomBytes);
+    if (!ddb || !tableName) return slug;
+    const existing = await ddb.send(
+      new GetCommand({ TableName: tableName, Key: buildSlugLookupKey(slug) })
+    );
+    if (!existing?.Item) return slug;
+  }
+  throw new Error("Could not mint a unique public slug");
+}
 
 const ANON_ACTOR = "anonymous-public";
 const DEFAULT_ANON_MAX_TABLES = 4;
@@ -62,6 +101,7 @@ function sanitizeReservationForPublic(reservation, eventName) {
   const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
   const status = String(reservation?.status ?? "").toUpperCase();
 
+  const confirmationCode = String(reservation?.confirmationCode ?? "").trim() || null;
   return {
     reservationId: String(reservation?.reservationId ?? "").trim(),
     eventDate: String(reservation?.eventDate ?? "").trim(),
@@ -79,6 +119,10 @@ function sanitizeReservationForPublic(reservation, eventName) {
       paymentStatus === "PENDING" || paymentStatus === "PARTIAL"
         ? String(reservation?.paymentLinkUrl ?? "").trim() || null
         : null,
+    confirmationCode,
+    confirmationCodeFormatted: confirmationCode
+      ? formatPublicConfirmationCode(confirmationCode)
+      : null,
   };
 }
 
@@ -114,6 +158,8 @@ export async function handlePublicBookingsRoute(ctx) {
     loadTurnstileSecret,
     // shared
     getReservationById,
+    lookupReservationBySlug,
+    lookupReservationByConfirmationCode,
     upsertCrmClient,
     appendReservationHistory,
     // settings
@@ -127,6 +173,13 @@ export async function handlePublicBookingsRoute(ctx) {
     // Format: ${base}/r/{reservationId}?t={customerToken}. Defaults to
     // https://famosofuego.com — overridable via env for staging.
     publicBookingReturnBaseUrl,
+    // ddb + table-name deps for the code/slug collision pre-check.
+    // Anonymous-booking pre-flight: confirm the generated code + slug
+    // aren't already taken before we ship them down through the
+    // TransactWrite. Same `ddb` + `RES_TABLE` the route handler is
+    // already using elsewhere indirectly.
+    ddb,
+    tableNames,
   } = ctx;
 
   // ─────────────────────────────────────────────────────────────────────
@@ -279,6 +332,18 @@ export async function handlePublicBookingsRoute(ctx) {
     const expiresAtEpoch = Math.floor(nowMs / 1000) + anonTtlSeconds;
     const customerToken = newCustomerToken();
     const reservationId = randomUUID();
+    // Mint short identifiers with a tiny GetItem-then-retry collision
+    // check. Code space is 31^6 ≈ 887M and slug space is 62^16 ≈ 5e28,
+    // so a fresh-mint collision is astronomically unlikely; the check
+    // exists purely to be airtight under worst-case scenarios.
+    const confirmationCode = await mintUniqueConfirmationCode(
+      ddb,
+      tableNames?.RES_TABLE
+    );
+    const publicSlug = await mintUniquePublicSlug(
+      ddb,
+      tableNames?.RES_TABLE
+    );
 
     // Format paymentDeadlineAt as YYYY-MM-DDTHH:mm:ss in the operating tz.
     // createReservation expects this shape (matches normalizeDeadlineLocalIso).
@@ -412,6 +477,12 @@ export async function handlePublicBookingsRoute(ctx) {
           paymentDeadlineAt,
           paymentDeadlineTz: operatingTz,
           customerToken,
+          // Short identifiers — createReservation will persist them on
+          // the row + add PK=CODE/PK=SLUG lookup rows to the same
+          // TransactWrite. Either both land or none, alongside the
+          // hold upgrades, so we never end up with orphan codes.
+          confirmationCode,
+          publicSlug,
         },
         ANON_ACTOR,
         false
@@ -430,10 +501,14 @@ export async function handlePublicBookingsRoute(ctx) {
     }
 
     // Generate Square hosted checkout link for the full amount due.
+    // The customer-facing return URL goes through the short /p/{slug}
+    // alias (which 302s server-side to /r/{id}?t=...&eventDate=...).
+    // This keeps the URL the customer sees on Square + their email
+    // receipt + any browser history short — ~28 chars instead of ~200.
     const returnBase = String(
       publicBookingReturnBaseUrl ?? "https://famosofuego.com"
     ).trim().replace(/\/+$/, "");
-    const customerReturnUrl = `${returnBase}/r/${encodeURIComponent(reservationId)}?t=${encodeURIComponent(customerToken)}`;
+    const customerReturnUrl = `${returnBase}/p/${encodeURIComponent(publicSlug)}`;
     let paymentLinkUrl = null;
     let paymentLinkId = null;
     try {
@@ -447,12 +522,13 @@ export async function handlePublicBookingsRoute(ctx) {
         amount: amountDue,
         // No operator-internal "Anonymous public booking" prefix — it
         // appeared on the customer's Square receipt and read like a
-        // scam. createPaymentLink will fall back to the clean
-        // "Booking <id> • <date>" reference text on its own.
+        // scam. createPaymentLink uses the friendly "Booking #FF-XXXXXX"
+        // form because we're supplying confirmationCode below.
         note: "",
         idempotencyKey,
         buyerEmail: customerEmailRaw || undefined,
         redirectUrlOverride: customerReturnUrl,
+        confirmationCode,
       });
       const link = square?.paymentLink ?? {};
       paymentLinkUrl = String(link?.url ?? "").trim();
@@ -537,6 +613,10 @@ export async function handlePublicBookingsRoute(ctx) {
       {
         reservationId,
         customerToken,
+        confirmationCode,
+        confirmationCodeFormatted: formatPublicConfirmationCode(confirmationCode),
+        publicSlug,
+        shortUrl: `${returnBase}/p/${publicSlug}`,
         paymentUrl: paymentLinkUrl,
         amountDue,
         currency: "USD",
@@ -860,6 +940,47 @@ export async function handlePublicBookingsRoute(ctx) {
       },
       cors
     );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // GET /p/{slug} — short URL alias. Looks up the slug + 302s to the
+  // canonical /r/{reservationId}?t=...&eventDate=... URL the SPA already
+  // renders. Customer-facing SMS / WhatsApp links use this form so they
+  // stay short (~28 chars instead of ~200).
+  // ─────────────────────────────────────────────────────────────────────
+  const publicSlugMatch = path.match(/^\/p\/([^/]+)$/);
+  if (publicSlugMatch && method === "GET") {
+    const slug = publicSlugMatch[1];
+    if (typeof lookupReservationBySlug !== "function") {
+      return json(500, { message: "Slug lookup not configured" }, cors);
+    }
+    const looked = await lookupReservationBySlug(slug);
+    if (!looked?.reservationId || !looked?.eventDate || !looked?.customerToken) {
+      return json(
+        404,
+        { message: "Booking not found", code: "SLUG_NOT_FOUND" },
+        cors
+      );
+    }
+    const base = String(
+      publicBookingReturnBaseUrl ?? "https://famosofuego.com"
+    )
+      .trim()
+      .replace(/\/+$/, "");
+    const destination = `${base}/r/${encodeURIComponent(
+      looked.reservationId
+    )}?t=${encodeURIComponent(looked.customerToken)}&eventDate=${encodeURIComponent(
+      looked.eventDate
+    )}`;
+    return {
+      statusCode: 302,
+      headers: {
+        location: destination,
+        "cache-control": "no-store",
+        ...cors,
+      },
+      body: "",
+    };
   }
 
   return null; // not handled by this module

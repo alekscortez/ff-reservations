@@ -46,6 +46,8 @@ export function createReservationsHoldsService(deps) {
     listReservations: reservations.listReservations,
     listReservationHistory: reservations.listReservationHistory,
     getReservationById: shared.getReservationById,
+    lookupReservationByConfirmationCode: shared.lookupReservationByConfirmationCode,
+    lookupReservationBySlug: shared.lookupReservationBySlug,
     releaseOverdueReservationsForEventDate:
       reservations.releaseOverdueReservationsForEventDate,
     releaseOverdueReservationsForAllActiveEvents:

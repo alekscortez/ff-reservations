@@ -912,6 +912,19 @@ export function createReservationsService(
     // on the reservation row entirely.
     const customerToken =
       String(payload?.customerToken ?? "").trim() || null;
+    // 6-char human-readable booking code (e.g. "K7M3X2"). Anonymous
+    // public booking pre-generates this and passes it through so it can
+    // show up on Square receipts + the customer-facing /r page. Staff
+    // and customer-app paths leave it null. A lookup row is appended
+    // to the TransactWrite below so PK=CODE/SK=CODE#XXXXXX resolves to
+    // {reservationId, eventDate} on Square webhook + /p/<slug> redirects.
+    const confirmationCode =
+      String(payload?.confirmationCode ?? "").trim() || null;
+    // 16-char base62 URL slug used by GET /p/{slug} to 302 to the
+    // canonical /r/{id}?t=...&eventDate=... URL. Customer-facing
+    // shareable URLs use the slug so SMS / WhatsApp links stay short.
+    const publicSlug =
+      String(payload?.publicSlug ?? "").trim() || null;
     const phoneRaw = String(payload?.phone ?? "").trim();
     const phoneCountry = normalizePhoneCountry(payload?.phoneCountry ?? "US");
     const phone = normalizePhoneE164(phoneRaw, phoneCountry);
@@ -1163,10 +1176,53 @@ export function createReservationsService(
                   // mobile-customer paths so the attribute doesn't grow
                   // existing rows.
                   ...(customerToken ? { customerToken } : {}),
+                  ...(confirmationCode ? { confirmationCode } : {}),
+                  ...(publicSlug ? { publicSlug } : {}),
                 },
                 ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
               },
             },
+            // Conditional lookup rows. Only written when the anon-flow
+            // route pre-generated a code/slug. Each row carries enough
+            // context to rebuild the canonical URL without a second
+            // DDB hit on the reservation.
+            ...(confirmationCode
+              ? [
+                  {
+                    Put: {
+                      TableName: RES_TABLE,
+                      Item: {
+                        PK: "CODE",
+                        SK: `CODE#${confirmationCode}`,
+                        entityType: "RESERVATION_CODE",
+                        reservationId,
+                        eventDate,
+                        createdAt: now,
+                      },
+                      ConditionExpression: "attribute_not_exists(SK)",
+                    },
+                  },
+                ]
+              : []),
+            ...(publicSlug
+              ? [
+                  {
+                    Put: {
+                      TableName: RES_TABLE,
+                      Item: {
+                        PK: "SLUG",
+                        SK: `SLUG#${publicSlug}`,
+                        entityType: "RESERVATION_SLUG",
+                        reservationId,
+                        eventDate,
+                        customerToken,
+                        createdAt: now,
+                      },
+                      ConditionExpression: "attribute_not_exists(SK)",
+                    },
+                  },
+                ]
+              : []),
           ],
         })
       );
@@ -1271,6 +1327,12 @@ export function createReservationsService(
     return {
       reservationId,
       checkInPass: checkInPass?.pass ?? null,
+      // Echo back the short identifiers so the caller can hand them to
+      // the customer (in the POST /public/reservations response) and
+      // attach them to the Square payment-link note. Null for paths
+      // that didn't pre-generate either.
+      confirmationCode,
+      publicSlug,
     };
   }
 

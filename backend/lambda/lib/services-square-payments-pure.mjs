@@ -137,6 +137,37 @@ export function extractReservationFromNote(noteRaw) {
   return { reservationId, eventDate };
 }
 
+// Pull a confirmation code (e.g. K7M3X2) out of a free-form string.
+// Mirror of services-reservation-codes:extractConfirmationCodeFromText
+// but pure-fn-only so this module stays test-light. Matches the
+// "FF-XXXXXX" prefix form because customers may also paste a bare
+// code into a contact form and we'd want to recognize that elsewhere.
+const CODE_ALPHABET_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const FF_CODE_REGEX = new RegExp(
+  `FF-([${CODE_ALPHABET_CHARS}]{6})`,
+  "i"
+);
+
+export function extractConfirmationCodeFromText(textRaw) {
+  const text = String(textRaw ?? "").trim();
+  if (!text) return null;
+  const match = text.match(FF_CODE_REGEX);
+  return match ? match[1].toUpperCase() : null;
+}
+
+// Extract a reservation reference from a Square payment, in priority order:
+//   1. payment.metadata.reservationId + eventDate (preferred shape)
+//   2. confirmationCode in payment.note ("Booking #FF-XXXXXX") — callers
+//      must follow up with a DDB lookup against PK="CODE" to resolve
+//      reservationId + eventDate. We return `{ confirmationCode }` so the
+//      caller can distinguish from a direct hit.
+//   3. UUID in payment.note ("Booking <uuid> · <date>", legacy) — direct.
+//   4. payment.reference_id + metadata.eventDate fallback.
+//
+// Returns one of:
+//   { reservationId, eventDate }  — caller can use directly
+//   { confirmationCode }          — caller must look up
+//   null                          — no reference found
 export function extractReservationRefFromPayment(payment) {
   const metadata =
     payment?.metadata && typeof payment.metadata === "object" ? payment.metadata : {};
@@ -144,6 +175,11 @@ export function extractReservationRefFromPayment(payment) {
   const mdEventDate = String(metadata?.eventDate ?? "").trim();
   if (isUuidLike(mdReservationId) && isIsoDate(mdEventDate)) {
     return { reservationId: mdReservationId, eventDate: mdEventDate };
+  }
+
+  const codeFromNote = extractConfirmationCodeFromText(payment?.note);
+  if (codeFromNote) {
+    return { confirmationCode: codeFromNote };
   }
 
   const noteRef = extractReservationFromNote(payment?.note);

@@ -236,6 +236,12 @@ export function createSquarePaymentsService({
     // pass a customer-specific URL so the customer lands on
     // /r/{reservationId}?t=... after checkout.
     redirectUrlOverride,
+    // Optional human-readable booking code (e.g. "K7M3X2"). When set,
+    // the payment_note becomes the customer-friendly
+    // "Booking #FF-K7M3X2 · {eventDate}" instead of the bare UUID
+    // form. The webhook handler accepts both formats so back-compat
+    // is intact for any payment in flight when this rolls out.
+    confirmationCode,
     // Optional override for Square's accepted_payment_methods. Falls back
     // to the env-driven defaults (apple_pay/google_pay/cash_app_pay all
     // true) when omitted. Used by /me/cashapp-link to restrict the hosted
@@ -268,15 +274,21 @@ export function createSquarePaymentsService({
     const amountMinor = toAmountMoney(amount);
     const secret = await loadSquareSecret();
     const buyerPhoneNumber = toSquareBuyerPhone(phone);
-    // Receipt-facing note. Customer sees this in their Square email
-    // receipt, so frame the reservation reference as a normal
-    // "Booking #..." instead of the operator-internal "Reservation ..."
-    // that read scammy. The webhook handler still parses the UUID +
-    // date from this string (extractReservationFromNote understands
-    // both "Reservation" and "Booking" prefixes for back-compat with
-    // existing in-flight payments).
-    const reservationRefText =
-      `Booking ${String(reservationId ?? "").trim()} • ${String(eventDate ?? "").trim()}`;
+    // Receipt-facing note. Two formats supported:
+    //
+    //   confirmationCode supplied (anon-booking flow + future staff use):
+    //     "Booking #FF-K7M3X2 • 2026-05-16"
+    //   No code (legacy path, in-flight payments):
+    //     "Booking 4170d5f9-... • 2026-05-16"
+    //
+    // Webhook handler parses BOTH (services-square-payments-pure.mjs:
+    // extractReservationFromNote + extractConfirmationCodeFromText)
+    // so a receipt-format change doesn't strand anyone mid-payment.
+    const codeText = String(confirmationCode ?? "").trim();
+    const eventDateText = String(eventDate ?? "").trim();
+    const reservationRefText = codeText
+      ? `Booking #FF-${codeText} • ${eventDateText}`
+      : `Booking ${String(reservationId ?? "").trim()} • ${eventDateText}`;
     const noteText = String(note ?? "").trim();
     const paymentNote = noteText ? `${noteText} | ${reservationRefText}` : reservationRefText;
     const eventDateLabel = formatEventDateForLabel(eventDate);
@@ -607,6 +619,7 @@ export function createSquarePaymentsService({
   async function processSquareWebhookEvent({
     webhookEvent,
     addReservationPayment,
+    lookupReservationByConfirmationCode,
     systemUser = "system:square-webhook",
   }) {
     const eventType = String(webhookEvent?.type ?? "").trim();
@@ -664,13 +677,46 @@ export function createSquarePaymentsService({
       };
     }
 
-    const reservationRef = extractReservationRefFromPayment(payment);
-    if (!reservationRef) {
+    const initialRef = extractReservationRefFromPayment(payment);
+    if (!initialRef) {
       return {
         ignored: true,
         reason: "reservation_reference_missing",
         type: eventType,
         paymentId: hintedPaymentId,
+      };
+    }
+
+    // If the receipt note carried a confirmation code instead of a bare
+    // UUID, resolve it to {reservationId, eventDate} via the CODE lookup
+    // row. Failure here is logged as a separate reason so we can tell
+    // "we got a code we couldn't find" from "no reference at all".
+    let reservationRef = initialRef;
+    if (initialRef.confirmationCode && !initialRef.reservationId) {
+      if (typeof lookupReservationByConfirmationCode !== "function") {
+        return {
+          ignored: true,
+          reason: "code_lookup_unavailable",
+          type: eventType,
+          paymentId: hintedPaymentId,
+          confirmationCode: initialRef.confirmationCode,
+        };
+      }
+      const looked = await lookupReservationByConfirmationCode(
+        initialRef.confirmationCode
+      );
+      if (!looked?.reservationId || !looked?.eventDate) {
+        return {
+          ignored: true,
+          reason: "code_lookup_missing",
+          type: eventType,
+          paymentId: hintedPaymentId,
+          confirmationCode: initialRef.confirmationCode,
+        };
+      }
+      reservationRef = {
+        reservationId: looked.reservationId,
+        eventDate: looked.eventDate,
       };
     }
 

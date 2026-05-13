@@ -16,6 +16,16 @@ export interface CreatePublicReservationRequest {
 export interface CreatePublicReservationResponse {
   reservationId: string;
   customerToken: string;
+  // Human-readable booking code ("K7M3X2") + the pre-formatted "FF-K7M3X2".
+  // Shown on the customer's confirmation page so they have a short
+  // identifier to reference instead of the full UUID.
+  confirmationCode: string;
+  confirmationCodeFormatted: string;
+  // 16-char URL slug + the full short URL (e.g. "famosofuego.com/p/xxx").
+  // Client persists shortUrl in localStorage so the pending-hold banner
+  // can render a tap-able link the customer can also screenshot/share.
+  publicSlug: string;
+  shortUrl: string;
   paymentUrl: string;
   amountDue: number;
   currency: string;
@@ -38,6 +48,10 @@ export interface PublicReservationView {
   paymentDeadlineAt: string | null;
   paymentDeadlineTz: string | null;
   paymentLinkUrl: string | null;
+  // Short booking identifier. Older reservations (before the short-code
+  // rollout) won't have these — they'll be null.
+  confirmationCode: string | null;
+  confirmationCodeFormatted: string | null;
 }
 
 export interface GetPublicReservationResponse {

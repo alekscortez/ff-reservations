@@ -618,6 +618,52 @@ export function createReservationsShared({
     return res.Item;
   }
 
+  // Resolves a 6-char human-readable booking code (e.g. "K7M3X2") to
+  // the reservationId + eventDate that anchor the actual row. Used by
+  // the Square webhook handler when the receipt note carried a code
+  // instead of a bare UUID, and by GET /p/{slug}'s sibling code path.
+  // Returns null when the code doesn't exist; callers convert to a
+  // 404 / 410 as appropriate.
+  async function lookupReservationByConfirmationCode(codeRaw) {
+    requiredEnv("RES_TABLE", RES_TABLE);
+    const code = String(codeRaw ?? "").trim().toUpperCase();
+    if (!/^[A-Z0-9]{6}$/.test(code)) return null;
+    const res = await ddb.send(
+      new GetCommand({
+        TableName: RES_TABLE,
+        Key: { PK: "CODE", SK: `CODE#${code}` },
+      })
+    );
+    const item = res?.Item;
+    if (!item) return null;
+    return {
+      reservationId: String(item.reservationId ?? "").trim() || null,
+      eventDate: String(item.eventDate ?? "").trim() || null,
+    };
+  }
+
+  // Resolves a 16-char URL slug to the reservation + customer token.
+  // Used by GET /p/{slug} to build the canonical /r/{id}?t=... URL
+  // for the redirect.
+  async function lookupReservationBySlug(slugRaw) {
+    requiredEnv("RES_TABLE", RES_TABLE);
+    const slug = String(slugRaw ?? "").trim();
+    if (!/^[A-Za-z0-9]{16}$/.test(slug)) return null;
+    const res = await ddb.send(
+      new GetCommand({
+        TableName: RES_TABLE,
+        Key: { PK: "SLUG", SK: `SLUG#${slug}` },
+      })
+    );
+    const item = res?.Item;
+    if (!item) return null;
+    return {
+      reservationId: String(item.reservationId ?? "").trim() || null,
+      eventDate: String(item.eventDate ?? "").trim() || null,
+      customerToken: String(item.customerToken ?? "").trim() || null,
+    };
+  }
+
   return {
     // pure utilities
     clampNumber,
@@ -654,5 +700,7 @@ export function createReservationsShared({
     // read-only DDB
     queryReservationsForEventDate,
     getReservationById,
+    lookupReservationByConfirmationCode,
+    lookupReservationBySlug,
   };
 }

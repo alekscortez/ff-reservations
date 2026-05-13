@@ -1,7 +1,15 @@
 <section class="mx-auto w-full max-w-2xl px-3 py-6 md:px-5">
-  <header class="mb-4 flex items-center gap-3">
+  <header class="mb-4 flex flex-wrap items-center gap-3">
     <img class="h-12 w-12 object-contain" src="/assets/ff-logo.svg" alt="Famoso Fuego logo" />
-    <h1 class="text-xl font-semibold text-brand-900 md:text-2xl">Your Reservation</h1>
+    <div class="grid">
+      <h1 class="text-xl font-semibold text-brand-900 md:text-2xl">Your Reservation</h1>
+      <p
+        *ngIf="reservation()?.confirmationCodeFormatted as code"
+        class="text-xs font-medium uppercase tracking-[0.18em] text-brand-500"
+      >
+        {{ code }}
+      </p>
+    </div>
   </header>
 
   <article
