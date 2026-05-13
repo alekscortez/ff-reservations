@@ -121,52 +121,98 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
   @ViewChild('mobileCtaBar') mobileCtaBar?: ElementRef<HTMLElement>;
 
-  eventDate: string | null = null;
-  event: EventItem | null = null;
+  private readonly _eventDate = signal<string | null>(null);
+  get eventDate(): string | null { return this._eventDate(); }
+  set eventDate(value: string | null) { this._eventDate.set(value); }
+  private readonly _event = signal<EventItem | null>(null);
+  get event(): EventItem | null { return this._event(); }
+  set event(value: EventItem | null) { this._event.set(value); }
   private readonly _events = signal<EventItem[]>([]);
   get events(): EventItem[] { return this._events(); }
   set events(value: EventItem[]) { this._events.set(value); }
-  eventsLoading = false;
-  eventsError: string | null = null;
-  showPastModal = false;
+  private readonly _eventsLoading = signal(false);
+  get eventsLoading(): boolean { return this._eventsLoading(); }
+  set eventsLoading(value: boolean) { this._eventsLoading.set(value); }
+  private readonly _eventsError = signal<string | null>(null);
+  get eventsError(): string | null { return this._eventsError(); }
+  set eventsError(value: string | null) { this._eventsError.set(value); }
+  private readonly _showPastModal = signal(false);
+  get showPastModal(): boolean { return this._showPastModal(); }
+  set showPastModal(value: boolean) { this._showPastModal.set(value); }
   private readonly _tables = signal<TableForEvent[]>([]);
   get tables(): TableForEvent[] { return this._tables(); }
   set tables(value: TableForEvent[]) { this._tables.set(value); }
-  loading = false;
-  error: string | null = null;
+  private readonly _loading = signal(false);
+  get loading(): boolean { return this._loading(); }
+  set loading(value: boolean) { this._loading.set(value); }
+  private readonly _error = signal<string | null>(null);
+  get error(): string | null { return this._error(); }
+  set error(value: string | null) { this._error.set(value); }
 
-  selectedTable: TableForEvent | null = null;
-  selectedTableId: string | null = null;
-  holdId: string | null = null;
-  holdExpiresAt: number | null = null;
-  holdCountdown = 0;
+  private readonly _selectedTable = signal<TableForEvent | null>(null);
+  get selectedTable(): TableForEvent | null { return this._selectedTable(); }
+  set selectedTable(value: TableForEvent | null) { this._selectedTable.set(value); }
+  private readonly _selectedTableId = signal<string | null>(null);
+  get selectedTableId(): string | null { return this._selectedTableId(); }
+  set selectedTableId(value: string | null) { this._selectedTableId.set(value); }
+  private readonly _holdId = signal<string | null>(null);
+  get holdId(): string | null { return this._holdId(); }
+  set holdId(value: string | null) { this._holdId.set(value); }
+  private readonly _holdExpiresAt = signal<number | null>(null);
+  get holdExpiresAt(): number | null { return this._holdExpiresAt(); }
+  set holdExpiresAt(value: number | null) { this._holdExpiresAt.set(value); }
+  private readonly _holdCountdown = signal(0);
+  get holdCountdown(): number { return this._holdCountdown(); }
+  set holdCountdown(value: number) { this._holdCountdown.set(value); }
   // Set when the per-second timer ticks to zero. Cleared when a fresh hold
   // is created or the modal is reset. Drives the in-modal "hold expired"
   // banner and prevents confirmReservation from firing a doomed POST.
-  holdExpired = false;
+  private readonly _holdExpired = signal(false);
+  get holdExpired(): boolean { return this._holdExpired(); }
+  set holdExpired(value: boolean) { this._holdExpired.set(value); }
   private holdTimer: ReturnType<typeof setInterval> | null = null;
-  holdCreatedByMe = false;
-  showReleaseConfirm = false;
+  private readonly _holdCreatedByMe = signal(false);
+  get holdCreatedByMe(): boolean { return this._holdCreatedByMe(); }
+  set holdCreatedByMe(value: boolean) { this._holdCreatedByMe.set(value); }
+  private readonly _showReleaseConfirm = signal(false);
+  get showReleaseConfirm(): boolean { return this._showReleaseConfirm(); }
+  set showReleaseConfirm(value: boolean) { this._showReleaseConfirm.set(value); }
   // Multi-table booking state. selectedTables stays in 1:1 alignment with
   // holdEntries (same length, same order); the scalars above mirror the
   // first element for back-compat with existing template bindings + the
   // hold-countdown timer (which is keyed off the primary hold).
-  selectedTables: TableForEvent[] = [];
-  holdEntries: ActiveHoldEntry[] = [];
+  private readonly _selectedTables = signal<TableForEvent[]>([]);
+  get selectedTables(): TableForEvent[] { return this._selectedTables(); }
+  set selectedTables(value: TableForEvent[]) { this._selectedTables.set(value); }
+  private readonly _holdEntries = signal<ActiveHoldEntry[]>([]);
+  get holdEntries(): ActiveHoldEntry[] { return this._holdEntries(); }
+  set holdEntries(value: ActiveHoldEntry[]) { this._holdEntries.set(value); }
   // True after the staff clicks "+ Add another table" in the modal. The
   // next AVAILABLE-table click in the map gets appended to the booking
   // instead of replacing the selection. The flag is consumed on click
   // and reset.
-  addAnotherTablePending = false;
-  addAnotherTableError: string | null = null;
+  private readonly _addAnotherTablePending = signal(false);
+  get addAnotherTablePending(): boolean { return this._addAnotherTablePending(); }
+  set addAnotherTablePending(value: boolean) { this._addAnotherTablePending.set(value); }
+  private readonly _addAnotherTableError = signal<string | null>(null);
+  get addAnotherTableError(): string | null { return this._addAnotherTableError(); }
+  set addAnotherTableError(value: string | null) { this._addAnotherTableError.set(value); }
   // Max tables enforced server-side too; keep this in sync with
   // MAX_TABLES_PER_RESERVATION in services-reservations-shared.mjs.
   readonly maxTablesPerBooking = 10;
   private pollSub: Subscription | null = null;
-  showReservationModal = false;
-  sections: string[] = [];
-  allowCustomDeposit = false;
-  paymentDeadlineEnabled = false;
+  private readonly _showReservationModal = signal(false);
+  get showReservationModal(): boolean { return this._showReservationModal(); }
+  set showReservationModal(value: boolean) { this._showReservationModal.set(value); }
+  private readonly _sections = signal<string[]>([]);
+  get sections(): string[] { return this._sections(); }
+  set sections(value: string[]) { this._sections.set(value); }
+  private readonly _allowCustomDeposit = signal(false);
+  get allowCustomDeposit(): boolean { return this._allowCustomDeposit(); }
+  set allowCustomDeposit(value: boolean) { this._allowCustomDeposit.set(value); }
+  private readonly _paymentDeadlineEnabled = signal(false);
+  get paymentDeadlineEnabled(): boolean { return this._paymentDeadlineEnabled(); }
+  set paymentDeadlineEnabled(value: boolean) { this._paymentDeadlineEnabled.set(value); }
   paymentDeadlineDate = new FormControl('', { nonNullable: true });
   paymentDeadlineTime = new FormControl('00:00', { nonNullable: true });
   paymentDeadlineTz = 'America/Chicago';
@@ -210,8 +256,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   // Mirrors the settings-driven cashReceiptNumberRequired flag used by
   // the staff Reservations page; populated in loadRuntimeContext. Defaults
   // to true to match backend's resolveCashReceiptNumberRequired() fallback.
-  cashReceiptNumberRequired = true;
-  confirmSubmitAttempted = false;
+  private readonly _cashReceiptNumberRequired = signal(true);
+  get cashReceiptNumberRequired(): boolean { return this._cashReceiptNumberRequired(); }
+  set cashReceiptNumberRequired(value: boolean) { this._cashReceiptNumberRequired.set(value); }
+  private readonly _confirmSubmitAttempted = signal(false);
+  get confirmSubmitAttempted(): boolean { return this._confirmSubmitAttempted(); }
+  set confirmSubmitAttempted(value: boolean) { this._confirmSubmitAttempted.set(value); }
   // In-flight guards: prevent a rapid double-click from firing the same
   // POST twice. Backend idempotency replays the second create, but the
   // FE's `next:` callback would run twice and churn modal/hold state.
@@ -224,8 +274,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   });
   filterSection = new FormControl<string>('ALL', { nonNullable: true });
   tableViewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
-  showFiltersPanel = false;
-  phoneCountry: 'US' | 'MX' = 'US';
+  private readonly _showFiltersPanel = signal(false);
+  get showFiltersPanel(): boolean { return this._showFiltersPanel(); }
+  set showFiltersPanel(value: boolean) { this._showFiltersPanel.set(value); }
+  private readonly _phoneCountry = signal<'US' | 'MX'>('US');
+  get phoneCountry(): 'US' | 'MX' { return this._phoneCountry(); }
+  set phoneCountry(value: 'US' | 'MX') { this._phoneCountry.set(value); }
   pastFilterDate = new FormControl('', { nonNullable: true });
   pastFilterName = new FormControl('', { nonNullable: true });
 
@@ -247,13 +301,27 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private readonly pastFilterNameSignal = toSignal(this.pastFilterName.valueChanges, {
     initialValue: this.pastFilterName.value,
   });
-  clientMatches: CrmClient[] = [];
-  clientLoading = false;
-  noClientMatch = false;
-  exactMatchPhone: string | null = null;
-  clientCredits: RescheduleCredit[] = [];
-  clientCreditsLoading = false;
-  clientCreditsError: string | null = null;
+  private readonly _clientMatches = signal<CrmClient[]>([]);
+  get clientMatches(): CrmClient[] { return this._clientMatches(); }
+  set clientMatches(value: CrmClient[]) { this._clientMatches.set(value); }
+  private readonly _clientLoading = signal(false);
+  get clientLoading(): boolean { return this._clientLoading(); }
+  set clientLoading(value: boolean) { this._clientLoading.set(value); }
+  private readonly _noClientMatch = signal(false);
+  get noClientMatch(): boolean { return this._noClientMatch(); }
+  set noClientMatch(value: boolean) { this._noClientMatch.set(value); }
+  private readonly _exactMatchPhone = signal<string | null>(null);
+  get exactMatchPhone(): string | null { return this._exactMatchPhone(); }
+  set exactMatchPhone(value: string | null) { this._exactMatchPhone.set(value); }
+  private readonly _clientCredits = signal<RescheduleCredit[]>([]);
+  get clientCredits(): RescheduleCredit[] { return this._clientCredits(); }
+  set clientCredits(value: RescheduleCredit[]) { this._clientCredits.set(value); }
+  private readonly _clientCreditsLoading = signal(false);
+  get clientCreditsLoading(): boolean { return this._clientCreditsLoading(); }
+  set clientCreditsLoading(value: boolean) { this._clientCreditsLoading.set(value); }
+  private readonly _clientCreditsError = signal<string | null>(null);
+  get clientCreditsError(): string | null { return this._clientCreditsError(); }
+  set clientCreditsError(value: string | null) { this._clientCreditsError.set(value); }
   private creditsLookupKey: string | null = null;
   private creditsLookupSeq = 0;
   // Cached derivatives of `events` / `tables` + form-control filters.
@@ -290,15 +358,33 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       this.filterSectionSignal() ?? 'ALL'
     )
   );
-  creatingPaymentLink = false;
-  paymentLinkError: string | null = null;
-  paymentLinkNotice: string | null = null;
-  paymentLinkUrl: string | null = null;
-  createdReservation: CreatedReservationContext | null = null;
-  desktopSplitHeightPx: number | null = null;
-  compactBottomInsetPx = 96;
-  compactPanelHeightPx: number | null = null;
-  compactSectionBottomPaddingPx: number | null = null;
+  private readonly _creatingPaymentLink = signal(false);
+  get creatingPaymentLink(): boolean { return this._creatingPaymentLink(); }
+  set creatingPaymentLink(value: boolean) { this._creatingPaymentLink.set(value); }
+  private readonly _paymentLinkError = signal<string | null>(null);
+  get paymentLinkError(): string | null { return this._paymentLinkError(); }
+  set paymentLinkError(value: string | null) { this._paymentLinkError.set(value); }
+  private readonly _paymentLinkNotice = signal<string | null>(null);
+  get paymentLinkNotice(): string | null { return this._paymentLinkNotice(); }
+  set paymentLinkNotice(value: string | null) { this._paymentLinkNotice.set(value); }
+  private readonly _paymentLinkUrl = signal<string | null>(null);
+  get paymentLinkUrl(): string | null { return this._paymentLinkUrl(); }
+  set paymentLinkUrl(value: string | null) { this._paymentLinkUrl.set(value); }
+  private readonly _createdReservation = signal<CreatedReservationContext | null>(null);
+  get createdReservation(): CreatedReservationContext | null { return this._createdReservation(); }
+  set createdReservation(value: CreatedReservationContext | null) { this._createdReservation.set(value); }
+  private readonly _desktopSplitHeightPx = signal<number | null>(null);
+  get desktopSplitHeightPx(): number | null { return this._desktopSplitHeightPx(); }
+  set desktopSplitHeightPx(value: number | null) { this._desktopSplitHeightPx.set(value); }
+  private readonly _compactBottomInsetPx = signal(96);
+  get compactBottomInsetPx(): number { return this._compactBottomInsetPx(); }
+  set compactBottomInsetPx(value: number) { this._compactBottomInsetPx.set(value); }
+  private readonly _compactPanelHeightPx = signal<number | null>(null);
+  get compactPanelHeightPx(): number | null { return this._compactPanelHeightPx(); }
+  set compactPanelHeightPx(value: number | null) { this._compactPanelHeightPx.set(value); }
+  private readonly _compactSectionBottomPaddingPx = signal<number | null>(null);
+  get compactSectionBottomPaddingPx(): number | null { return this._compactSectionBottomPaddingPx(); }
+  set compactSectionBottomPaddingPx(value: number | null) { this._compactSectionBottomPaddingPx.set(value); }
   private desktopLayoutRafId: number | null = null;
 
   ngOnInit(): void {
@@ -1325,12 +1411,12 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     }
   }
 
-  get holdCountdownLabel(): string {
-    const total = this.holdCountdown || 0;
+  readonly holdCountdownLabel = computed<string>(() => {
+    const total = this._holdCountdown() || 0;
     const min = Math.floor(total / 60);
     const sec = String(total % 60).padStart(2, '0');
     return `${min}:${sec}`;
-  }
+  });
 
   selectClient(client: CrmClient): void {
     if (!client) return;
