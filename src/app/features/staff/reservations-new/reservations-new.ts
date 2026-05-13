@@ -9,9 +9,11 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  computed,
   inject,
+  signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -121,11 +123,15 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
 
   eventDate: string | null = null;
   event: EventItem | null = null;
-  events: EventItem[] = [];
+  private readonly _events = signal<EventItem[]>([]);
+  get events(): EventItem[] { return this._events(); }
+  set events(value: EventItem[]) { this._events.set(value); }
   eventsLoading = false;
   eventsError: string | null = null;
   showPastModal = false;
-  tables: TableForEvent[] = [];
+  private readonly _tables = signal<TableForEvent[]>([]);
+  get tables(): TableForEvent[] { return this._tables(); }
+  set tables(value: TableForEvent[]) { this._tables.set(value); }
   loading = false;
   error: string | null = null;
 
@@ -164,7 +170,9 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   paymentDeadlineDate = new FormControl('', { nonNullable: true });
   paymentDeadlineTime = new FormControl('00:00', { nonNullable: true });
   paymentDeadlineTz = 'America/Chicago';
-  businessDate = todayString();
+  private readonly _businessDate = signal<string>(todayString());
+  get businessDate(): string { return this._businessDate(); }
+  set businessDate(value: string) { this._businessDate.set(value); }
   tablePollingSeconds = 10;
   defaultPaymentDeadlineHour = 0;
   defaultPaymentDeadlineMinute = 0;
@@ -220,6 +228,25 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   phoneCountry: 'US' | 'MX' = 'US';
   pastFilterDate = new FormControl('', { nonNullable: true });
   pastFilterName = new FormControl('', { nonNullable: true });
+
+  // Filter control values exposed as signals so the cache `computed`s
+  // below stay reactive without manual recompute methods. valueChanges
+  // initial-value supplied so first read isn't undefined.
+  private readonly filterQuerySignal = toSignal(this.filterQuery.valueChanges, {
+    initialValue: this.filterQuery.value,
+  });
+  private readonly filterStatusSignal = toSignal(this.filterStatus.valueChanges, {
+    initialValue: this.filterStatus.value,
+  });
+  private readonly filterSectionSignal = toSignal(this.filterSection.valueChanges, {
+    initialValue: this.filterSection.value,
+  });
+  private readonly pastFilterDateSignal = toSignal(this.pastFilterDate.valueChanges, {
+    initialValue: this.pastFilterDate.value,
+  });
+  private readonly pastFilterNameSignal = toSignal(this.pastFilterName.valueChanges, {
+    initialValue: this.pastFilterName.value,
+  });
   clientMatches: CrmClient[] = [];
   clientLoading = false;
   noClientMatch = false;
@@ -230,14 +257,39 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
   private creditsLookupKey: string | null = null;
   private creditsLookupSeq = 0;
   // Cached derivatives of `events` / `tables` + form-control filters.
-  // Bound directly in the template (instead of method calls in *ngFor)
-  // so change detection doesn't re-run filter logic + slice on every CD
-  // cycle — that was the iOS Chrome touch-drop pattern flagged in memory
-  // feedback_ngfor_no_template_methods.md. Recomputed only when the
-  // underlying inputs change.
-  upcomingEventsCache: EventItem[] = [];
-  pastEventsCache: EventItem[] = [];
-  filteredTablesCache: TableForEvent[] = [];
+  // Implemented as `computed()` signals so they auto-recompute only
+  // when one of their inputs changes. Memoization keeps the *ngFor
+  // array reference stable across CD cycles — same property that the
+  // previous imperative cache offered (no touchend-drop on iOS Chrome).
+  // Maximum past events kept in the cache (older events reachable via
+  // the date/name filters; filtered results bypass the slice).
+  private readonly maxPastEventsRendered = 50;
+  readonly upcomingEventsCache = computed<EventItem[]>(() =>
+    this._events()
+      .filter((e) => (e.eventDate || '') >= this._businessDate())
+      .slice(0, 4)
+  );
+  readonly pastEventsCache = computed<EventItem[]>(() => {
+    const dateFilter = (this.pastFilterDateSignal() ?? '').trim();
+    const nameFilter = (this.pastFilterNameSignal() ?? '').trim().toLowerCase();
+    const hasFilters = Boolean(dateFilter || nameFilter);
+    const filtered = this._events()
+      .filter((e) => (e.eventDate || '') < this._businessDate())
+      .filter((e) => (dateFilter ? e.eventDate === dateFilter : true))
+      .filter((e) =>
+        nameFilter ? (e.eventName || '').toLowerCase().includes(nameFilter) : true
+      )
+      .reverse();
+    return hasFilters ? filtered : filtered.slice(0, this.maxPastEventsRendered);
+  });
+  readonly filteredTablesCache = computed<TableForEvent[]>(() =>
+    applyTableFilters(
+      this._tables(),
+      this.filterQuerySignal() ?? '',
+      (this.filterStatusSignal() ?? 'ALL') as TableFilterStatus,
+      this.filterSectionSignal() ?? 'ALL'
+    )
+  );
   creatingPaymentLink = false;
   paymentLinkError: string | null = null;
   paymentLinkNotice: string | null = null;
@@ -396,24 +448,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         },
       });
 
-    // Cache invalidation for the template-bound *-Cache arrays. Each
-    // filter control mutation triggers a single recompute instead of the
-    // previous "method-in-*ngFor → CD re-runs every cycle" pattern.
-    this.filterQuery.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.recomputeFilteredTables());
-    this.filterStatus.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.recomputeFilteredTables());
-    this.filterSection.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.recomputeFilteredTables());
-    this.pastFilterDate.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.recomputePastEvents());
-    this.pastFilterName.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.recomputePastEvents());
   }
 
   ngAfterViewInit(): void {
@@ -463,7 +497,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
           this.filterSection.setValue('ALL');
           this.saveFilters();
         }
-        this.recomputeFilteredTables();
         if (this.selectedTableId) {
           this.selectedTable = this.tables.find((t) => t.id === this.selectedTableId) ?? null;
         } else {
@@ -530,8 +563,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
         this.events = (items ?? []).sort((a, b) =>
           (a.eventDate || '').localeCompare(b.eventDate || '')
         );
-        this.recomputeUpcomingEvents();
-        this.recomputePastEvents();
         this.eventsLoading = false;
       },
       error: (err) => {
@@ -553,7 +584,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.eventDate = null;
     this.event = null;
     this.tables = [];
-    this.recomputeFilteredTables();
     this.selectedTable = null;
     this.selectedTableId = null;
     this.selectedTables = [];
@@ -572,44 +602,6 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
     this.desktopSplitHeightPx = null;
     this.compactPanelHeightPx = null;
     this.compactSectionBottomPaddingPx = null;
-  }
-
-  private recomputeUpcomingEvents(): void {
-    this.upcomingEventsCache = this.events
-      .filter((e) => (e.eventDate || '') >= this.businessDate)
-      .slice(0, 4);
-  }
-
-  // Max past events kept in the cache. The "Past Events" modal is meant
-  // for "find a recent past event" — older events are reachable via the
-  // date/name filters (filtered results bypass the slice because they
-  // narrow before this cap kicks in). Bounds DOM size as event history
-  // grows.
-  private readonly maxPastEventsRendered = 50;
-
-  private recomputePastEvents(): void {
-    const dateFilter = this.pastFilterDate.value.trim();
-    const nameFilter = this.pastFilterName.value.trim().toLowerCase();
-    const hasFilters = Boolean(dateFilter || nameFilter);
-    const filtered = this.events
-      .filter((e) => (e.eventDate || '') < this.businessDate)
-      .filter((e) => (dateFilter ? e.eventDate === dateFilter : true))
-      .filter((e) =>
-        nameFilter ? (e.eventName || '').toLowerCase().includes(nameFilter) : true
-      )
-      .reverse();
-    this.pastEventsCache = hasFilters
-      ? filtered
-      : filtered.slice(0, this.maxPastEventsRendered);
-  }
-
-  private recomputeFilteredTables(): void {
-    this.filteredTablesCache = applyTableFilters(
-      this.tables,
-      this.filterQuery.value,
-      this.filterStatus.value,
-      this.filterSection.value
-    );
   }
 
   trackByEventDate(_: number, e: EventItem): string {
@@ -2042,11 +2034,10 @@ export class ReservationsNew implements OnInit, OnDestroy, DoCheck, AfterViewIni
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
       next: (ctx) => {
+        // businessDate setter writes to a signal → the upcomingEventsCache +
+        // pastEventsCache computeds re-evaluate automatically using the new
+        // split point. No explicit recompute needed.
         this.businessDate = String(ctx?.businessDate ?? '').trim() || todayString();
-        // businessDate is the upcoming/past split point — recompute both
-        // event caches now that we know its real value.
-        this.recomputeUpcomingEvents();
-        this.recomputePastEvents();
         this.paymentDeadlineTz = String(ctx?.settings?.operatingTz ?? '').trim() || 'America/Chicago';
         this.defaultPaymentDeadlineHour = normalizeHour(
           ctx?.settings?.defaultPaymentDeadlineHour,
