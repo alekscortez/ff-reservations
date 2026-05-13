@@ -105,22 +105,25 @@
       </div>
     </div>
 
-    <div
-      class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warm-300 bg-warm-50 px-3 py-2 text-sm text-brand-900"
+    <hlm-alert
+      variant="info"
+      class="mt-2"
       *ngIf="addAnotherTablePending"
     >
-      <span>
-        <strong>Adding another table:</strong>
-        click a free (green) table on the map to add it to this booking.
-      </span>
-      <button
-        type="button"
-        hlmBtn variant="outline" size="xs"
-        (click)="cancelAddAnotherTable()"
-      >
-        Cancel
-      </button>
-    </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          <strong>Adding another table:</strong>
+          click a free (green) table on the map to add it to this booking.
+        </span>
+        <button
+          type="button"
+          hlmBtn variant="outline" size="xs"
+          (click)="cancelAddAnotherTable()"
+        >
+          Cancel
+        </button>
+      </div>
+    </hlm-alert>
 
     <div class="mt-4 grid gap-2 lg:hidden">
       <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
@@ -194,10 +197,10 @@
       >
         <div class="grid gap-2">
           <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
-          <div class="flex flex-wrap gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'ALL'"
               (click)="setFilterStatus('ALL')"
             >
@@ -205,7 +208,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'AVAILABLE'"
               (click)="setFilterStatus('AVAILABLE')"
             >
@@ -213,7 +216,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'HOLD'"
               (click)="setFilterStatus('HOLD')"
             >
@@ -221,7 +224,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'PENDING_PAYMENT'"
               (click)="setFilterStatus('PENDING_PAYMENT')"
             >
@@ -229,7 +232,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'RESERVED'"
               (click)="setFilterStatus('RESERVED')"
             >
@@ -237,7 +240,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterStatus.value === 'DISABLED'"
               (click)="setFilterStatus('DISABLED')"
             >
@@ -248,10 +251,10 @@
 
         <div class="grid gap-2">
           <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Section</p>
-          <div class="flex flex-wrap gap-2">
+          <div class="grid grid-cols-3 gap-2">
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               [active]="filterSection.value === 'ALL'"
               (click)="setFilterSection('ALL')"
             >
@@ -259,7 +262,7 @@
             </button>
             <button
               type="button"
-              hlmToggle variant="outline"
+              hlmToggle variant="outline" class="w-full"
               *ngFor="let s of sections"
               [active]="filterSection.value === s"
               (click)="setFilterSection(s)"
@@ -425,10 +428,10 @@
             >
               <div class="grid gap-2">
                 <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Status</p>
-                <div class="flex flex-wrap gap-2">
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'ALL'"
                     (click)="setFilterStatus('ALL')"
                   >
@@ -436,7 +439,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'AVAILABLE'"
                     (click)="setFilterStatus('AVAILABLE')"
                   >
@@ -444,7 +447,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'HOLD'"
                     (click)="setFilterStatus('HOLD')"
                   >
@@ -452,7 +455,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'PENDING_PAYMENT'"
                     (click)="setFilterStatus('PENDING_PAYMENT')"
                   >
@@ -460,7 +463,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'RESERVED'"
                     (click)="setFilterStatus('RESERVED')"
                   >
@@ -468,7 +471,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterStatus.value === 'DISABLED'"
                     (click)="setFilterStatus('DISABLED')"
                   >
@@ -479,10 +482,10 @@
 
               <div class="grid gap-2">
                 <p class="text-[11px] uppercase tracking-[0.16em] text-brand-500">Section</p>
-                <div class="flex flex-wrap gap-2">
+                <div class="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     [active]="filterSection.value === 'ALL'"
                     (click)="setFilterSection('ALL')"
                   >
@@ -490,7 +493,7 @@
                   </button>
                   <button
                     type="button"
-                    hlmToggle variant="outline"
+                    hlmToggle variant="outline" class="w-full"
                     *ngFor="let s of sections"
                     [active]="filterSection.value === s"
                     (click)="setFilterSection(s)"
@@ -809,16 +812,6 @@
               />
             </label>
 
-            <div class="rounded-xl border border-brand-100 bg-brand-50 p-3 text-xs text-brand-700 md:col-span-2" *ngIf="!isUsingClientCredit() && !isCashMethod()">
-              <p class="font-semibold text-brand-800">
-                Digital payment flow
-              </p>
-              <p class="mt-1">
-                Reservation is created as pending until payment is confirmed. Full amount due is collected using
-                {{ isClientPayMethod() ? 'Cash App link' : 'Square link' }}.
-              </p>
-            </div>
-
             <div class="grid gap-4 md:col-span-2 md:grid-cols-2" *ngIf="!isUsingClientCredit() && isCashMethod()">
               <label class="grid gap-1 text-xs text-brand-600">
                 Payment Status
@@ -858,9 +851,6 @@
                 />
                 Set payment deadline (required if not fully paid)
               </label>
-              <p class="text-xs text-brand-600" *ngIf="!isUsingClientCredit() && !isCashMethod()">
-                Payment deadline is required for digital payment methods.
-              </p>
               <p class="text-xs text-brand-600" *ngIf="isUsingClientCredit() && shouldShowCreditRemainingMethod()">
                 Remaining balance will be collected by
                 {{
