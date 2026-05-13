@@ -59,6 +59,10 @@ src/app/
   core/         # auth, config, layout, http, guards, payments
   features/     # public/, staff/, admin/ route groups (lazy-loaded)
   shared/       # components, primitives (src/app/shared/ui/), models
+                # shared/components/reservation-detail-modal/ is the
+                # 4-tab modal used by both Dashboard + staff Reservations
+                # (parent owns loading/error state; modal handles tabs +
+                # presentation + emits ~14 actions)
 
 backend/lambda/
   index.mjs                         # entry, auth helpers, CORS, router, EventBridge dispatch
@@ -159,6 +163,7 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - `auth-callback.ts` reads groups from the **ID token**; API calls use the **access token**. Keep them in sync.
 - API Gateway routes are explicit (no `$default` proxy). Adding a backend route requires both the handler in `lib/routes-*.mjs` AND `aws apigatewayv2 create-route` with `--target integrations/0bj43cm --authorization-type JWT --authorizer-id 5ea6tk` (or NONE for public).
 - **`*ngFor` with template method calls is an anti-pattern** — CD re-invokes them every cycle; iOS Chrome drops the trailing touchend. Memoize + use `trackBy`. See memory `feedback_ngfor_no_template_methods.md`.
+- **Lines that start with `=` in `.html` templates** are corrupted bindings (usually `[active]` whose attribute name got stripped). Angular parses them as a string attribute called `""` and silently does nothing — toggle stays dead. Hit twice in 2026-05-12. Grep `find src -name '*.html' -exec grep -l '^=' {} \;` before shipping any HlmToggle-heavy page. Memory: `feedback_stripped_active_bindings.md`.
 
 ## Wiring outside this repo
 
@@ -179,9 +184,10 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 
 - **New lambda route** → register in `backend/lambda/lib/routes-*.mjs`, wire into `index.mjs` router, add a smoke `.http` file. Also `aws apigatewayv2 create-route` per the Auth section.
 - **New frontend feature** → standalone component under `src/app/features/`, register in `src/app/app.routes.ts` with the right guards. Authed routes render *inside* `<main hlmSidebarInset>` (full inset width minus `p-3 md:p-4`); don't add page-level horizontal padding.
-- **Touching the shell** (topbar / sidebar / inset) → memory `sidebar_shell_spartan_pattern.md` for the gap-div + fixed-container pattern. Real `display: flex` (no `contents`) per memory `safari_display_contents_flex_bug.md`.
+- **Touching the shell** (topbar / sidebar / inset) → memory `sidebar_shell_spartan_pattern.md` for the gap-div + fixed-container pattern. Real `display: flex` (no `contents`) per memory `safari_display_contents_flex_bug.md`. **Topbar uses `position: fixed`, not sticky** (memory `topbar_uses_position_fixed.md`): wrapper has `pt-14` to reserve space; sidebar's fixed `top: var(--header-height)` keeps it below. If topbar height ever changes from `h-14`, update both `pt-14` on the wrapper AND `--header-height: 3.5rem` inline style.
 - **Touching `reservations-new.ts`** (staff Hold & Reserve) → orchestration in main file, pure helpers extracted into 5 siblings under `src/app/features/staff/reservations-new/`: `*-utils.ts`, `*-active-hold.ts`, `*-filters.ts`, `*-credits.ts`, `*-confirm.ts`. Each has co-located `*.spec.ts`.
 - **Multi-table booking UX** lives in `reservations-new.ts`. "+ Add another table" appends to a session of per-table holds; cancellation derives release list from `reservation.tableIds`. **Render labels via `TableLabelPipe`** (`{{ reservation | tableLabel }}`) — never template `{{ reservation.tableId }}` directly.
+- **Reservation detail modal** (Dashboard urgent-payment row click + staff Reservations row click) → shared component at `src/app/shared/components/reservation-detail-modal/`. Parent owns all loading / error / notice state and emits ~14 actions; modal owns the 4-tab UI (overview / links / pass / activity), pure predicates (`canGeneratePaymentLink`, `canManageCheckInPass`, etc.), formatting helpers (`historyEventLabel`, `formatDeadline`, …), and tab signal. Shared types in `src/app/shared/models/reservation-detail.model.ts`. Don't duplicate the template — extend the shared component.
 - **Reservation state** → pick the right module per the Repo Layout split (`services-reservations.mjs` CRUD, `services-payment-recording.mjs` payments, `services-holds.mjs` holds, `services-reservations-shared.mjs` utilities, `services-reservations-holds.mjs` barrel). Read existing TransactWrite + ConditionExpression patterns before adding new writes.
 - **Payments** → `services-square-payments.mjs` (Square API) + `routes-square-webhooks.mjs` (receiver). The 6 staff/customer payment routes in `routes-reservations-holds.mjs` share the audit-C2 `autoRefundAfterRecordFailure` safety net (idempotency-keyed by Square paymentId). Customer-mobile equivalent in `routes-me.mjs` inlines the same — audit BOTH paths when changing payment behavior.
 - **Push notifications** → `services-push-notifications.mjs` (Expo Push dispatcher); `addReservationPayment` fires `sendPushToCustomer` on every recording. Logs `payment_push_dispatched`/`_skipped`.
