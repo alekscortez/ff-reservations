@@ -1,0 +1,315 @@
+<hlm-dialog
+  *ngIf="reservation"
+  (close)="close.emit()"
+  panelClass="h-[92dvh] w-[94vw] md:h-auto md:max-h-[92dvh]"
+>
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Reservation</p>
+      <h3 class="text-xl font-semibold text-brand-900">{{ reservation | tableLabel }}</h3>
+      <p class="break-words text-sm text-brand-600">{{ reservation.customerName }} · {{ reservation.phone | phoneDisplay }}</p>
+    </div>
+    <button
+      type="button"
+      hlmBtn variant="outline" size="icon-sm" class="rounded-full"
+      (click)="close.emit()"
+      aria-label="Close details"
+    >
+      <ng-icon name="lucideX" size="14" />
+    </button>
+  </div>
+
+  <div class="mt-4 grid grid-cols-2 gap-2">
+    <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Status</p>
+      <p class="text-sm font-semibold text-brand-900">{{ reservation.status }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment</p>
+      <p class="text-sm font-semibold text-brand-900">{{ reservation.paymentStatus || '—' }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Deposit</p>
+      <p class="text-sm font-semibold text-brand-900">${{ reservation.depositAmount }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Amount Due</p>
+      <p class="text-sm font-semibold text-brand-900">${{ reservation.amountDue ?? 0 }}</p>
+    </article>
+  </div>
+
+  <nav class="mt-4 flex flex-wrap gap-1 rounded-lg border border-brand-200 bg-brand-50 p-1" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+      [class.bg-white]="tab() === 'overview'"
+      [class.text-brand-900]="tab() === 'overview'"
+      [class.shadow-sm]="tab() === 'overview'"
+      [class.text-brand-600]="tab() !== 'overview'"
+      [attr.aria-selected]="tab() === 'overview'"
+      (click)="tab.set('overview')"
+    >
+      Overview
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+      [class.bg-white]="tab() === 'links'"
+      [class.text-brand-900]="tab() === 'links'"
+      [class.shadow-sm]="tab() === 'links'"
+      [class.text-brand-600]="tab() !== 'links'"
+      [attr.aria-selected]="tab() === 'links'"
+      (click)="tab.set('links')"
+    >
+      Links
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+      [class.bg-white]="tab() === 'pass'"
+      [class.text-brand-900]="tab() === 'pass'"
+      [class.shadow-sm]="tab() === 'pass'"
+      [class.text-brand-600]="tab() !== 'pass'"
+      [attr.aria-selected]="tab() === 'pass'"
+      (click)="tab.set('pass')"
+    >
+      Pass
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+      [class.bg-white]="tab() === 'history'"
+      [class.text-brand-900]="tab() === 'history'"
+      [class.shadow-sm]="tab() === 'history'"
+      [class.text-brand-600]="tab() !== 'history'"
+      [attr.aria-selected]="tab() === 'history'"
+      (click)="tab.set('history')"
+    >
+      Activity
+    </button>
+  </nav>
+
+  <div class="mt-4 grid gap-3" *ngIf="tab() === 'overview'" role="tabpanel">
+    <article class="rounded-xl border border-brand-100 p-3">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Info</p>
+      <dl class="mt-2 grid gap-2 text-sm text-brand-800">
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-brand-500">Method</dt>
+          <dd class="font-medium text-brand-900">{{ reservation.paymentMethod | paymentMethodLabel }}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-brand-500">Deadline</dt>
+          <dd class="font-medium text-brand-900">{{ formatDeadline(reservation.paymentDeadlineAt, reservation.eventDate) }}</dd>
+        </div>
+      </dl>
+    </article>
+
+    <article class="rounded-xl border border-brand-100 p-3">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Audit</p>
+      <dl class="mt-2 grid gap-2 text-sm text-brand-800">
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-brand-500">Created By</dt>
+          <dd class="font-medium text-brand-900">{{ reservation.createdBy || '—' }}</dd>
+        </div>
+        <div class="flex items-start justify-between gap-3">
+          <dt class="text-brand-500">Cancel Reason</dt>
+          <dd class="max-w-[70%] text-right font-medium text-brand-900">{{ reservation.cancelReason || '—' }}</dd>
+        </div>
+      </dl>
+    </article>
+
+    <article class="rounded-xl border border-brand-100 p-3" *ngIf="canCancel">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Reservation Status</p>
+        <button
+          type="button"
+          hlmBtn variant="outline" size="xs" class="border-danger-200 text-danger-700"
+          [disabled]="!canCancelReservation(reservation)"
+          (click)="cancel.emit()"
+        >
+          Cancel Reservation
+        </button>
+      </div>
+      <p class="mt-2 text-xs text-brand-500" *ngIf="isPastEvent(reservation)">
+        Past event reservation: payments and cancellation are disabled.
+      </p>
+    </article>
+  </div>
+
+  <div class="mt-4 grid gap-3" *ngIf="tab() === 'links'" role="tabpanel">
+    <p
+      class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600"
+      *ngIf="!canGeneratePaymentLink(reservation)"
+    >
+      Payment links are unavailable: this reservation is either paid in full, cancelled, or for a past event.
+    </p>
+
+    <article class="rounded-xl border border-brand-100 p-3" *ngIf="canGeneratePaymentLink(reservation)">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Links</p>
+      <div class="mt-2 grid gap-2 md:grid-cols-2">
+        <section class="rounded-lg border border-brand-100 bg-brand-50 p-2">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">Square</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              hlmBtn variant="outline" size="xs"
+              [disabled]="squareLinkLoading || cashAppLinkLoading || !canGeneratePaymentLink(reservation)"
+              (click)="generateSquareLink.emit()"
+            >
+              {{ squareLinkLoading ? 'Generating…' : 'Generate Square Link' }}
+            </button>
+          </div>
+        </section>
+
+        <section class="rounded-lg border border-brand-100 bg-brand-50 p-2">
+          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">Cash App</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              hlmBtn size="xs"
+              [disabled]="cashAppLinkLoading || squareLinkLoading || !canGeneratePaymentLink(reservation)"
+              (click)="generateCashAppLink.emit()"
+            >
+              {{ cashAppLinkLoading ? 'Generating…' : 'Generate Cash App Link' }}
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <p class="mt-2 text-xs text-danger-700" *ngIf="paymentLinkError">{{ paymentLinkError }}</p>
+      <p class="mt-2 text-xs text-success-700" *ngIf="paymentLinkNotice">{{ paymentLinkNotice }}</p>
+
+      <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="paymentLinkSmsState as smsState">
+        <div class="flex flex-wrap items-center gap-2">
+          <span hlmBadge size="sm" [variant]="paymentLinkSmsBadgeVariant(smsState.status)">
+            {{ smsState.status === 'SENT' ? 'SMS SENT' : 'SMS FAILED' }}
+          </span>
+          <span class="text-xs text-brand-600">{{ smsState.atMs | date:'short' }}</span>
+        </div>
+        <p class="mt-1 text-xs text-brand-700" *ngIf="smsState.to">To {{ smsState.to }}</p>
+        <p class="mt-1 break-all text-xs text-danger-700" *ngIf="smsState.errorMessage">{{ smsState.errorMessage }}</p>
+      </div>
+
+      <div class="mt-2 grid min-w-0 gap-2" *ngIf="paymentLink as link">
+        <p class="text-xs text-brand-600">
+          {{ link.method === 'cashapp' ? 'Cash App' : 'Square' }} link · Generated {{ link.createdAtMs | date:'shortTime' }} · ${{ link.amount | number:'1.2-2' }}
+        </p>
+        <input
+          type="text"
+          hlmInput class="min-w-0 text-xs"
+          [value]="link.url"
+          readonly
+        />
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            hlmBtn variant="outline" size="sm" class="border-warning-300 bg-warning-50 text-warning-800"
+            [disabled]="(link.method === 'square' ? squareLinkLoading : cashAppLinkLoading) || !canGeneratePaymentLink(reservation)"
+            (click)="sendSms.emit(link.method)"
+          >
+            {{
+              (link.method === 'square' ? squareLinkLoading : cashAppLinkLoading)
+                ? 'Sending…'
+                : 'Send via FF SMS'
+            }}
+          </button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="copyLink.emit()">Copy</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="openSms.emit()">SMS App</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="openWhatsApp.emit()">WhatsApp</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="share.emit()">Share</button>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <div class="mt-4 grid gap-3" *ngIf="tab() === 'pass'" role="tabpanel">
+    <article class="rounded-xl border border-brand-100 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Check-In Pass</p>
+        <button
+          type="button"
+          hlmBtn size="xs" class="shrink-0"
+          [disabled]="checkInPassLoading || !canReissueCheckInPass(reservation)"
+          (click)="reissuePass.emit()"
+        >
+          {{ checkInPassLoading ? 'Reissuing…' : 'Reissue Pass' }}
+        </button>
+      </div>
+
+      <p class="mt-2 text-xs text-brand-500" *ngIf="!canManageCheckInPass(reservation)">
+        Pass is available only for confirmed and fully paid reservations.
+      </p>
+      <p class="mt-2 text-xs text-brand-500" *ngIf="canManageCheckInPass(reservation) && !canReissueCheckInPass(reservation)">
+        Reservation is already checked in. Reissue is disabled.
+      </p>
+
+      <div class="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="checkInPassState as state">
+        <div class="flex flex-wrap items-center gap-2">
+          <span hlmBadge size="sm" [variant]="checkInStateBadgeVariant(state.status)">
+            {{ checkInStateLabel(state.status) }}
+          </span>
+          <span class="text-xs text-brand-600" *ngIf="epochSecondsToMs(state.usedAt) as usedAtMs">
+            {{ usedAtMs | date:'short' }}
+          </span>
+        </div>
+        <p class="mt-1 text-xs text-brand-700" *ngIf="state.usedBy">By {{ state.usedBy | systemActorLabel }}</p>
+        <p class="mt-1 text-xs text-brand-700" *ngIf="state.revokedBy">Revoked by {{ state.revokedBy | systemActorLabel }}</p>
+      </div>
+
+      <p class="mt-2 text-xs text-danger-700" *ngIf="checkInPassError">{{ checkInPassError }}</p>
+      <p class="mt-2 text-xs text-success-700" *ngIf="checkInPassNotice">{{ checkInPassNotice }}</p>
+
+      <div class="mt-2 grid min-w-0 gap-2" *ngIf="checkInPass as pass">
+        <p class="break-all text-xs text-brand-600">Pass {{ pass.passId }} · Updated {{ pass.createdAtMs | date:'shortTime' }}</p>
+        <input
+          type="text"
+          hlmInput class="min-w-0 text-xs"
+          [value]="pass.url"
+          readonly
+        />
+        <div class="flex flex-wrap gap-2">
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="copyPassLink.emit()">Copy</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="openSmsPass.emit()">SMS</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="openWhatsAppPass.emit()">WhatsApp</button>
+          <button type="button" hlmBtn variant="outline" size="sm" (click)="sharePass.emit()">Share</button>
+        </div>
+        <p class="break-all text-xs text-brand-500">{{ checkInPassShareMessage(reservation, pass.url) }}</p>
+      </div>
+    </article>
+  </div>
+
+  <div class="mt-4 grid gap-3" *ngIf="tab() === 'history'" role="tabpanel">
+    <article class="rounded-xl border border-brand-100 bg-white p-3">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Activity Log</p>
+
+      <p class="mt-2 text-xs text-brand-500" *ngIf="historyLoading">Loading history…</p>
+      <p class="mt-2 text-xs text-danger-700" *ngIf="historyError">{{ historyError }}</p>
+
+      <div class="mt-3 grid gap-2">
+        <p class="text-xs text-brand-500" *ngIf="(history?.length ?? 0) === 0 && !historyLoading">
+          No history yet for this reservation.
+        </p>
+
+        <article class="rounded-lg border border-brand-100 bg-brand-50 p-2" *ngFor="let h of history">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-brand-900">{{ historyEventLabel(h.eventType) }}</p>
+              <p class="mt-0.5 text-[11px] text-brand-600" *ngIf="historySummary(h) as summary">{{ summary }}</p>
+              <p class="mt-0.5 text-[11px] text-brand-500">By {{ h.actor | systemActorLabel }}</p>
+            </div>
+            <div class="text-right">
+              <span hlmBadge size="xs" [variant]="historyEventBadgeVariant(h.eventType)">
+                {{ historyEventLabel(h.eventType) }}
+              </span>
+              <p class="mt-1 text-[11px] text-brand-500">{{ h.atMs | date:'short' }}</p>
+            </div>
+          </div>
+        </article>
+      </div>
+    </article>
+  </div>
+</hlm-dialog>

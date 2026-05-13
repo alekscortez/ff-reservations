@@ -26,17 +26,20 @@ import {
   getSortedRowModel,
 } from '@tanstack/angular-table';
 import {
-  CreateSquarePaymentLinkResponse,
   ReservationHistoryItem,
   ReservationsService,
 } from '../../../core/http/reservations.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
 import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
+import {
+  CheckInPassState,
+  GeneratedCheckInPass,
+  GeneratedPaymentLink,
+  PaymentLinkSmsState,
+  ReservationHistoryViewItem,
+} from '../../../shared/models/reservation-detail.model';
 import { EventsService } from '../../../core/http/events.service';
 import { EventItem } from '../../../shared/models/event.model';
-import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
-import { PaymentMethodLabelPipe } from '../../../shared/payment-method-label.pipe';
-import { SystemActorLabelPipe } from '../../../shared/system-actor-label.pipe';
 import {
   formatTableLabel,
   formatTableLabelLower,
@@ -67,53 +70,9 @@ import {
   HlmTh,
   HlmTr,
 } from '../../../shared/ui/table';
+import { ReservationDetailModal } from '../../../shared/components/reservation-detail-modal/reservation-detail-modal';
 
 const PAGE_SIZE = 25;
-// (BadgeVariants imported for paymentStatusBadgeVariant in Phase 5c —
-// re-used here for the 3 modal-internal badge variants below.)
-
-interface GeneratedPaymentLink {
-  method: 'square' | 'cashapp';
-  url: string;
-  amount: number;
-  createdAtMs: number;
-  audit?: CreateSquarePaymentLinkResponse['square']['audit'];
-}
-
-interface GeneratedCheckInPass {
-  passId: string;
-  url: string;
-  token: string;
-  qrPayload: string;
-  createdAtMs: number;
-}
-
-interface CheckInPassState {
-  passId: string;
-  status: string;
-  issuedAt: number | null;
-  usedAt: number | null;
-  usedBy: string | null;
-  revokedAt: number | null;
-  revokedBy: string | null;
-  expiresAt: number | null;
-}
-
-interface ReservationHistoryViewItem {
-  eventId: string;
-  eventType: string;
-  atMs: number;
-  actor: string;
-  source: string | null;
-  details: Record<string, unknown> | null;
-}
-
-interface PaymentLinkSmsState {
-  status: 'SENT' | 'FAILED';
-  atMs: number;
-  to: string | null;
-  errorMessage: string | null;
-}
 
 @Component({
   selector: 'app-reservations',
@@ -121,9 +80,6 @@ interface PaymentLinkSmsState {
     CommonModule,
     ReactiveFormsModule,
     NgIcon,
-    PhoneDisplayPipe,
-    PaymentMethodLabelPipe,
-    SystemActorLabelPipe,
     TableLabelPipe,
     HlmAlert,
     HlmDialog,
@@ -144,6 +100,7 @@ interface PaymentLinkSmsState {
     HlmTd,
     HlmTh,
     HlmTr,
+    ReservationDetailModal,
   ],
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX })],
   templateUrl: './reservations.html',
@@ -665,12 +622,9 @@ export class Reservations implements OnInit, OnDestroy {
     return this.remainingAmount(item);
   }
 
-  readonly detailTab = signal<'overview' | 'links' | 'pass' | 'history'>('overview');
-
   openDetails(item: ReservationItem): void {
     this.detailItem = item;
     this.showDetailsModal = true;
-    this.detailTab.set('overview');
     this.syncSidebarModalLock();
     this.checkInPassError = null;
     this.checkInPassNotice = null;
@@ -848,35 +802,6 @@ export class Reservations implements OnInit, OnDestroy {
       return;
     }
     this.copyCheckInPassLink(item);
-  }
-
-  checkInPassShareMessage(item: ReservationItem): string {
-    const pass = this.getCheckInPass(item);
-    if (!pass) return '';
-    return this.buildCheckInPassShareMessage(item, pass.url);
-  }
-
-  checkInStateLabel(status: string | null | undefined): string {
-    const normalized = String(status ?? '').toUpperCase();
-    if (normalized === 'USED') return 'Checked In';
-    if (normalized === 'ISSUED') return 'Issued';
-    if (normalized === 'REVOKED') return 'Revoked';
-    if (normalized === 'EXPIRED') return 'Expired';
-    return 'Unknown';
-  }
-
-  checkInStateBadgeVariant(status: string | null | undefined): BadgeVariants['variant'] {
-    const normalized = String(status ?? '').toUpperCase();
-    if (normalized === 'USED') return 'success';
-    if (normalized === 'ISSUED') return 'secondary';
-    if (normalized === 'REVOKED') return 'danger';
-    if (normalized === 'EXPIRED') return 'warning';
-    return 'secondary';
-  }
-
-  epochSecondsToMs(value: number | null | undefined): number | null {
-    const epoch = Number(value ?? 0);
-    return Number.isFinite(epoch) && epoch > 0 ? epoch * 1000 : null;
   }
 
   openPayment(item: ReservationItem): void {
@@ -1259,102 +1184,6 @@ export class Reservations implements OnInit, OnDestroy {
     };
   }
 
-  paymentLinkSmsBadgeVariant(status: string | null | undefined): BadgeVariants['variant'] {
-    const normalized = String(status ?? '').trim().toUpperCase();
-    if (normalized === 'SENT') return 'success';
-    if (normalized === 'FAILED') return 'danger';
-    return 'secondary';
-  }
-
-  historyEventLabel(eventType: string): string {
-    const normalized = String(eventType ?? '').trim().toUpperCase();
-    if (normalized === 'RESERVATION_CREATED') return 'Reservation Created';
-    if (normalized === 'PAYMENT_RECORDED') return 'Payment Recorded';
-    if (normalized === 'PAYMENT_LINK_ISSUED') return 'Square Link';
-    if (normalized === 'CASH_APP_LINK_COMPLETED') return 'Cash App Payment Completed';
-    if (normalized === 'CASH_APP_LINK_ISSUED') return 'Cash App Link';
-    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'Payment Request Sent';
-    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'Payment Request Failed';
-    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'Check-In Pass Sent';
-    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'Check-In Pass Failed';
-    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'Reservation Credit Issued';
-    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'Reservation Credit Applied';
-    if (normalized === 'RESERVATION_CANCELLED') return 'Reservation Cancelled';
-    if (normalized === 'CHECKIN_PASS_ISSUED') return 'Check-In Pass Issued';
-    if (normalized === 'CHECKIN_PASS_REISSUED') return 'Check-In Pass Reissued';
-    if (normalized === 'CHECKED_IN') return 'Checked In';
-    return normalized.replace(/_/g, ' ');
-  }
-
-  historyEventBadgeVariant(eventType: string): BadgeVariants['variant'] {
-    const normalized = String(eventType ?? '').trim().toUpperCase();
-    if (normalized === 'CHECKED_IN') return 'success';
-    if (normalized === 'PAYMENT_RECORDED') return 'secondary';
-    if (normalized === 'PAYMENT_LINK_SMS_SENT') return 'success';
-    if (normalized === 'PAYMENT_LINK_SMS_FAILED') return 'danger';
-    if (normalized === 'CHECKIN_PASS_SMS_SENT') return 'success';
-    if (normalized === 'CHECKIN_PASS_SMS_FAILED') return 'danger';
-    if (normalized === 'RESCHEDULE_CREDIT_ISSUED') return 'success';
-    if (normalized === 'RESCHEDULE_CREDIT_APPLIED') return 'success';
-    if (normalized === 'RESERVATION_CANCELLED') return 'danger';
-    return 'secondary';
-  }
-
-  historySummary(item: ReservationHistoryViewItem): string {
-    const details = item.details ?? {};
-    const amount = this.historyNumber(details['amount']);
-    const method = this.historyString(details['method']);
-    const reason = this.historyString(details['reason']);
-    const paymentStatus = this.historyString(details['paymentStatus']);
-    const receiptNumber = this.historyString(details['receiptNumber']);
-    const smsTo = this.historyString(details['to']);
-    const smsError = this.historyString(details['errorMessage']);
-    const creditAmount = this.historyNumber(details['amount']);
-    const creditExpiresAt = this.historyString(details['expiresAt']);
-
-    if (item.eventType === 'PAYMENT_RECORDED' && amount !== null) {
-      const methodText = method ? ` · ${this.paymentMethodLabel(method)}` : '';
-      const statusText = paymentStatus ? ` · ${paymentStatus}` : '';
-      const receiptText = receiptNumber ? ` · Receipt ${receiptNumber}` : '';
-      return `$${amount.toFixed(2)}${methodText}${statusText}${receiptText}`;
-    }
-    if (item.eventType === 'RESERVATION_CANCELLED' && reason) {
-      return reason;
-    }
-    if (item.eventType === 'RESERVATION_CREATED' && paymentStatus) {
-      return `Status ${paymentStatus}`;
-    }
-    if (item.eventType === 'PAYMENT_LINK_SMS_SENT') {
-      return smsTo ? `Sent to ${smsTo}` : 'SMS sent';
-    }
-    if (item.eventType === 'PAYMENT_LINK_SMS_FAILED') {
-      return smsError || 'SMS send failed';
-    }
-    if (item.eventType === 'PAYMENT_LINK_ISSUED') {
-      return 'Square link generated';
-    }
-    if (item.eventType === 'CASH_APP_LINK_COMPLETED') {
-      return 'Cash App payment completed';
-    }
-    if (item.eventType === 'CASH_APP_LINK_ISSUED') {
-      return 'Cash App link generated';
-    }
-    if (item.eventType === 'CHECKIN_PASS_SMS_SENT') {
-      return smsTo ? `Sent to ${smsTo}` : 'SMS sent';
-    }
-    if (item.eventType === 'CHECKIN_PASS_SMS_FAILED') {
-      return smsError || 'SMS send failed';
-    }
-    if (item.eventType === 'RESCHEDULE_CREDIT_ISSUED') {
-      const amountText = creditAmount !== null ? `$${creditAmount.toFixed(2)}` : 'Credit issued';
-      return creditExpiresAt ? `${amountText} · Expires ${creditExpiresAt}` : amountText;
-    }
-    if (item.eventType === 'RESCHEDULE_CREDIT_APPLIED') {
-      return amount !== null ? `$${amount.toFixed(2)}` : 'Credit applied';
-    }
-    return '';
-  }
-
   private remainingAmount(item: ReservationItem): number {
     const due = Number(item.amountDue ?? 0);
     const paid = Number(item.depositAmount ?? 0);
@@ -1458,25 +1287,6 @@ export class Reservations implements OnInit, OnDestroy {
   private historyString(value: unknown): string | null {
     const text = String(value ?? '').trim();
     return text ? text : null;
-  }
-
-  private historyNumber(value: unknown): number | null {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  private paymentMethodLabel(value: string): string {
-    const normalized = String(value ?? '').trim().toLowerCase();
-    if (normalized === 'cash') return 'Cash';
-    if (normalized === 'cashapp') return 'Cash App Pay';
-    if (normalized === 'square') return 'Square';
-    if (normalized === 'credit') return 'Reservation Credit';
-    return normalized
-      .replace(/[_-]+/g, ' ')
-      .split(' ')
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ');
   }
 
   private toSmsRecipient(phone: string | undefined): string {
