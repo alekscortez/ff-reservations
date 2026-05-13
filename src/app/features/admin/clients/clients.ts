@@ -1,4 +1,12 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -80,6 +88,7 @@ const PAGE_SIZE = 50;
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis })],
   templateUrl: './clients.html',
   styleUrl: './clients.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Clients implements OnInit {
   private clientsApi = inject(ClientsService);
@@ -89,7 +98,7 @@ export class Clients implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly editingPhone = signal<string | null>(null);
-  editPhoneCountry: 'US' | 'MX' = 'US';
+  readonly editPhoneCountry = signal<'US' | 'MX'>('US');
 
   readonly filterQuery = new FormControl('', { nonNullable: true });
   private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
@@ -285,9 +294,10 @@ export class Clients implements OnInit {
 
   startEdit(item: CrmClient): void {
     this.editingPhone.set(item.phone);
-    this.editPhoneCountry =
+    this.editPhoneCountry.set(
       inferPhoneCountryFromE164(item.phone) ??
-      normalizePhoneCountry(item.phoneCountry ?? 'US');
+        normalizePhoneCountry(item.phoneCountry ?? 'US'),
+    );
     this.editForm.setValue({
       name: item.name ?? '',
       phone: item.phone ?? '',
@@ -301,9 +311,10 @@ export class Clients implements OnInit {
   saveEdit(): void {
     const editingPhone = this.editingPhone();
     if (!editingPhone) return;
+    const country = this.editPhoneCountry();
     const phone = normalizePhoneToE164(
       this.editForm.controls.phone.value.trim(),
-      normalizePhoneCountry(this.editPhoneCountry),
+      normalizePhoneCountry(country),
     );
     if (!phone) {
       this.error.set('Phone must be a valid US or MX number.');
@@ -314,7 +325,7 @@ export class Clients implements OnInit {
     const patch = {
       name: this.editForm.controls.name.value.trim(),
       phone,
-      phoneCountry: this.editPhoneCountry,
+      phoneCountry: country,
     };
     this.clientsApi.update(editingPhone, patch).subscribe({
       next: (item) => {
@@ -329,29 +340,29 @@ export class Clients implements OnInit {
     });
   }
 
-  frequentTarget: CrmClient | null = null;
+  readonly frequentTarget = signal<CrmClient | null>(null);
   frequentForm = new FormGroup({
     defaultTables: new FormControl('', { nonNullable: true }),
     notes: new FormControl('', { nonNullable: true }),
   });
-  deleteTarget: CrmClient | null = null;
+  readonly deleteTarget = signal<CrmClient | null>(null);
 
   addToFrequent(item: CrmClient): void {
-    this.frequentTarget = item;
+    this.frequentTarget.set(item);
     this.frequentForm.reset({ defaultTables: '', notes: '' });
   }
 
   cancelAddToFrequent(): void {
-    this.frequentTarget = null;
+    this.frequentTarget.set(null);
   }
 
   confirmAddToFrequent(): void {
-    const item = this.frequentTarget;
+    const item = this.frequentTarget();
     if (!item) return;
     const defaultTables = this.frequentForm.controls.defaultTables.value.trim();
     if (!defaultTables) return;
     const notes = this.frequentForm.controls.notes.value.trim();
-    this.frequentTarget = null;
+    this.frequentTarget.set(null);
     this.loading.set(true);
     this.error.set(null);
     this.frequentApi
@@ -379,17 +390,17 @@ export class Clients implements OnInit {
   }
 
   deleteClient(item: CrmClient): void {
-    this.deleteTarget = item;
+    this.deleteTarget.set(item);
   }
 
   cancelDeleteClient(): void {
-    this.deleteTarget = null;
+    this.deleteTarget.set(null);
   }
 
   confirmDeleteClient(): void {
-    const item = this.deleteTarget;
+    const item = this.deleteTarget();
     if (!item) return;
-    this.deleteTarget = null;
+    this.deleteTarget.set(null);
     this.loading.set(true);
     this.error.set(null);
     this.clientsApi.delete(item.phone ?? '').subscribe({

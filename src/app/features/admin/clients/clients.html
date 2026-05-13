@@ -122,8 +122,8 @@
                     />
                     <select
                       hlmInput class="px-2"
-                      [value]="editPhoneCountry"
-                      (change)="editPhoneCountry = $any($event.target).value"
+                      [value]="editPhoneCountry()"
+                      (change)="editPhoneCountry.set($any($event.target).value)"
                     >
                       <option value="US">US</option>
                       <option value="MX">MX</option>
@@ -217,20 +217,21 @@
   </div>
 </section>
 
-<hlm-confirm-dialog
-  *ngIf="deleteTarget"
-  title="Delete client?"
-  [message]="'Remove ' + (deleteTarget.name || deleteTarget.phone || '') + ' from CRM. This cannot be undone.'"
-  confirmText="Delete"
-  loadingText="Deleting…"
-  [destructive]="true"
-  (confirm)="confirmDeleteClient()"
-  (cancel)="cancelDeleteClient()"
-/>
+<ng-container *ngIf="deleteTarget() as target">
+  <hlm-confirm-dialog
+    title="Delete client?"
+    [message]="'Remove ' + (target.name || target.phone || '') + ' from CRM. This cannot be undone.'"
+    confirmText="Delete"
+    loadingText="Deleting…"
+    [destructive]="true"
+    (confirm)="confirmDeleteClient()"
+    (cancel)="cancelDeleteClient()"
+  />
+</ng-container>
 
-<hlm-dialog *ngIf="frequentTarget" (close)="cancelAddToFrequent()" panelClass="max-w-md" [ariaLabel]="'Add to frequent clients'">
+<hlm-dialog *ngIf="frequentTarget() as target" (close)="cancelAddToFrequent()" panelClass="max-w-md" [ariaLabel]="'Add to frequent clients'">
   <h3 class="text-lg font-semibold text-brand-900">Add to frequent clients</h3>
-  <p class="mt-2 text-sm text-brand-600">{{ frequentTarget.name || frequentTarget.phone }}</p>
+  <p class="mt-2 text-sm text-brand-600">{{ target.name || target.phone }}</p>
   <form [formGroup]="frequentForm" (ngSubmit)="confirmAddToFrequent()" class="mt-4 grid gap-3">
     <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
       Default tables
