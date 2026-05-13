@@ -95,13 +95,16 @@ function getRemoteIp(event) {
 
 // Sanitized payload for the polling endpoint. Hides phone digits,
 // tablePrices, internal CRM links, etc. — everything the customer doesn't
-// need to see on the confirmation page.
-function sanitizeReservationForPublic(reservation, eventName) {
+// need to see on the confirmation page. baseUrl is optional and only used
+// to build the pre-formatted shortUrl; without it the field is omitted.
+function sanitizeReservationForPublic(reservation, eventName, baseUrl = "") {
   const tableIds = getReservationTableIds(reservation);
   const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
   const status = String(reservation?.status ?? "").toUpperCase();
 
   const confirmationCode = String(reservation?.confirmationCode ?? "").trim() || null;
+  const publicSlug = String(reservation?.publicSlug ?? "").trim() || null;
+  const trimmedBase = String(baseUrl ?? "").trim().replace(/\/+$/, "");
   return {
     reservationId: String(reservation?.reservationId ?? "").trim(),
     eventDate: String(reservation?.eventDate ?? "").trim(),
@@ -123,6 +126,11 @@ function sanitizeReservationForPublic(reservation, eventName) {
     confirmationCodeFormatted: confirmationCode
       ? formatPublicConfirmationCode(confirmationCode)
       : null,
+    publicSlug,
+    // Pre-formatted short URL — convenience so the frontend doesn't have
+    // to know our return-base URL. Null for legacy reservations that
+    // don't have a slug.
+    shortUrl: publicSlug && trimmedBase ? `${trimmedBase}/p/${publicSlug}` : null,
   };
 }
 
@@ -687,7 +695,11 @@ export async function handlePublicBookingsRoute(ctx) {
         {
           message: "Reservation cancelled",
           code: "RESERVATION_CANCELLED",
-          reservation: sanitizeReservationForPublic(reservation, null),
+          reservation: sanitizeReservationForPublic(
+            reservation,
+            null,
+            publicBookingReturnBaseUrl
+          ),
         },
         cors
       );
@@ -702,7 +714,11 @@ export async function handlePublicBookingsRoute(ctx) {
     return json(
       200,
       {
-        reservation: sanitizeReservationForPublic(reservation, eventName),
+        reservation: sanitizeReservationForPublic(
+          reservation,
+          eventName,
+          publicBookingReturnBaseUrl
+        ),
       },
       cors
     );
@@ -943,10 +959,15 @@ export async function handlePublicBookingsRoute(ctx) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
-  // GET /p/{slug} — short URL alias. Looks up the slug + 302s to the
-  // canonical /r/{reservationId}?t=...&eventDate=... URL the SPA already
-  // renders. Customer-facing SMS / WhatsApp links use this form so they
-  // stay short (~28 chars instead of ~200).
+  // GET /p/{slug}[?to=pass] — short URL alias. Default 302s to the
+  // /r confirmation page. ?to=pass sniffs the reservation, finds the
+  // active check-in pass, and 302s to /check-in/pass?token=... so a
+  // single short link can carry either intent (Android customers who
+  // want the QR straight away vs the standard receipt landing page).
+  //
+  // ?to=pass falls back to the /r redirect if the reservation isn't
+  // yet PAID — better than a confusing error for a customer who
+  // taps the link before the webhook lands.
   // ─────────────────────────────────────────────────────────────────────
   const publicSlugMatch = path.match(/^\/p\/([^/]+)$/);
   if (publicSlugMatch && method === "GET") {
@@ -967,6 +988,58 @@ export async function handlePublicBookingsRoute(ctx) {
     )
       .trim()
       .replace(/\/+$/, "");
+
+    const requestedDestination = String(
+      event?.queryStringParameters?.to ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (requestedDestination === "pass") {
+      try {
+        const reservation = await getReservationById(
+          looked.eventDate,
+          looked.reservationId
+        );
+        const paymentStatus = String(reservation?.paymentStatus ?? "")
+          .toUpperCase();
+        if (paymentStatus === "PAID" || paymentStatus === "COURTESY") {
+          let pass =
+            typeof getActivePassForReservation === "function"
+              ? await getActivePassForReservation(looked.reservationId, {
+                  includeToken: true,
+                })
+              : null;
+          if (!pass && typeof issuePassForReservation === "function") {
+            const issued = await issuePassForReservation({
+              reservation,
+              issuedBy: ANON_ACTOR,
+              reissue: false,
+            });
+            pass = issued?.pass ?? null;
+          }
+          const passToken = String(pass?.token ?? "").trim();
+          if (passToken) {
+            return {
+              statusCode: 302,
+              headers: {
+                location: `${base}/check-in/pass?token=${encodeURIComponent(
+                  passToken
+                )}`,
+                "cache-control": "no-store",
+                ...cors,
+              },
+              body: "",
+            };
+          }
+        }
+        // PENDING / no-pass-yet → fall through to the default /r redirect
+        // so the customer lands on a useful page instead of a dead end.
+      } catch {
+        // Soft-fail — fall through to /r.
+      }
+    }
+
     const destination = `${base}/r/${encodeURIComponent(
       looked.reservationId
     )}?t=${encodeURIComponent(looked.customerToken)}&eventDate=${encodeURIComponent(

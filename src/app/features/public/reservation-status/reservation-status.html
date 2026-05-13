@@ -120,6 +120,20 @@
         *ngIf="walletError() as err"
         class="text-xs text-danger-700"
       >{{ err }}</p>
+
+      <!-- For Android customers and anyone without Apple Wallet — open
+           the dedicated check-in pass page (existing branded card with
+           the QR code). Routes through the short URL with ?to=pass so
+           the share-friendly version is what they get if they screenshot
+           or copy the address. -->
+      <a
+        *ngIf="r.shortUrl"
+        [href]="r.shortUrl + '?to=pass'"
+        hlmBtn variant="outline" size="lg"
+        target="_blank"
+        rel="noopener"
+      >View check-in pass</a>
+
       <p class="text-xs text-success-700">
         Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt.
       </p>

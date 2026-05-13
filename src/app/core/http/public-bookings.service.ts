@@ -52,6 +52,11 @@ export interface PublicReservationView {
   // rollout) won't have these — they'll be null.
   confirmationCode: string | null;
   confirmationCodeFormatted: string | null;
+  // 16-char URL slug + the pre-formatted short URL. shortUrl with
+  // ?to=pass redirects to /check-in/pass — used by the "View check-in
+  // pass" CTA on the PAID page (so non-Apple users can show the QR).
+  publicSlug: string | null;
+  shortUrl: string | null;
 }
 
 export interface GetPublicReservationResponse {
