@@ -356,6 +356,21 @@ describe("GET /reservations", () => {
     assert.equal(res.body.items.length, 1);
     assert.deepEqual(calls.releaseOverdueReservationsForEventDate, ["2026-05-09"]);
   });
+
+  it("suppressRelease=1 skips the overdue release sweep", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/reservations",
+      event: {
+        queryStringParameters: { eventDate: "2026-05-09", suppressRelease: "1" },
+      },
+      reservations: [{ reservationId: "r1" }],
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.items.length, 1);
+    assert.deepEqual(calls.releaseOverdueReservationsForEventDate, []);
+  });
 });
 
 // ---------------------------------------------------------------------------

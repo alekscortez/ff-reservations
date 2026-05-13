@@ -167,9 +167,11 @@ export class ReservationsService {
     return this.api.post<CreateReservationResponse>('/reservations', payload);
   }
 
-  list(eventDate: string) {
+  list(eventDate: string, opts?: { suppressRelease?: boolean }) {
+    const params: Record<string, string> = { eventDate };
+    if (opts?.suppressRelease) params['suppressRelease'] = '1';
     return this.api
-      .get<{ items: ReservationItem[] }>('/reservations', { eventDate })
+      .get<{ items: ReservationItem[] }>('/reservations', params)
       .pipe(map((res) => res.items ?? []));
   }
 

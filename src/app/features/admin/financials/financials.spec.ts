@@ -179,6 +179,30 @@ describe('Financials', () => {
       expect(receivables.length).toBe(2);
       expect(receivables.map((r: any) => r.paymentStatus)).toEqual(['PENDING', 'PARTIAL']);
     });
+
+    it('includes balance-bearing rows without a deadline and sorts them last', () => {
+      const rows = [
+        {
+          reservationId: 'no-deadline',
+          status: 'CONFIRMED',
+          paymentStatus: 'PENDING',
+          balance: 100,
+          deadlineMs: null,
+        },
+        {
+          reservationId: 'urgent',
+          status: 'CONFIRMED',
+          paymentStatus: 'PARTIAL',
+          balance: 50,
+          deadlineMs: 1700000000000,
+        },
+      ];
+      const receivables = (component as any).buildReceivables(rows);
+      expect(receivables.map((r: any) => r.reservationId)).toEqual([
+        'urgent',
+        'no-deadline',
+      ]);
+    });
   });
 
   // buildMethodTotals ------------------------------------------------------
@@ -435,6 +459,30 @@ describe('Financials', () => {
     it('formats square-refund as "Square Refund" with danger badge', () => {
       expect(component.formatSourceLabel('square-refund')).toBe('Square Refund');
       expect(component.sourceBadgeClass('square-refund')).toContain('danger');
+    });
+  });
+
+  // CSV escaping -----------------------------------------------------------
+
+  describe('escapeCsv', () => {
+    it('prefixes a single quote to defang formula-injection vectors', () => {
+      const esc = (v: unknown) => (component as any).escapeCsv(v);
+      expect(esc('=cmd|"calc"!A1')).toBe(`"'=cmd|""calc""!A1"`);
+      expect(esc('+1234')).toBe(`'+1234`);
+      expect(esc('-5')).toBe(`'-5`);
+      expect(esc('@example')).toBe(`'@example`);
+    });
+
+    it('leaves benign values untouched', () => {
+      const esc = (v: unknown) => (component as any).escapeCsv(v);
+      expect(esc('Alice')).toBe('Alice');
+      expect(esc('123.45')).toBe('123.45');
+    });
+
+    it('quotes cells containing commas / quotes / newlines', () => {
+      const esc = (v: unknown) => (component as any).escapeCsv(v);
+      expect(esc('Doe, John')).toBe('"Doe, John"');
+      expect(esc('he said "hi"')).toBe('"he said ""hi"""');
     });
   });
 });

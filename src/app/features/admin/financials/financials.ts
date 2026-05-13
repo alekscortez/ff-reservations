@@ -320,7 +320,7 @@ export class Financials implements OnInit, OnDestroy {
     },
     {
       id: 'deadline',
-      accessorFn: (r) => r.deadlineMs ?? 0,
+      accessorFn: (r) => r.deadlineMs ?? Number.MAX_SAFE_INTEGER,
       enableSorting: true,
       sortingFn: 'basic',
     },
@@ -481,7 +481,9 @@ export class Financials implements OnInit, OnDestroy {
           (r.eventDate || '').toLowerCase().includes(q) ||
           (r.tableId || '').toLowerCase().includes(q) ||
           (r.providerPaymentId || '').toLowerCase().includes(q) ||
-          (r.orderId || '').toLowerCase().includes(q),
+          (r.orderId || '').toLowerCase().includes(q) ||
+          this.formatMethodLabel(r.method).toLowerCase().includes(q) ||
+          this.formatSourceLabel(r.source).toLowerCase().includes(q),
       );
     },
     getCoreRowModel: getCoreRowModel(),
@@ -641,12 +643,15 @@ export class Financials implements OnInit, OnDestroy {
     ).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(
       now.getMinutes()
     ).padStart(2, '0')}`;
+    const from = this.rangeFrom.value.trim().replace(/-/g, '');
+    const to = this.rangeTo.value.trim().replace(/-/g, '');
+    const rangeStamp = from && to ? `_${from}-${to}` : '';
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `financials-${stamp}.csv`;
+    a.download = `financials${rangeStamp}-${stamp}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -826,7 +831,7 @@ export class Financials implements OnInit, OnDestroy {
 
   private loadReservationsForEvents(events: EventItem[]) {
     const requests = events.map((event) =>
-      this.reservationsApi.list(event.eventDate).pipe(
+      this.reservationsApi.list(event.eventDate, { suppressRelease: true }).pipe(
         map((reservations) => ({ event, reservations: reservations ?? [] })),
         catchError((err) => {
           const msg =
@@ -903,12 +908,18 @@ export class Financials implements OnInit, OnDestroy {
   }
 
   private buildReceivables(rows: FinancialRow[]): FinancialRow[] {
+    // Includes rows without a paymentDeadlineAt — operator still needs to
+    // chase the balance even though the deadline is missing. Null-deadline
+    // rows sort to the bottom (treated as +∞) so real overdue stays first.
     return rows
       .filter((row) => row.status === 'CONFIRMED')
       .filter((row) => row.paymentStatus === 'PENDING' || row.paymentStatus === 'PARTIAL')
       .filter((row) => row.balance > 0)
-      .filter((row) => row.deadlineMs !== null)
-      .sort((a, b) => (a.deadlineMs ?? 0) - (b.deadlineMs ?? 0));
+      .sort(
+        (a, b) =>
+          (a.deadlineMs ?? Number.MAX_SAFE_INTEGER) -
+          (b.deadlineMs ?? Number.MAX_SAFE_INTEGER)
+      );
   }
 
   private buildEventSummaries(
@@ -1281,10 +1292,15 @@ export class Financials implements OnInit, OnDestroy {
 
   private escapeCsv(value: unknown): string {
     const text = String(value ?? '');
-    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-      return `"${text.replace(/"/g, '""')}"`;
+    // Defang CSV-injection / formula-execution: spreadsheets evaluate cells
+    // that start with =, +, -, or @ as formulas. Prefix a single quote so
+    // the cell is parsed as literal text. The quote is invisible in the
+    // grid but breaks the formula path.
+    const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
+      return `"${safe.replace(/"/g, '""')}"`;
     }
-    return text;
+    return safe;
   }
 
   private sum(values: number[]): number {

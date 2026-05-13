@@ -632,7 +632,14 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     requireStaffOrAdmin(event);
     const eventDate = event.queryStringParameters?.eventDate;
     if (!eventDate) return json(400, { message: "eventDate is required" }, cors);
-    if (typeof releaseOverdueReservationsForEventDate === "function") {
+    // `suppressRelease=1` skips the per-event overdue sweep that staff
+    // hot-paths use as a belt-and-suspenders against the EventBridge cron.
+    // Reporting consumers (admin Financials) fan out across many events
+    // and don't want the read to mutate hold state mid-load. The cron
+    // (`runScheduledMaintenance`) still owns active-event sweeping.
+    const suppressRelease =
+      String(event.queryStringParameters?.suppressRelease ?? "").trim() === "1";
+    if (!suppressRelease && typeof releaseOverdueReservationsForEventDate === "function") {
       await releaseOverdueReservationsForEventDate(eventDate);
     }
     const items = await listReservations(eventDate);
