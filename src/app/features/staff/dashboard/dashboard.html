@@ -6,50 +6,50 @@
       </div>
     </div>
 
-    <div *ngIf="loadingContext" class="mt-3 text-sm text-brand-500">Loading event context…</div>
+    <div *ngIf="loadingContext()" class="mt-3 text-sm text-brand-500">Loading event context…</div>
 
-    <div *ngIf="!loadingContext && contextEvent" class="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+    <div *ngIf="!loadingContext() && contextEvent() as ctx" class="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
       <div>
-        <p class="text-[11px] uppercase tracking-[0.15em] text-brand-500">{{ contextLabel }}</p>
-        <h2 class="text-xl font-semibold text-brand-900">{{ contextEvent.eventName }}</h2>
-        <p class="text-sm text-brand-600">{{ formatEventDate(contextEvent.eventDate) }} · {{ contextEvent.status }}</p>
+        <p class="text-[11px] uppercase tracking-[0.15em] text-brand-500">{{ contextLabel() }}</p>
+        <h2 class="text-xl font-semibold text-brand-900">{{ ctx.eventName }}</h2>
+        <p class="text-sm text-brand-600">{{ formatEventDate(ctx.eventDate) }} · {{ ctx.status }}</p>
       </div>
       <a
         [routerLink]="['/staff/reservations/new']"
-        [queryParams]="{ date: contextEvent.eventDate }"
+        [queryParams]="{ date: ctx.eventDate }"
         class="inline-flex h-11 items-center justify-center rounded-lg bg-brand-900 px-4 text-sm font-semibold text-white"
       >
         New Reservation
       </a>
     </div>
 
-    <div *ngIf="!loadingContext && !contextEvent" class="mt-4 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-700">
+    <div *ngIf="!loadingContext() && !contextEvent()" class="mt-4 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-700">
       No active event found for today. Create/activate an event to see live floor metrics.
     </div>
 
-    <hlm-alert *ngIf="error" variant="destructive" class="mt-3">{{ error }}</hlm-alert>
+    <hlm-alert *ngIf="error()" variant="destructive" class="mt-3">{{ error() }}</hlm-alert>
   </header>
 
   <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
     <article class="rounded-xl border border-brand-100 bg-white p-4">
       <p class="text-xs uppercase tracking-[0.14em] text-brand-500">Total</p>
-      <p class="mt-2 text-2xl font-semibold text-brand-900">{{ kpis.total }}</p>
+      <p class="mt-2 text-2xl font-semibold text-brand-900">{{ kpis().total }}</p>
     </article>
     <article class="rounded-xl border border-success-200 bg-success-50 p-4">
       <p class="text-xs uppercase tracking-[0.14em] text-success-700">Available</p>
-      <p class="mt-2 text-2xl font-semibold text-success-700">{{ kpis.available }}</p>
+      <p class="mt-2 text-2xl font-semibold text-success-700">{{ kpis().available }}</p>
     </article>
     <article class="rounded-xl border border-warm-200 bg-warm-50 p-4">
       <p class="text-xs uppercase tracking-[0.14em] text-warm-700">On Hold</p>
-      <p class="mt-2 text-2xl font-semibold text-warm-800">{{ kpis.hold }}</p>
+      <p class="mt-2 text-2xl font-semibold text-warm-800">{{ kpis().hold }}</p>
     </article>
     <article class="rounded-xl border border-brand-200 bg-brand-50 p-4">
       <p class="text-xs uppercase tracking-[0.14em] text-brand-700">Reserved</p>
-      <p class="mt-2 text-2xl font-semibold text-brand-900">{{ kpis.reserved }}</p>
+      <p class="mt-2 text-2xl font-semibold text-brand-900">{{ kpis().reserved }}</p>
     </article>
     <article class="rounded-xl border border-brand-200 bg-white p-4">
       <p class="text-xs uppercase tracking-[0.14em] text-brand-500">Disabled</p>
-      <p class="mt-2 text-2xl font-semibold text-brand-700">{{ kpis.disabled }}</p>
+      <p class="mt-2 text-2xl font-semibold text-brand-700">{{ kpis().disabled }}</p>
     </article>
   </section>
 
@@ -60,14 +60,14 @@
         <a [routerLink]="['/staff/reservations']" class="text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">Open List</a>
       </div>
 
-      <div *ngIf="loadingSnapshot" class="mt-3 text-sm text-brand-500">Updating…</div>
-      <div *ngIf="!loadingSnapshot && urgentPayments.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
+      <div *ngIf="loadingSnapshot()" class="mt-3 text-sm text-brand-500">Updating…</div>
+      <div *ngIf="!loadingSnapshot() && urgentPayments.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
         No pending or partial reservations due soon.
       </div>
 
       <div class="mt-3 grid gap-2" *ngIf="urgentPayments.length > 0">
         <article
-          *ngFor="let item of urgentPayments"
+          *ngFor="let item of urgentPayments()"
           class="rounded-xl border px-3 py-2"
           [ngClass]="urgencyClass(item)"
         >
@@ -84,15 +84,15 @@
                 type="button"
                 hlmBtn variant="outline-current" size="xs" class="rounded-full text-[11px] uppercase tracking-[0.1em]"
                 (click)="sendPaymentLinkSms(item.reservation)"
-                [disabled]="paymentLinkLoadingId === item.reservation.reservationId || !canGeneratePaymentLink(item.reservation)"
+                [disabled]="paymentLinkLoadingId() === item.reservation.reservationId || !canGeneratePaymentLink(item.reservation)"
               >
-                {{ paymentLinkLoadingId === item.reservation.reservationId ? 'Sending…' : 'Send SMS' }}
+                {{ paymentLinkLoadingId() === item.reservation.reservationId ? 'Sending…' : 'Send SMS' }}
               </button>
               <button
                 type="button"
                 hlmBtn variant="outline-current" size="xs" class="rounded-full text-[11px] uppercase tracking-[0.1em]"
                 (click)="openUrgentPayment(item)"
-                [disabled]="paymentLoading || !canTakePayment(item.reservation)"
+                [disabled]="paymentLoading() || !canTakePayment(item.reservation)"
               >
                 Take Payment
               </button>
@@ -143,8 +143,8 @@
         </article>
       </div>
 
-      <hlm-alert *ngIf="paymentLinkError" variant="destructive" class="mt-3">{{ paymentLinkError }}</hlm-alert>
-      <hlm-alert *ngIf="paymentLinkNotice" variant="success" class="mt-3">{{ paymentLinkNotice }}</hlm-alert>
+      <hlm-alert *ngIf="paymentLinkError()" variant="destructive" class="mt-3">{{ paymentLinkError() }}</hlm-alert>
+      <hlm-alert *ngIf="paymentLinkNotice()" variant="success" class="mt-3">{{ paymentLinkNotice() }}</hlm-alert>
     </article>
 
     <article class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
@@ -152,7 +152,7 @@
       <div class="mt-3 grid gap-2">
         <a
           [routerLink]="['/staff/reservations/new']"
-          [queryParams]="contextEvent ? { date: contextEvent.eventDate } : null"
+          [queryParams]="contextEvent() ? { date: contextEvent()?.eventDate } : null"
           hlmBtn variant="outline" size="lg" class="justify-between"
         >
           <span>New Reservation</span>
@@ -174,8 +174,10 @@
         </a>
       </div>
 
-      <div class="mt-4 rounded-lg border border-brand-100 bg-brand-50 p-3 text-xs text-brand-600" *ngIf="nextUpcomingEvent && contextLabel === 'NEXT EVENT'">
-        Today has no active event. Showing next event context: <span class="font-semibold text-brand-800">{{ nextUpcomingEvent.eventName }}</span>
+      <div class="mt-4 rounded-lg border border-brand-100 bg-brand-50 p-3 text-xs text-brand-600" *ngIf="nextUpcomingEvent() as next">
+        <ng-container *ngIf="contextLabel() === 'NEXT EVENT'">
+          Today has no active event. Showing next event context: <span class="font-semibold text-brand-800">{{ next.eventName }}</span>
+        </ng-container>
       </div>
     </article>
   </section>
@@ -183,20 +185,20 @@
   <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
     <div class="flex items-center justify-between gap-2">
       <h3 class="text-lg font-semibold text-brand-900">Recent Activity</h3>
-      <span class="text-xs uppercase tracking-[0.14em] text-brand-500">Latest {{ recentActivity.length }}</span>
+      <span class="text-xs uppercase tracking-[0.14em] text-brand-500">Latest {{ recentActivity().length }}</span>
     </div>
 
-    <div *ngIf="loadingSnapshot" class="mt-3 text-sm text-brand-500">Updating…</div>
-    <div *ngIf="!loadingSnapshot && recentActivity.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
+    <div *ngIf="loadingSnapshot()" class="mt-3 text-sm text-brand-500">Updating…</div>
+    <div *ngIf="!loadingSnapshot() && recentActivity().length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
       No recent reservation activity for this event.
     </div>
 
-    <div class="mt-3 grid gap-2" *ngIf="recentActivity.length > 0">
+    <div class="mt-3 grid gap-2" *ngIf="recentActivity().length > 0">
       <button
         type="button"
         class="cursor-pointer rounded-xl border px-3 py-2 text-left transition-colors"
         [ngClass]="activityCardClass(activity)"
-        *ngFor="let activity of recentActivity"
+        *ngFor="let activity of recentActivity()"
         (click)="openActivityDetails(activity)"
       >
         <div class="flex items-start justify-between gap-2">
@@ -216,41 +218,42 @@
   </section>
 </section>
 
-<reservation-detail-modal
-  *ngIf="showDetailsModal && detailItem"
-  [reservation]="detailItem"
-  [paymentLink]="getPaymentLink(detailItem)"
-  [paymentLinkSmsState]="getPaymentLinkSmsState(detailItem)"
-  [paymentLinkError]="paymentLinkError"
-  [paymentLinkNotice]="paymentLinkNotice"
-  [squareLinkLoading]="paymentLinkLoadingId === detailItem.reservationId"
-  [cashAppLinkLoading]="publicPayLinkLoadingId === detailItem.reservationId"
-  [checkInPass]="getCheckInPass(detailItem)"
-  [checkInPassState]="getCheckInPassState(detailItem)"
-  [checkInPassError]="checkInPassError"
-  [checkInPassNotice]="checkInPassNotice"
-  [checkInPassLoading]="checkInPassLoadingId === detailItem.reservationId"
-  [history]="getHistory(detailItem)"
-  [historyLoading]="historyLoadingId === detailItem.reservationId"
-  [historyError]="historyError"
-  [canCancel]="false"
-  (close)="closeDetails()"
-  (generateSquareLink)="generatePaymentLink(detailItem)"
-  (generateCashAppLink)="generateClientPayLink(detailItem)"
-  (sendSms)="sendGeneratedLinkSms(detailItem, $event)"
-  (copyLink)="copyPaymentLink(detailItem)"
-  (openSms)="openSmsShare(detailItem)"
-  (openWhatsApp)="openWhatsAppShare(detailItem)"
-  (share)="sharePaymentLink(detailItem)"
-  (reissuePass)="reissueCheckInPass(detailItem)"
-  (copyPassLink)="copyCheckInPassLink(detailItem)"
-  (openSmsPass)="openSmsShareCheckInPass(detailItem)"
-  (openWhatsAppPass)="openWhatsAppShareCheckInPass(detailItem)"
-  (sharePass)="shareCheckInPassLink(detailItem)"
-/>
+<ng-container *ngIf="showDetailsModal() && detailItem() as detail">
+  <reservation-detail-modal
+    [reservation]="detail"
+    [paymentLink]="getPaymentLink(detail)"
+    [paymentLinkSmsState]="getPaymentLinkSmsState(detail)"
+    [paymentLinkError]="paymentLinkError()"
+    [paymentLinkNotice]="paymentLinkNotice()"
+    [squareLinkLoading]="paymentLinkLoadingId() === detail.reservationId"
+    [cashAppLinkLoading]="publicPayLinkLoadingId() === detail.reservationId"
+    [checkInPass]="getCheckInPass(detail)"
+    [checkInPassState]="getCheckInPassState(detail)"
+    [checkInPassError]="checkInPassError()"
+    [checkInPassNotice]="checkInPassNotice()"
+    [checkInPassLoading]="checkInPassLoadingId() === detail.reservationId"
+    [history]="getHistory(detail)"
+    [historyLoading]="historyLoadingId() === detail.reservationId"
+    [historyError]="historyError()"
+    [canCancel]="false"
+    (close)="closeDetails()"
+    (generateSquareLink)="generatePaymentLink(detail)"
+    (generateCashAppLink)="generateClientPayLink(detail)"
+    (sendSms)="sendGeneratedLinkSms(detail, $event)"
+    (copyLink)="copyPaymentLink(detail)"
+    (openSms)="openSmsShare(detail)"
+    (openWhatsApp)="openWhatsAppShare(detail)"
+    (share)="sharePaymentLink(detail)"
+    (reissuePass)="reissueCheckInPass(detail)"
+    (copyPassLink)="copyCheckInPassLink(detail)"
+    (openSmsPass)="openSmsShareCheckInPass(detail)"
+    (openWhatsAppPass)="openWhatsAppShareCheckInPass(detail)"
+    (sharePass)="shareCheckInPassLink(detail)"
+  />
+</ng-container>
 
 <hlm-dialog
-  *ngIf="showPaymentModal && paymentItem"
+  *ngIf="showPaymentModal() && paymentItem() as payment"
   (close)="closeUrgentPayment()"
   panelClass="max-w-md"
   [ariaLabel]="'Take Payment'"
@@ -267,7 +270,7 @@
       </button>
     </div>
 
-    <p class="mt-2 text-sm text-brand-600">{{ paymentItem | tableLabel }} · {{ paymentItem.customerName }}</p>
+    <p class="mt-2 text-sm text-brand-600">{{ payment | tableLabel }} · {{ payment.customerName }}</p>
 
     <form class="mt-4 grid gap-3" [formGroup]="paymentForm" (ngSubmit)="submitUrgentPayment()">
       <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
@@ -303,17 +306,17 @@
             formControlName="creditId"
             (change)="onPaymentCreditChanged()"
             hlmInput size="lg"
-            [disabled]="paymentCreditsLoading || !paymentCredits.length"
+            [disabled]="paymentCreditsLoading() || !paymentCredits.length"
           >
             <option value="" disabled selected hidden>Select reservation credit</option>
-            <option *ngFor="let credit of paymentCredits" [value]="credit.creditId">
+            <option *ngFor="let credit of paymentCredits()" [value]="credit.creditId">
               {{ creditOptionLabel(credit) }}
             </option>
           </select>
         </label>
-        <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading">Loading reservation credits…</p>
-        <p class="text-xs text-danger-700" *ngIf="paymentCreditsError">{{ paymentCreditsError }}</p>
-        <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading && paymentCredits.length">
+        <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading()">Loading reservation credits…</p>
+        <p class="text-xs text-danger-700" *ngIf="paymentCreditsError()">{{ paymentCreditsError() }}</p>
+        <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading() && paymentCredits.length">
           <p>Credit applied now: ${{ creditAppliedAmount().toFixed(2) }}</p>
           <p *ngIf="creditRemainingAmount() > 0">Remaining after credit: ${{ creditRemainingAmount().toFixed(2) }}</p>
         </div>
@@ -361,7 +364,7 @@
         />
       </label>
 
-      <hlm-alert *ngIf="paymentError" variant="destructive">{{ paymentError }}</hlm-alert>
+      <hlm-alert *ngIf="paymentError()" variant="destructive">{{ paymentError() }}</hlm-alert>
       <p class="text-xs text-brand-600" *ngIf="isSquarePaymentMethodSelected()">
         Square in this modal generates a Square link. Reader charge can be added later.
       </p>
@@ -370,28 +373,28 @@
       </p>
       <div class="rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="isCashAppPaymentMethodSelected()">
         <div #cashAppPayHost class="min-h-[140px]"></div>
-        <p class="mt-2 text-xs text-brand-600" *ngIf="cashAppPayReady">
+        <p class="mt-2 text-xs text-brand-600" *ngIf="cashAppPayReady()">
           QR ready. Waiting for client approval.
         </p>
       </div>
       <hlm-alert *ngIf="isCashAppPaymentMethodSelected() && !canUseCashAppPay()" variant="destructive">
         Cash App Pay is not configured. Set Square application id and location id in Lambda env vars.
       </hlm-alert>
-      <hlm-alert *ngIf="paymentLinkError && isSquarePaymentMethodSelected()" variant="destructive">{{ paymentLinkError }}</hlm-alert>
-      <hlm-alert *ngIf="paymentLinkError && isCashAppPaymentMethodSelected()" variant="destructive">{{ paymentLinkError }}</hlm-alert>
+      <hlm-alert *ngIf="paymentLinkError() && isSquarePaymentMethodSelected()" variant="destructive">{{ paymentLinkError() }}</hlm-alert>
+      <hlm-alert *ngIf="paymentLinkError() && isCashAppPaymentMethodSelected()" variant="destructive">{{ paymentLinkError() }}</hlm-alert>
 
       <button
         type="submit"
         hlmBtn size="lg"
         [disabled]="
           isSquarePaymentMethodSelected()
-            ? paymentLinkLoadingId === paymentItem.reservationId || !canGeneratePaymentLink(paymentItem)
-            : paymentLoading ||
-              cashAppPayPreparing ||
+            ? paymentLinkLoadingId() === payment.reservationId || !canGeneratePaymentLink(payment)
+            : paymentLoading() ||
+              cashAppPayPreparing() ||
               paymentForm.invalid ||
               (isCashAppPaymentMethodSelected() && !canUseCashAppPay()) ||
               (isCreditPaymentMethodSelected() &&
-                (paymentCreditsLoading ||
+                (paymentCreditsLoading() ||
                   !paymentForm.controls.creditId.value ||
                   (shouldShowRemainingMethodSelector() && !paymentForm.controls.remainingMethod.value)))
         "
