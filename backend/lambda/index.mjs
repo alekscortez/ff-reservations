@@ -13,6 +13,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
   SecretsManagerClient,
+  GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 import {
   SNSClient,
@@ -63,6 +64,9 @@ import { createSmsNotificationsService } from "./lib/services-sms-notifications.
 import { createSettingsService } from "./lib/services-settings.mjs";
 import { createUsersService } from "./lib/services-users.mjs";
 import { createRateLimitService } from "./lib/services-rate-limit.mjs";
+import { handlePublicBookingsRoute } from "./lib/routes-public-bookings.mjs";
+import { createTurnstileService } from "./lib/services-turnstile.mjs";
+import { createAnonBookingsService } from "./lib/services-anon-bookings.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -90,6 +94,9 @@ const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
 const CASH_APP_LINK_BASE_URL = process.env.CASH_APP_LINK_BASE_URL;
 const SETTINGS_TABLE = process.env.SETTINGS_TABLE;
 const PACKAGES_TABLE = process.env.PACKAGES_TABLE;
+const TURNSTILE_SECRET_ARN = process.env.TURNSTILE_SECRET_ARN;
+const PUBLIC_BOOKING_RETURN_BASE_URL =
+  process.env.PUBLIC_BOOKING_RETURN_BASE_URL ?? "https://famosofuego.com";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
@@ -374,6 +381,54 @@ const rateLimitService = createRateLimitService({
   httpError,
 });
 
+const turnstileService = createTurnstileService({
+  fetchImpl: globalThis.fetch,
+  httpError,
+});
+
+// Cache the Turnstile secret to avoid hitting Secrets Manager on every
+// public-booking POST. 5-minute TTL — same shape as Square's loader.
+let turnstileSecretCache = { secretArn: null, value: null, expiresAt: 0 };
+async function loadTurnstileSecret() {
+  if (!TURNSTILE_SECRET_ARN) return "";
+  const now = Date.now();
+  if (
+    turnstileSecretCache.secretArn === TURNSTILE_SECRET_ARN &&
+    now < turnstileSecretCache.expiresAt &&
+    turnstileSecretCache.value
+  ) {
+    return turnstileSecretCache.value;
+  }
+  const out = await secretsManager.send(
+    new GetSecretValueCommand({ SecretId: TURNSTILE_SECRET_ARN })
+  );
+  const raw =
+    out.SecretString ??
+    (out.SecretBinary ? Buffer.from(out.SecretBinary, "base64").toString("utf8") : "");
+  // Accept either a plain string OR a JSON object {secret: "..."} so the
+  // operator can rotate without changing this code.
+  let value = "";
+  try {
+    const parsed = JSON.parse(raw);
+    value = String(parsed?.secret ?? parsed?.TURNSTILE_SECRET ?? raw).trim();
+  } catch {
+    value = String(raw).trim();
+  }
+  turnstileSecretCache = {
+    secretArn: TURNSTILE_SECRET_ARN,
+    value,
+    expiresAt: now + 5 * 60 * 1000,
+  };
+  return value;
+}
+
+const anonBookingsService = createAnonBookingsService({
+  ddb,
+  tableNames: { HOLDS_TABLE },
+  nowEpoch,
+  httpError,
+});
+
 const usersService = createUsersService({
   cognito,
   userPoolId: USER_POOL_ID,
@@ -560,6 +615,46 @@ export const handler = async (event) => {
         rateLimitService.checkAndIncrementSmsRateLimit,
     });
     if (customerAuthResponse) return customerAuthResponse;
+
+    const publicBookingsResponse = await handlePublicBookingsRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      httpError,
+      getBody,
+      randomUUID,
+      normalizePhoneE164,
+      normalizePhoneCountry,
+      getEventByDate: eventsService.getEventByDate,
+      getTablePriceForEvent,
+      createHold: reservationsHoldsService.createHold,
+      releaseHold: reservationsHoldsService.releaseHold,
+      createReservation: reservationsHoldsService.createReservation,
+      cancelReservation: reservationsHoldsService.cancelReservation,
+      createSquarePaymentLink: squarePaymentsService.createPaymentLink,
+      setReservationPaymentLinkWindow:
+        reservationsHoldsService.setReservationPaymentLinkWindow,
+      acquireAnonBookingPhoneSlot:
+        anonBookingsService.acquireAnonBookingPhoneSlot,
+      releaseAnonBookingPhoneSlot:
+        anonBookingsService.releaseAnonBookingPhoneSlot,
+      verifyCustomerToken: anonBookingsService.verifyCustomerToken,
+      verifyTurnstileToken: turnstileService.verifyTurnstileToken,
+      loadTurnstileSecret,
+      getReservationById: reservationsHoldsService.getReservationById,
+      upsertCrmClient: clientsService.upsertCrmClient,
+      appendReservationHistory: reservationsHoldsService.appendReservationHistory,
+      getAppSettings: settingsService.getAppSettings,
+      // wallet pass — token-gated /public/.../wallet-pass route
+      getActivePassForReservation: checkInPassesService.getActivePassForReservation,
+      issuePassForReservation: checkInPassesService.issuePassForReservation,
+      generateWalletPass: walletPassService.generatePkpassForReservation,
+      walletPassEnabled: walletPassService.isEnabled,
+      publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
+    });
+    if (publicBookingsResponse) return publicBookingsResponse;
 
     const meRouteResponse = await handleMeRoute({
       method,
