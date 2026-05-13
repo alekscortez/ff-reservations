@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { decodeJwt, normalizeGroupsClaim } from '../../../core/auth/jwt';
@@ -8,6 +8,7 @@ import { decodeJwt, normalizeGroupsClaim } from '../../../core/auth/jwt';
   imports: [],
   templateUrl: './auth-callback.html',
   styleUrl: './auth-callback.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AuthCallback implements OnInit {
   private oidc = inject(OidcSecurityService);
