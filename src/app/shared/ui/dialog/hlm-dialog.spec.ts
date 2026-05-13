@@ -104,12 +104,15 @@ describe('HlmDialog', () => {
     expect(panelSection(f).textContent).toContain('body');
   });
 
-  it('locks body overflow while mounted + restores on destroy', () => {
-    const beforeMount = document.body.style.overflow;
+  it('locks html + body overflow while mounted + restores on destroy', () => {
+    const beforeHtml = document.documentElement.style.overflow;
+    const beforeBody = document.body.style.overflow;
     const f = createHost();
+    expect(document.documentElement.style.overflow).toBe('hidden');
     expect(document.body.style.overflow).toBe('hidden');
     f.destroy();
-    // restored to whatever it was before (typically '')
-    expect(document.body.style.overflow).toBe(beforeMount);
+    // restored to whatever each was before (typically '')
+    expect(document.documentElement.style.overflow).toBe(beforeHtml);
+    expect(document.body.style.overflow).toBe(beforeBody);
   });
 });

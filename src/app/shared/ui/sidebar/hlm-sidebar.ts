@@ -136,18 +136,25 @@ export class HlmSidebar {
   private readonly doc = inject(DOCUMENT);
 
   constructor() {
-    // Lock body scroll while the mobile sheet is open; restore on close.
-    let previousOverflow: string | null = null;
+    // Lock page scroll while the mobile sheet is open; restore on close.
+    // Sets overflow on both html (scroll container per styles.scss) and
+    // body so the lock works regardless of which element owns the scroll.
+    let previousHtmlOverflow: string | null = null;
+    let previousBodyOverflow: string | null = null;
     effect(() => {
       const lock = this.service.isMobile() && this.service.openMobile();
       if (lock) {
-        if (previousOverflow === null) {
-          previousOverflow = this.doc.body.style.overflow;
+        if (previousHtmlOverflow === null) {
+          previousHtmlOverflow = this.doc.documentElement.style.overflow;
+          previousBodyOverflow = this.doc.body.style.overflow;
         }
+        this.doc.documentElement.style.overflow = 'hidden';
         this.doc.body.style.overflow = 'hidden';
-      } else if (previousOverflow !== null) {
-        this.doc.body.style.overflow = previousOverflow;
-        previousOverflow = null;
+      } else if (previousHtmlOverflow !== null) {
+        this.doc.documentElement.style.overflow = previousHtmlOverflow;
+        this.doc.body.style.overflow = previousBodyOverflow ?? '';
+        previousHtmlOverflow = null;
+        previousBodyOverflow = null;
       }
     });
   }

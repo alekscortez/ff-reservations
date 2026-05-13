@@ -109,14 +109,22 @@ export class HlmDialog implements OnDestroy {
   );
 
   private readonly doc = inject(DOCUMENT);
+  private readonly previousHtmlOverflow: string;
   private readonly previousBodyOverflow: string;
 
   constructor() {
+    // Lock both html and body to cover both scroll-container configurations
+    // (html-owned vs body-owned). Today html owns the scroll (styles.scss:
+    // overflow-x on html, none on body), but historically body did — keeping
+    // both writes makes the lock robust to that choice changing again.
+    this.previousHtmlOverflow = this.doc.documentElement.style.overflow;
     this.previousBodyOverflow = this.doc.body.style.overflow;
+    this.doc.documentElement.style.overflow = 'hidden';
     this.doc.body.style.overflow = 'hidden';
   }
 
   ngOnDestroy(): void {
+    this.doc.documentElement.style.overflow = this.previousHtmlOverflow;
     this.doc.body.style.overflow = this.previousBodyOverflow;
   }
 }
