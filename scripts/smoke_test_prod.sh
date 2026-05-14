@@ -116,6 +116,27 @@ check "staff /reservations 401 without auth" \
   "401"
 
 # -----------------------------------------------------------------------------
+# 4b. Public telemetry endpoint — accepts whitelisted events, 204s on
+#     unknown ones (silent so frontend typos don't break the UX).
+# -----------------------------------------------------------------------------
+check "public/telemetry accepts known event (204)" \
+  "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' -d '{\"event\":\"map_loaded\",\"sessionId\":\"smoke-$(date +%s)\"}' '$API_BASE/public/telemetry'" \
+  "204"
+
+check "public/telemetry silently 204s unknown events" \
+  "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' -d '{\"event\":\"not-in-whitelist\"}' '$API_BASE/public/telemetry'" \
+  "204"
+
+# -----------------------------------------------------------------------------
+# 4c. Find-my-booking endpoint — Turnstile-gated. Without a token,
+#     fails closed with 403 TURNSTILE_FAILED. Proves the route is
+#     wired + the Turnstile gate is active.
+# -----------------------------------------------------------------------------
+check "public/lookup-by-phone Turnstile-gated (403 without token)" \
+  "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' -d '{\"phone\":\"+15555550100\"}' '$API_BASE/public/lookup-by-phone'" \
+  "403"
+
+# -----------------------------------------------------------------------------
 # 5. Square webhook receiver (public, no auth)
 # -----------------------------------------------------------------------------
 # Should 403 for an unsigned POST. Proves the route is alive and signature
