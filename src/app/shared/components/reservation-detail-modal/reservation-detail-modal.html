@@ -9,6 +9,14 @@
       <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Reservation</p>
       <h3 id="reservation-detail-modal-title" class="text-xl font-semibold text-brand-900">{{ reservation | tableLabel }}</h3>
       <p class="break-words text-sm text-brand-600">{{ reservation.customerName }} · {{ reservation.phone | phoneDisplay }}</p>
+      <!-- Customer-facing booking code. Visible only on anon-public
+           bookings (staff-created reservations don't have a code).
+           Lets staff verify "FF-K7M3X2" matches what the customer
+           reads off their phone or Square receipt. -->
+      <p
+        *ngIf="reservation.confirmationCode"
+        class="mt-1 font-mono text-xs uppercase tracking-[0.18em] text-brand-700"
+      >Booking code: <span class="font-semibold text-brand-900">FF-{{ reservation.confirmationCode }}</span></p>
     </div>
     <button
       type="button"

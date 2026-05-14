@@ -50,6 +50,11 @@ export interface ReservationItem {
   tableIds?: string[];
   customerName: string;
   phone: string;
+  // Customer-facing short identifiers — set on anon-public bookings,
+  // null for staff-created ones. Display as "FF-XXXXXX" so staff can
+  // verify a customer's spoken code matches the row.
+  confirmationCode?: string | null;
+  publicSlug?: string | null;
   depositAmount: number;
   tablePrice?: number;
   tablePrices?: number[];
