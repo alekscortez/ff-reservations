@@ -245,21 +245,30 @@
         >{{ err }}</p>
       </article>
 
-      <p class="text-sm text-brand-700">
-        Total to pay now:
-        <span class="font-semibold text-brand-900">${{ totalAmount() }} USD</span>
-      </p>
+      <!-- Sticky bottom CTA. Pairs with A.1's sticky header so the
+           customer can always see where they are (top: title + close)
+           AND what to do (bottom: total + Hold & pay). The negative
+           margin pulls the strip out to the panel edges; the bg-white
+           + border-t separates it visually from the scrolling content.
+           -mt-3 cancels the form's gap-3 above the strip so the border
+           sits flush with the last content row. -->
+      <div class="sticky bottom-0 z-10 -mx-4 -mt-3 grid gap-2 border-t border-brand-100 bg-white px-4 py-3">
+        <p class="text-sm text-brand-700">
+          Total to pay now:
+          <span class="font-semibold text-brand-900">${{ totalAmount() }} USD</span>
+        </p>
 
-      <button
-        type="submit"
-        hlmBtn size="lg"
-        [disabled]="submitting() || form.invalid || selectedTables().length === 0"
-      >
-        {{ submitting() ? 'Reserving…' : 'Hold & continue to payment' }}
-      </button>
-      <p class="text-[11px] text-brand-500">
-        By continuing, you agree to hold this table for 10 minutes while you complete payment via Square.
-      </p>
+        <button
+          type="submit"
+          hlmBtn size="lg"
+          [disabled]="submitting() || form.invalid || selectedTables().length === 0"
+        >
+          {{ submitting() ? 'Reserving…' : 'Hold & continue to payment' }}
+        </button>
+        <p class="text-[11px] text-brand-500">
+          By continuing, you agree to hold this table for 10 minutes while you complete payment via Square.
+        </p>
+      </div>
     </form>
   </div>
 </hlm-dialog>
