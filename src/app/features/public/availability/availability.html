@@ -121,12 +121,6 @@
         [interactive]="bookingEnabled()"
         (tableSelect)="onTableSelect($event)"
       ></app-table-map>
-      <p
-        *ngIf="selectionLimitNotice() as notice"
-        class="mt-2 text-center text-sm font-medium text-warning-800"
-        role="status"
-        aria-live="polite"
-      >{{ notice }}</p>
       <p class="mt-2 text-center text-[11px] text-brand-500 lg:hidden">
         <span *ngIf="bookingEnabled(); else mapHint">
           Tap a green table to reserve.

@@ -71,7 +71,6 @@ export class PublicAvailability implements OnInit, OnDestroy {
   // against `data.anonymousMaxTablesPerBooking`.
   readonly selectedIds = signal<string[]>([]);
   readonly modalOpen = signal(false);
-  readonly selectionLimitNotice = signal<string | null>(null);
 
   // Pending-hold banner. Polled from localStorage on init + after each
   // modal submit / release. Auto-clears if the stored hold is past its
@@ -188,7 +187,6 @@ export class PublicAvailability implements OnInit, OnDestroy {
 
   onTableSelect(table: TableForEvent): void {
     if (!this.bookingEnabled()) return;
-    this.selectionLimitNotice.set(null);
     const current = this.selectedIds();
     if (current.includes(table.id)) {
       // Deselect — caller clicked an already-selected tile.
@@ -215,7 +213,6 @@ export class PublicAvailability implements OnInit, OnDestroy {
   onModalClose(): void {
     this.modalOpen.set(false);
     this.selectedIds.set([]);
-    this.selectionLimitNotice.set(null);
   }
 
   onModalAddAnother(): void {

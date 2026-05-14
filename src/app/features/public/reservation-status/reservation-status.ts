@@ -34,7 +34,6 @@ type StatusKind =
   | 'pending'
   | 'paid'
   | 'cancelled'
-  | 'expired'
   | 'error';
 
 @Component({
@@ -377,7 +376,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
       }
       // Don't keep polling after a terminal state.
       const status = this.status();
-      if (status === 'paid' || status === 'cancelled' || status === 'expired') {
+      if (status === 'paid' || status === 'cancelled') {
         return;
       }
       this.fetchStatus();
