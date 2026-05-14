@@ -46,6 +46,10 @@ import {
   PublicBookingsService,
 } from '../../../../core/http/public-bookings.service';
 import { PublicAvailabilityTable } from '../../../../core/http/public-availability.service';
+import {
+  clearPendingHold,
+  readPendingHold,
+} from '../pending-hold.store';
 
 // Error code → human-readable message + retryable flag. The codes match
 // what the backend returns from POST /public/reservations.
@@ -189,6 +193,16 @@ export class ReserveTableModal implements OnDestroy {
     effect(() => {
       const isOpen = this.open();
       const siteKey = String(this.turnstileSiteKey() ?? '').trim();
+      if (!isOpen) {
+        // Wipe error + recovery state on close so the next open paints
+        // clean. The modal instance lives across opens (only the inner
+        // <hlm-dialog> *ngIfs); without this reset a stale ACTIVE_HOLD
+        // recovery card flashes on the next attempt.
+        this.errorMessage.set(null);
+        this.errorDetails.set(null);
+        this.activeHoldDetail.set(null);
+        this.activeHoldReleaseError.set(null);
+      }
       if (!isOpen || !siteKey) {
         this.teardownTurnstile();
         return;
@@ -293,6 +307,33 @@ export class ReserveTableModal implements OnDestroy {
   readonly errorDetails = signal<{ unavailableTableIds?: string[] } | null>(
     null
   );
+
+  // ACTIVE_HOLD_EXISTS recovery state. Backend's 429 returns the existing
+  // reservationId + expiresAt + eventDate when the phone slot is locked
+  // by a prior unpaid hold; we surface those plus a "Release pending hold"
+  // CTA when localStorage has a matching hold (= same browser, just
+  // dismissed the banner). Without this, the customer was stuck with no
+  // recovery action — direct cause of the deadlock the audit surfaced.
+  readonly activeHoldDetail = signal<{
+    existingReservationId: string;
+    existingExpiresAt: number | null;
+    existingEventDate: string | null;
+  } | null>(null);
+  readonly activeHoldReleasing = signal(false);
+  readonly activeHoldReleaseError = signal<string | null>(null);
+
+  // True when localStorage carries a pending hold whose reservationId
+  // matches the backend's existingReservationId — i.e. we have the
+  // customerToken needed to call /release. False when cookies were
+  // cleared / different device — in that case the recovery card shows
+  // contact-us copy instead of a release button.
+  readonly canReleaseExistingHold = computed<boolean>(() => {
+    const detail = this.activeHoldDetail();
+    if (!detail?.existingReservationId) return false;
+    const stored = readPendingHold();
+    if (!stored) return false;
+    return stored.reservationId === detail.existingReservationId;
+  });
 
   form = new FormGroup({
     name: new FormControl('', {
@@ -415,6 +456,8 @@ export class ReserveTableModal implements OnDestroy {
 
     this.errorMessage.set(null);
     this.errorDetails.set(null);
+    this.activeHoldDetail.set(null);
+    this.activeHoldReleaseError.set(null);
     this.submitting.set(true);
 
     const tableIds = tables.map((t) => t.id);
@@ -464,6 +507,34 @@ export class ReserveTableModal implements OnDestroy {
       if (Array.isArray(unavailable)) {
         this.errorDetails.set({ unavailableTableIds: unavailable });
       }
+      // Capture ACTIVE_HOLD_EXISTS detail so the template can render the
+      // recovery card (release button when localStorage matches; contact
+      // copy otherwise).
+      if (code === 'ACTIVE_HOLD_EXISTS') {
+        const body = err.error as
+          | {
+              existingReservationId?: string;
+              existingExpiresAt?: number | null;
+              existingEventDate?: string | null;
+            }
+          | null;
+        const existingReservationId = String(
+          body?.existingReservationId ?? '',
+        ).trim();
+        if (existingReservationId) {
+          this.activeHoldDetail.set({
+            existingReservationId,
+            existingExpiresAt:
+              typeof body?.existingExpiresAt === 'number'
+                ? body.existingExpiresAt
+                : null,
+            existingEventDate:
+              typeof body?.existingEventDate === 'string'
+                ? body.existingEventDate
+                : null,
+          });
+        }
+      }
       // Turnstile tokens are single-use. If the backend rejected ours
       // (replay, expired, signature mismatch), the widget needs a fresh
       // challenge before the customer can retry.
@@ -473,6 +544,54 @@ export class ReserveTableModal implements OnDestroy {
       return;
     }
     this.errorMessage.set('Network error. Please try again.');
+  }
+
+  // Customer tapped "Release pending hold" inside the recovery card.
+  // Pulls the stored token from localStorage (canReleaseExistingHold
+  // gates this — won't render the button without it) and fires the
+  // shared release endpoint. On success, wipes both the local hold +
+  // the modal's error state so the customer can retry the new booking
+  // immediately.
+  releaseExistingHold(): void {
+    if (this.activeHoldReleasing()) return;
+    const detail = this.activeHoldDetail();
+    if (!detail?.existingReservationId) return;
+    const stored = readPendingHold();
+    if (!stored || stored.reservationId !== detail.existingReservationId) {
+      this.activeHoldReleaseError.set(
+        'Could not find your hold details on this device. Please contact us to release it.',
+      );
+      return;
+    }
+    this.activeHoldReleasing.set(true);
+    this.activeHoldReleaseError.set(null);
+    this.bookings
+      .releaseReservation(stored.reservationId, stored.customerToken, stored.eventDate)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.activeHoldReleasing.set(false);
+          clearPendingHold();
+          this.activeHoldDetail.set(null);
+          this.errorMessage.set(null);
+          this.errorDetails.set(null);
+        },
+        error: (err: unknown) => {
+          this.activeHoldReleasing.set(false);
+          if (err instanceof HttpErrorResponse) {
+            this.activeHoldReleaseError.set(
+              String(
+                (err.error as { message?: string } | null)?.message ??
+                  'Could not release your hold. Please try again.',
+              ),
+            );
+          } else {
+            this.activeHoldReleaseError.set(
+              'Could not release your hold. Please try again.',
+            );
+          }
+        },
+      });
   }
 
   private resetTurnstileWidget(): void {
