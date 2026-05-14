@@ -15,9 +15,11 @@ import {
   signal,
 } from '@angular/core';
 import {
+  AbstractControl,
   FormControl,
   FormGroup,
   ReactiveFormsModule,
+  ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -26,6 +28,19 @@ import { HlmAlert } from '../../../../shared/ui/alert';
 import { HlmButton } from '../../../../shared/ui/button';
 import { HlmDialog } from '../../../../shared/ui/dialog';
 import { HlmInput } from '../../../../shared/ui/input';
+import { HlmNativeSelect } from '../../../../shared/ui/native-select';
+
+// Phone-digits validator: counts only digit characters, requires >=10.
+// Lets users include spaces / dashes / parens / leading "+" without
+// failing client-side; the country picker contributes the country code,
+// so 10 trailing digits is the expectation. The submit handler strips
+// the formatting before assembling the E.164 string.
+function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null {
+  const v = String(control.value ?? '').trim();
+  if (!v) return null; // required handles empty
+  const digits = v.replace(/\D/g, '');
+  return digits.length >= 10 ? null : { phoneDigits: true };
+}
 import {
   CreatePublicReservationResponse,
   PublicBookingsService,
@@ -146,6 +161,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     HlmButton,
     HlmDialog,
     HlmInput,
+    HlmNativeSelect,
   ],
   templateUrl: './reserve-table-modal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -283,12 +299,47 @@ export class ReserveTableModal implements OnDestroy {
       nonNullable: true,
       validators: [Validators.required, Validators.minLength(2)],
     }),
+    // Country picker drives the E.164 prefix on submit. Default US (+1)
+    // because the venue is McAllen, TX. Mexico (+52) is the second pick
+    // for cross-border customers.
+    countryCode: new FormControl<'+1' | '+52'>('+1', {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
     phone: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(10)],
+      validators: [Validators.required, phoneDigitsValidator],
     }),
-    email: new FormControl('', { nonNullable: true }),
+    // Email is optional, but if filled in must be a valid address —
+    // otherwise Square's receipt won't reach them.
+    email: new FormControl('', {
+      nonNullable: true,
+      validators: [Validators.email],
+    }),
   });
+
+  // User-facing error copy per (field, error key). Returns the first
+  // matching message, or null when the field is valid / untouched.
+  // Drives the inline `<p class="text-danger-700">` under each input.
+  readonly fieldError = (field: 'name' | 'phone' | 'email'): string | null => {
+    const ctrl = this.form.controls[field];
+    if (!ctrl.touched || !ctrl.errors) return null;
+    if (ctrl.errors['required']) {
+      if (field === 'name') return 'Please enter your name.';
+      if (field === 'phone') return 'Phone number is required.';
+      return null;
+    }
+    if (field === 'name' && ctrl.errors['minlength']) {
+      return 'Use at least 2 characters.';
+    }
+    if (field === 'phone' && ctrl.errors['phoneDigits']) {
+      return 'Use a 10-digit phone number.';
+    }
+    if (field === 'email' && ctrl.errors['email']) {
+      return 'Please enter a valid email address.';
+    }
+    return null;
+  };
 
   readonly canAddAnother = computed(
     () => this.selectedTables().length < this.maxTables()
@@ -368,13 +419,21 @@ export class ReserveTableModal implements OnDestroy {
 
     const tableIds = tables.map((t) => t.id);
     const token = this.turnstileToken().trim();
+    // Combine the country-picker prefix with the trailing 10 digits of
+    // the phone field into E.164. The validator already rejects fewer
+    // than 10 digits client-side; defensive .slice(-10) here keeps a
+    // user-pasted "+1 (956) 555-1234" working without round-tripping
+    // through the country picker.
+    const rawPhone = this.form.controls.phone.value.trim();
+    const phoneDigits = rawPhone.replace(/\D/g, '').slice(-10);
+    const e164Phone = `${this.form.controls.countryCode.value}${phoneDigits}`;
     this.bookings
       .createReservation({
         eventDate,
         tableIds,
         customer: {
           name: this.form.controls.name.value.trim(),
-          phone: this.form.controls.phone.value.trim(),
+          phone: e164Phone,
           email: this.form.controls.email.value.trim() || undefined,
         },
         turnstileToken: token || undefined,

@@ -100,23 +100,45 @@
           [disabled]="submitting()"
           required
         />
+        <p
+          *ngIf="fieldError('name') as err"
+          class="text-[11px] normal-case tracking-normal text-danger-700"
+          aria-live="polite"
+        >{{ err }}</p>
       </label>
 
-      <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
-        Phone number
-        <input
-          type="tel"
-          autocomplete="tel"
-          inputmode="tel"
-          formControlName="phone"
-          hlmInput size="lg"
-          [disabled]="submitting()"
-          required
-        />
+      <div class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        <span>Phone number</span>
+        <div class="flex items-stretch gap-2">
+          <hlm-native-select
+            formControlName="countryCode"
+            class="w-[5.5rem] flex-none text-sm normal-case tracking-normal h-11"
+            aria-label="Country code"
+          >
+            <option value="+1">US +1</option>
+            <option value="+52">MX +52</option>
+          </hlm-native-select>
+          <input
+            type="tel"
+            autocomplete="tel-national"
+            inputmode="tel"
+            formControlName="phone"
+            hlmInput size="lg"
+            class="flex-1"
+            placeholder="956 555 1234"
+            [disabled]="submitting()"
+            required
+          />
+        </div>
+        <p
+          *ngIf="fieldError('phone') as err"
+          class="text-[11px] normal-case tracking-normal text-danger-700"
+          aria-live="polite"
+        >{{ err }}</p>
         <span class="text-[11px] normal-case tracking-normal text-brand-500">
           We may contact you about your reservation.
         </span>
-      </label>
+      </div>
 
       <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
         Email <span class="lowercase text-brand-400">(optional)</span>
@@ -128,6 +150,11 @@
           hlmInput size="lg"
           [disabled]="submitting()"
         />
+        <p
+          *ngIf="fieldError('email') as err"
+          class="text-[11px] normal-case tracking-normal text-danger-700"
+          aria-live="polite"
+        >{{ err }}</p>
         <span class="text-[11px] normal-case tracking-normal text-brand-500">
           Optional — for your Square receipt and pass.
         </span>
