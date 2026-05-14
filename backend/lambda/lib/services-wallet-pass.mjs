@@ -282,7 +282,7 @@ export function createWalletPassService({
     if (assets.logo3xPng) buffers["logo@3x.png"] = assets.logo3xPng;
 
     const pass = new PKPass(buffers, certificates, passOptions);
-    pass.type = "eventTicket";
+    pass.type = "generic";
 
     for (const field of fields.headerFields) pass.headerFields.push(field);
     for (const field of fields.primaryFields) pass.primaryFields.push(field);
@@ -290,11 +290,13 @@ export function createWalletPassService({
     for (const field of fields.auxiliaryFields) pass.auxiliaryFields.push(field);
     for (const field of fields.backFields) pass.backFields.push(field);
 
+    const confirmationCode = String(reservation?.confirmationCode ?? "").trim();
+    const altText = confirmationCode ? `FF-${confirmationCode}` : reservationId;
     pass.setBarcodes({
       message: `ffr-checkin:${token}`,
       format: "PKBarcodeFormatQR",
       messageEncoding: "iso-8859-1",
-      altText: reservationId,
+      altText,
     });
 
     const buffer = pass.getAsBuffer();

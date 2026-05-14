@@ -349,7 +349,7 @@ describe("createWalletPassService — generatePkpassForReservation", () => {
     assert.equal(certs.signerKeyPassphrase, secret.signerKeyPassphrase);
   });
 
-  it("happy path: pass type is eventTicket with header/primary/secondary fields", async () => {
+  it("happy path: pass type is generic with header/primary/secondary fields", async () => {
     const { loader, FakePKPass } = makePkPassStub();
     // Spy by re-wrapping the FakePKPass to keep track of the constructed instance
     let instance = null;
@@ -373,7 +373,7 @@ describe("createWalletPassService — generatePkpassForReservation", () => {
       checkInPass: { token: "tok-xyz" },
     });
     assert.ok(instance, "PKPass should have been constructed");
-    assert.equal(instance.type, "eventTicket");
+    assert.equal(instance.type, "generic");
     // GUEST primary contains customer name
     assert.equal(instance.primaryFields.length, 1);
     assert.equal(instance.primaryFields[0].key, "guest");
@@ -423,6 +423,55 @@ describe("createWalletPassService — generatePkpassForReservation", () => {
       messageEncoding: "iso-8859-1",
       altText: "r-123",
     });
+  });
+
+  it("altText: prefers FF-{confirmationCode} when present", async () => {
+    const { FakePKPass } = makePkPassStub();
+    let instance = null;
+    const wrappedLoader = async () =>
+      class extends FakePKPass {
+        constructor(b, c, o) {
+          super(b, c, o);
+          instance = this;
+        }
+      };
+    const svc = createWalletPassService({
+      secretClient: makeSecretClient(validSecret()),
+      env: baseEnv(),
+      httpError,
+      assets: makeAssets(),
+      loadPkPass: wrappedLoader,
+    });
+    await svc.generatePkpassForReservation({
+      reservation: makeReservation({ confirmationCode: "K7M3X2" }),
+      checkInPass: { token: "tok-abc-123" },
+    });
+    assert.equal(instance.barcodes.altText, "FF-K7M3X2");
+    assert.equal(instance.barcodes.message, "ffr-checkin:tok-abc-123");
+  });
+
+  it("altText: falls back to reservationId when confirmationCode is empty/missing", async () => {
+    const { FakePKPass } = makePkPassStub();
+    let instance = null;
+    const wrappedLoader = async () =>
+      class extends FakePKPass {
+        constructor(b, c, o) {
+          super(b, c, o);
+          instance = this;
+        }
+      };
+    const svc = createWalletPassService({
+      secretClient: makeSecretClient(validSecret()),
+      env: baseEnv(),
+      httpError,
+      assets: makeAssets(),
+      loadPkPass: wrappedLoader,
+    });
+    await svc.generatePkpassForReservation({
+      reservation: makeReservation({ confirmationCode: "   " }),
+      checkInPass: { token: "tok-abc-123" },
+    });
+    assert.equal(instance.barcodes.altText, "r-123");
   });
 
   it("happy path: relevantDate is set for a valid eventDate", async () => {
