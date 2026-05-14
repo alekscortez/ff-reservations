@@ -75,6 +75,10 @@
             <div>
               <p class="text-sm font-semibold">{{ item.reservation | tableLabel }} · {{ item.reservation.customerName }}</p>
               <p class="text-xs opacity-80">{{ item.reservation.paymentStatus }} · Due {{ formatDeadlineShort(item.reservation.paymentDeadlineAt, item.reservation.eventDate) }}</p>
+              <p
+                *ngIf="item.reservation.confirmationCode"
+                class="font-mono text-[10px] uppercase tracking-[0.16em] opacity-70"
+              >FF-{{ item.reservation.confirmationCode }}</p>
             </div>
             <div class="flex flex-col items-end gap-1">
               <span hlmBadge variant="outline" size="sm" class="tracking-[0.12em]">
