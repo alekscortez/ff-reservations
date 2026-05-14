@@ -43,6 +43,41 @@
       </button>
     </div>
 
+    <!-- Find by booking code — for the door scenario where a customer
+         arrives without their pass and reads the FF-XXXXXX code off
+         their phone or Square receipt. Switches the page to the
+         reservation's eventDate and opens the detail modal. -->
+    <form
+      class="mt-4 grid gap-2 border-t border-brand-100 pt-3 md:grid-cols-[1fr_auto] md:items-end"
+      (ngSubmit)="searchByCode()"
+    >
+      <label class="grid gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">
+        Find by booking code
+        <input
+          type="text"
+          hlmInput size="lg"
+          [formControl]="searchCode"
+          placeholder="FF-K7M3X2"
+          autocomplete="off"
+          autocapitalize="characters"
+          inputmode="text"
+          aria-label="Booking confirmation code"
+          class="font-normal normal-case tracking-normal text-brand-900"
+        />
+      </label>
+      <button
+        hlmBtn size="lg" type="submit"
+        [disabled]="searchCodeLoading() || !searchCode.value.trim()"
+      >
+        {{ searchCodeLoading() ? 'Finding…' : 'Find' }}
+      </button>
+      <p
+        *ngIf="searchCodeError() as err"
+        class="text-xs text-danger-700 md:col-span-2"
+        aria-live="polite"
+      >{{ err }}</p>
+    </form>
+
     <details class="mt-4 border-t border-brand-100 pt-3">
       <summary class="cursor-pointer text-xs font-semibold uppercase tracking-[0.16em] text-brand-500 hover:text-brand-700">
         Look up another date

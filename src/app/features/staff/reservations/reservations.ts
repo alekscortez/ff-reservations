@@ -116,6 +116,14 @@ export class Reservations implements OnInit, OnDestroy {
   private squareWebPayments = inject(SquareWebPaymentsService);
 
   filterDate = new FormControl('', { nonNullable: true });
+  // Staff lookup by 6-char confirmation code (FF-XXXXXX). Drives the
+  // "Find by code" mini-form in the page header — useful at the door
+  // when a customer arrives without their pass and reads the code off
+  // their phone. On success, switches filterDate to the reservation's
+  // eventDate and opens the detail modal.
+  searchCode = new FormControl('', { nonNullable: true });
+  readonly searchCodeLoading = signal(false);
+  readonly searchCodeError = signal<string | null>(null);
   filterQuery = new FormControl('', { nonNullable: true });
   readonly items = signal<ReservationItem[]>([]);
   readonly loading = signal(false);
@@ -649,6 +657,65 @@ export class Reservations implements OnInit, OnDestroy {
     this.checkInPassError.set(null);
     this.checkInPassNotice.set(null);
     this.historyError.set(null);
+  }
+
+  // Resolve a staff-typed confirmation code to a reservation. Strips
+  // a "FF-" prefix and uppercases before sending — backend also handles
+  // both shapes but we mirror its parsing client-side for the inline
+  // validation message. On 200, switches the page's eventDate filter
+  // to the reservation's date so the row appears in the table, then
+  // opens the detail modal.
+  searchByCode(): void {
+    if (this.searchCodeLoading()) return;
+    const raw = String(this.searchCode.value ?? '').trim().toUpperCase();
+    const stripped = raw.startsWith('FF-') ? raw.slice(3) : raw;
+    if (!/^[A-Z0-9]{6}$/.test(stripped)) {
+      this.searchCodeError.set(
+        'Enter the 6-character code (e.g. FF-K7M3X2 or K7M3X2).',
+      );
+      return;
+    }
+    this.searchCodeError.set(null);
+    this.searchCodeLoading.set(true);
+    this.reservationsApi.findByCode(stripped).subscribe({
+      next: (reservation) => {
+        this.searchCodeLoading.set(false);
+        if (!reservation?.reservationId || !reservation?.eventDate) {
+          this.searchCodeError.set(
+            `No reservation found for code FF-${stripped}.`,
+          );
+          return;
+        }
+        // Switch the page filter so the row shows up in the table once
+        // the user closes the modal — they can keep working with that
+        // event's reservations.
+        if (this.filterDate.value !== reservation.eventDate) {
+          this.filterDate.setValue(reservation.eventDate);
+        }
+        this.searchCode.setValue('');
+        this.openDetails(reservation);
+      },
+      error: (err: unknown) => {
+        this.searchCodeLoading.set(false);
+        const status = (err as { status?: number })?.status;
+        const code = String(
+          ((err as { error?: { code?: string } })?.error?.code ?? '').trim(),
+        );
+        if (status === 404 || code === 'RESERVATION_NOT_FOUND') {
+          this.searchCodeError.set(
+            `No reservation found for code FF-${stripped}.`,
+          );
+        } else if (status === 400 || code === 'BAD_CONFIRMATION_CODE') {
+          this.searchCodeError.set(
+            'Code must be 6 alphanumeric characters.',
+          );
+        } else {
+          this.searchCodeError.set(
+            'Could not look up that code. Please try again.',
+          );
+        }
+      },
+    });
   }
 
   getHistory(item: ReservationItem | null | undefined): ReservationHistoryViewItem[] {

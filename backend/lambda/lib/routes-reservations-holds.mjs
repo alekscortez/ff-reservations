@@ -27,6 +27,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     listReservations,
     listReservationHistory,
     getReservationById,
+    lookupReservationByConfirmationCode,
     releaseOverdueReservationsForEventDate,
     addReservationPayment,
     setReservationPaymentLinkWindow,
@@ -626,6 +627,62 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       }
     }
     return json(201, { item, autoSquareLinkSms }, cors);
+  }
+
+  // Staff lookup by 6-char confirmation code (FF-XXXXXX shown on
+  // customer receipts and the /r page). Accepts the code with or
+  // without the "FF-" prefix so staff can paste exactly what the
+  // customer reads off their phone. Returns the full reservation row
+  // so the caller can navigate to the reservations page filtered by
+  // its eventDate and open the detail modal.
+  const byCodeMatch = path.match(/^\/reservations\/by-code\/([^/]+)$/);
+  if (byCodeMatch && method === "GET") {
+    requireStaffOrAdmin(event);
+    if (typeof lookupReservationByConfirmationCode !== "function") {
+      return json(500, { message: "Code lookup not configured" }, cors);
+    }
+    let code = String(byCodeMatch[1] ?? "").trim().toUpperCase();
+    if (code.startsWith("FF-")) code = code.slice(3);
+    if (!/^[A-Z0-9]{6}$/.test(code)) {
+      return json(
+        400,
+        {
+          message: "Confirmation code must be 6 alphanumeric characters.",
+          code: "BAD_CONFIRMATION_CODE",
+        },
+        cors
+      );
+    }
+    const looked = await lookupReservationByConfirmationCode(code);
+    if (!looked?.reservationId || !looked?.eventDate) {
+      return json(
+        404,
+        {
+          message: `No reservation found for code FF-${code}.`,
+          code: "RESERVATION_NOT_FOUND",
+        },
+        cors
+      );
+    }
+    const reservation = await getReservationById(
+      looked.eventDate,
+      looked.reservationId
+    );
+    if (!reservation) {
+      // Index row exists but reservation row doesn't — orphaned lookup
+      // (rare but possible if a backfill ran without the reservation
+      // write). Surface as not found; ops can spot via metric filter.
+      console.warn("by_code_orphaned_index", { code, ...looked });
+      return json(
+        404,
+        {
+          message: `No reservation found for code FF-${code}.`,
+          code: "RESERVATION_NOT_FOUND",
+        },
+        cors
+      );
+    }
+    return json(200, { reservation }, cors);
   }
 
   if (method === "GET" && path === "/reservations") {

@@ -30,6 +30,7 @@ function makeCtx(overrides = {}) {
     listReservations: [],
     listReservationHistory: [],
     getReservationById: [],
+    lookupReservationByConfirmationCode: [],
     releaseOverdueReservationsForEventDate: [],
     addReservationPayment: [],
     setReservationPaymentLinkWindow: [],
@@ -109,6 +110,10 @@ function makeCtx(overrides = {}) {
       getReservationById: async (eventDate, id) => {
         calls.getReservationById.push({ eventDate, id });
         return overrides.reservation !== undefined ? overrides.reservation : null;
+      },
+      lookupReservationByConfirmationCode: async (code) => {
+        calls.lookupReservationByConfirmationCode.push(code);
+        return overrides.codeLookup !== undefined ? overrides.codeLookup : null;
       },
       releaseOverdueReservationsForEventDate: async (date) => {
         calls.releaseOverdueReservationsForEventDate.push(date);
@@ -370,6 +375,84 @@ describe("GET /reservations", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.items.length, 1);
     assert.deepEqual(calls.releaseOverdueReservationsForEventDate, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /reservations/by-code/{code}
+// ---------------------------------------------------------------------------
+
+describe("GET /reservations/by-code/{code}", () => {
+  it("400 when code is malformed", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/abc",
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.code, "BAD_CONFIRMATION_CODE");
+  });
+
+  it("404 when lookup returns null", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/K7M3X2",
+      codeLookup: null,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.code, "RESERVATION_NOT_FOUND");
+  });
+
+  it("strips FF- prefix and uses bare code for lookup", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/FF-K7M3X2",
+      codeLookup: { reservationId: "r-1", eventDate: "2026-05-16" },
+      reservation: { reservationId: "r-1", eventDate: "2026-05-16" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(calls.lookupReservationByConfirmationCode, ["K7M3X2"]);
+    assert.deepEqual(calls.getReservationById, [
+      { eventDate: "2026-05-16", id: "r-1" },
+    ]);
+    assert.equal(res.body.reservation.reservationId, "r-1");
+  });
+
+  it("uppercases lowercase codes before lookup", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/k7m3x2",
+      codeLookup: { reservationId: "r-1", eventDate: "2026-05-16" },
+      reservation: { reservationId: "r-1" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(calls.lookupReservationByConfirmationCode, ["K7M3X2"]);
+  });
+
+  it("404 when lookup row exists but reservation is missing (orphan)", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/K7M3X2",
+      codeLookup: { reservationId: "r-1", eventDate: "2026-05-16" },
+      reservation: null,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.body.code, "RESERVATION_NOT_FOUND");
+  });
+
+  it("requireStaffOrAdmin gates the route", async () => {
+    const err = new Error("forbidden");
+    err.statusCode = 403;
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/by-code/K7M3X2",
+      requireStaffOrAdminThrows: err,
+    });
+    await assert.rejects(() => handleReservationsAndHoldsRoute(ctx));
   });
 });
 

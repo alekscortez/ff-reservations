@@ -175,6 +175,19 @@ export class ReservationsService {
       .pipe(map((res) => res.items ?? []));
   }
 
+  // Staff lookup by 6-char confirmation code (FF-XXXXXX). Caller can
+  // pass the code with or without the "FF-" prefix; backend strips it.
+  // Returns the full reservation row so the caller can switch the
+  // page's eventDate filter and open the detail modal.
+  findByCode(code: string) {
+    const trimmed = String(code ?? '').trim();
+    return this.api
+      .get<{ reservation: ReservationItem }>(
+        `/reservations/by-code/${encodeURIComponent(trimmed)}`,
+      )
+      .pipe(map((res) => res.reservation));
+  }
+
   cancel(
     reservationId: string,
     eventDate: string,

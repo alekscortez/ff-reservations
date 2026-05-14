@@ -878,6 +878,8 @@ export const handler = async (event) => {
       listReservations: reservationsHoldsService.listReservations,
       listReservationHistory: reservationsHoldsService.listReservationHistory,
       getReservationById: reservationsHoldsService.getReservationById,
+      lookupReservationByConfirmationCode:
+        reservationsHoldsService.lookupReservationByConfirmationCode,
       releaseOverdueReservationsForEventDate:
         reservationsHoldsService.releaseOverdueReservationsForEventDate,
       addReservationPayment: reservationsHoldsService.addReservationPayment,
