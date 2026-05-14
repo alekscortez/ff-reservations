@@ -167,12 +167,24 @@
       </p>
     </div>
 
-    <!-- Bring a friend's group? Bounce back to /map for another table. -->
-    <a
-      hlmBtn variant="outline" size="sm"
-      routerLink="/map"
-      class="w-fit"
-    >Book another table</a>
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <!-- Bring a friend's group? Bounce back to /map for another table. -->
+      <a
+        hlmBtn variant="outline" size="sm"
+        routerLink="/map"
+        class="w-fit"
+      >Book another table</a>
+      <!-- Self-service contact in case of questions before the night.
+           WhatsApp opens the venue conversation; tel: dials. Hidden when
+           no contact phone is configured. -->
+      <a
+        *ngIf="contactWhatsappHref() as href"
+        [href]="href"
+        hlmBtn variant="outline" size="sm"
+        target="_blank" rel="noopener"
+        class="w-fit"
+      >Message us</a>
+    </div>
   </article>
 
   <!-- CANCELLED — auto-released (hold expired before payment) -->
