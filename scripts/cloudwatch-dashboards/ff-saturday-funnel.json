@@ -1,0 +1,103 @@
+{
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0, "y": 0, "width": 24, "height": 2,
+      "properties": {
+        "markdown": "# FF Saturday — Public Booking Ops\n\n**Refresh:** 30s · **Lookback:** 1h (most widgets) · **Runbook:** `[[saturday_operational_runbook]]`\n\nFunnel events: `public_booking_event` (backend) + `frontend_funnel_event` (frontend). They thread together via `phone`/`reservationId` (BE) and `sessionId` (FE)."
+      }
+    },
+    {
+      "type": "log",
+      "x": 0, "y": 2, "width": 12, "height": 6,
+      "properties": {
+        "title": "Backend funnel by step (1h)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | filter @message like \"public_booking_event\" | parse @message /step:\\s*'(?<step>[a-z_]+)'/ | stats count() as cnt by step | sort cnt desc",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12, "y": 2, "width": 12, "height": 6,
+      "properties": {
+        "title": "Frontend funnel by event (1h)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | filter @message like \"frontend_funnel_event\" | parse @message /event:\\s*'(?<event>[a-z_]+)'/ | stats count() as cnt by event | sort cnt desc",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0, "y": 8, "width": 24, "height": 6,
+      "properties": {
+        "title": "Recent block reasons — what's stopping customers (1h, last 25)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | fields @timestamp | parse @message /step:\\s*'(?<step>blocked_[a-z_]+)'/ | parse @message /phone:\\s*'(?<phone>[^']+)'/ | parse @message /eventDate:\\s*'(?<eventDate>[^']+)'/ | filter ispresent(step) | sort @timestamp desc | limit 25 | display @timestamp, step, phone, eventDate",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0, "y": 14, "width": 12, "height": 6,
+      "properties": {
+        "title": "/r status arrivals — were they paid or cancelled? (1h)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | filter @message like \"frontend_funnel_event\" | parse @message /event:\\s*'(?<event>r_status_[a-z_]+)'/ | filter ispresent(event) | stats count() as cnt by event",
+        "view": "table"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12, "y": 14, "width": 12, "height": 6,
+      "properties": {
+        "title": "Day-shape early warning — webhook ignored (1h)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | filter @message like \"reservation_update_ignored\" | sort @timestamp desc | limit 25 | display @timestamp, @message",
+        "view": "table"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 20, "width": 12, "height": 6,
+      "properties": {
+        "title": "Lambda invocations / errors / throttles (1h)",
+        "region": "us-east-1",
+        "metrics": [
+          [ "AWS/Lambda", "Invocations", "FunctionName", "ff-reservations-api", { "label": "Invocations" } ],
+          [ ".", "Errors", ".", ".", { "label": "Errors", "color": "#d62728" } ],
+          [ ".", "Throttles", ".", ".", { "label": "Throttles", "color": "#ff7f0e" } ]
+        ],
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 60,
+        "yAxis": { "left": { "min": 0 } }
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 20, "width": 12, "height": 6,
+      "properties": {
+        "title": "Lambda duration p50 + p95 (1h)",
+        "region": "us-east-1",
+        "metrics": [
+          [ "AWS/Lambda", "Duration", "FunctionName", "ff-reservations-api", { "stat": "p50", "label": "p50" } ],
+          [ "...", { "stat": "p95", "label": "p95", "color": "#d62728" } ]
+        ],
+        "view": "timeSeries",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "ms" } }
+      }
+    },
+    {
+      "type": "log",
+      "x": 0, "y": 26, "width": 24, "height": 6,
+      "properties": {
+        "title": "Recent payments recorded (1h, last 25)",
+        "region": "us-east-1",
+        "query": "SOURCE '/aws/lambda/ff-reservations-api' | filter @message like \"payment_recorded\" | sort @timestamp desc | limit 25 | display @timestamp, @message",
+        "view": "table"
+      }
+    }
+  ]
+}
