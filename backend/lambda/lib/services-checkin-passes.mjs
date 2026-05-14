@@ -85,6 +85,16 @@ export function createCheckInPassesService({
     return String(env.CHECKIN_PASS_BASE_URL ?? "").trim();
   }
 
+  // Short-URL base for slug-routed passes (api.famosofuego.com/p/{slug}?to=pass).
+  // Falls back to api.famosofuego.com when the env var isn't set so legacy
+  // bootstrap + tests work without per-env config; production sets it via
+  // PUBLIC_BOOKING_SHORT_URL_BASE in index.mjs.
+  function resolveShortUrlBase() {
+    return String(env.PUBLIC_BOOKING_SHORT_URL_BASE ?? "https://api.famosofuego.com")
+      .trim()
+      .replace(/\/+$/, "");
+  }
+
   async function appendReservationHistory({
     eventDate,
     reservationId,
@@ -142,7 +152,17 @@ export function createCheckInPassesService({
     }
   }
 
-  async function buildPassUrl(token) {
+  // Customer-facing pass URL. When the pass record carries a publicSlug
+  // (anonymous-public bookings stamp it at issuance), prefer the short
+  // /p/{slug}?to=pass form — keeps the URL ~50 chars and rooted on the
+  // canonical share host. Falls back to the legacy long token URL for
+  // staff-created reservations (and any pre-stamp legacy passes).
+  async function buildPassUrl(token, publicSlug = null) {
+    const slug = String(publicSlug ?? "").trim();
+    if (slug) {
+      const base = resolveShortUrlBase();
+      if (base) return `${base}/p/${encodeURIComponent(slug)}?to=pass`;
+    }
     return buildPassUrlFromBaseUrl(await resolvePassBaseUrl(), token);
   }
 
@@ -176,7 +196,9 @@ export function createCheckInPassesService({
       revokedAt: Number(item.revokedAt ?? 0) || null,
       revokedBy: String(item.revokedBy ?? "").trim() || null,
       token: token || null,
-      url: token ? await buildPassUrl(token) : null,
+      url: token
+        ? await buildPassUrl(token, item?.publicSlug)
+        : null,
       qrPayload: token ? `ffr-checkin:${token}` : null,
     };
   }
@@ -362,6 +384,14 @@ export function createCheckInPassesService({
       const tokenHash = hashToken(token);
       const passPk = `RES#${reservationId}`;
       const passSk = `PASS#${passId}`;
+      // publicSlug + confirmationCode are stamped from the reservation
+      // when present (anonymous-public bookings supply them; staff-created
+      // reservations leave them undefined so the legacy token URL stays
+      // the canonical share URL for those passes). Stored on the pass row
+      // so toPassResponse can build the slug-based short URL without an
+      // extra DDB read.
+      const reservationSlug = String(reservation?.publicSlug ?? "").trim() || null;
+      const reservationCode = String(reservation?.confirmationCode ?? "").trim() || null;
       const passItem = {
         PK: passPk,
         SK: passSk,
@@ -384,6 +414,8 @@ export function createCheckInPassesService({
         revokedAt: null,
         revokedBy: null,
         updatedAt: now,
+        ...(reservationSlug ? { publicSlug: reservationSlug } : {}),
+        ...(reservationCode ? { confirmationCode: reservationCode } : {}),
       };
       const lookupItem = {
         PK: `TOKEN#${tokenHash}`,

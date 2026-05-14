@@ -119,6 +119,71 @@ describe("resolvePassBaseUrl precedence (via issuePassForReservation)", () => {
   });
 });
 
+describe("slug-based pass URL (publicSlug overrides token URL)", () => {
+  it("uses /p/{slug}?to=pass when reservation supplies publicSlug", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: {
+        CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass",
+        PUBLIC_BOOKING_SHORT_URL_BASE: "https://api.famosofuego.com",
+      },
+    });
+    const out = await svc.issuePassForReservation({
+      reservation: {
+        ...buildPaidReservation(),
+        publicSlug: "eQ2KB9ams2exeu2H",
+        confirmationCode: "2AZCQ7",
+      },
+      issuedBy: "system:test",
+    });
+    // pass.url is the customer-facing share URL — short and slug-rooted
+    // when slug is on the reservation. The long token URL stays in
+    // pass.qrPayload (ffr-checkin:{token}) for staff QR scanning.
+    assert.equal(
+      out.pass.url,
+      "https://api.famosofuego.com/p/eQ2KB9ams2exeu2H?to=pass"
+    );
+    assert.match(out.pass.qrPayload, /^ffr-checkin:[a-f0-9]+$/);
+  });
+
+  it("falls back to token URL when reservation has no publicSlug", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: {
+        CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass",
+        PUBLIC_BOOKING_SHORT_URL_BASE: "https://api.famosofuego.com",
+      },
+    });
+    const out = await svc.issuePassForReservation({
+      reservation: buildPaidReservation(), // no publicSlug
+      issuedBy: "system:test",
+    });
+    assert.match(
+      out.pass.url,
+      /^https:\/\/env\.example\.com\/check-in\/pass\?token=[a-f0-9]+$/
+    );
+  });
+
+  it("env default for short-URL base is api.famosofuego.com", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: { CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass" },
+      // PUBLIC_BOOKING_SHORT_URL_BASE deliberately unset
+    });
+    const out = await svc.issuePassForReservation({
+      reservation: {
+        ...buildPaidReservation(),
+        publicSlug: "abc1234567890XYZ",
+      },
+      issuedBy: "system:test",
+    });
+    assert.equal(
+      out.pass.url,
+      "https://api.famosofuego.com/p/abc1234567890XYZ?to=pass"
+    );
+  });
+});
+
 describe("resolvePassTtlDays precedence", () => {
   // baseDate 2026-05-12; addDays of {1..30} yields predictable expiry epochs.
   // Pass expiry is computed as Date.parse(`${date+ttl}T12:00:00Z`)/1000.

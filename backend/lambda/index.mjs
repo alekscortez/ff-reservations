@@ -492,6 +492,12 @@ const checkInPassesService = createCheckInPassesService({
   env: {
     CHECKIN_PASS_BASE_URL,
     CHECKIN_PASS_TTL_DAYS,
+    // Threaded so toPassResponse can build slug-based short URLs (e.g.
+    // api.famosofuego.com/p/{slug}?to=pass) instead of the long
+    // /check-in/pass?token={64-char-hex} URL when the underlying
+    // reservation has a publicSlug. Customer-facing share URL stays
+    // short across all surfaces (staff modal, mobile app, future SMS).
+    PUBLIC_BOOKING_SHORT_URL_BASE,
   },
   requiredEnv,
   httpError,
