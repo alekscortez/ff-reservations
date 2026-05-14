@@ -1,27 +1,144 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { startWith } from 'rxjs';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 import { AppSettings, SettingsService } from '../../../core/http/settings.service';
 import { HlmAlert } from '../../../shared/ui/alert';
+import { HlmBadge } from '../../../shared/ui/badge';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmCheckbox } from '../../../shared/ui/checkbox';
+import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
+import { HlmNativeSelect } from '../../../shared/ui/native-select';
+import { HlmTimePicker } from '../../../shared/ui/time-picker';
+
+export function joinHm(hour: unknown, minute: unknown, fallback: string): string {
+  const h = Number(hour);
+  const m = Number(minute);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return fallback;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return fallback;
+  return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor(m)).padStart(2, '0')}`;
+}
+
+export function splitHm(value: string): { hour: number; minute: number } {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value ?? '').trim());
+  if (!match) return { hour: 0, minute: 0 };
+  return { hour: Number(match[1]), minute: Number(match[2]) };
+}
+
+type HighImpactKey =
+  | 'allowAnonymousPublicBooking'
+  | 'allowPastEventPayments'
+  | 'auditVerboseLogging';
+
+const HIGH_IMPACT_LABELS: Record<HighImpactKey, string> = {
+  allowAnonymousPublicBooking: 'Allow customers to self-book on the public map',
+  allowPastEventPayments: 'Allow payments on past events',
+  auditVerboseLogging: 'Detailed activity logs (for support)',
+};
+
+type SectionKey =
+  | 'operations'
+  | 'payments'
+  | 'liveUpdates'
+  | 'checkIn'
+  | 'clientMap'
+  | 'publicBooking'
+  | 'accessAudit';
+
+const FIELD_HINTS: Record<string, { min?: string; max?: string }> = {
+  operatingDayCutoffHour: { min: '0 (midnight)', max: '23' },
+  holdTtlSeconds: { min: '60 seconds (1 min)', max: '1800 seconds (30 min)' },
+  paymentLinkTtlMinutes: { min: '1 minute', max: '120 minutes (2 h)' },
+  frequentPaymentLinkTtlMinutes: { min: '10 minutes', max: '10080 minutes (7 d)' },
+  dashboardPollingSeconds: { min: '5 seconds', max: '120 seconds (2 min)' },
+  tableAvailabilityPollingSeconds: { min: '5 seconds', max: '120 seconds (2 min)' },
+  clientAvailabilityPollingSeconds: { min: '5 seconds', max: '120 seconds (2 min)' },
+  urgentPaymentWindowMinutes: { min: '5 minutes', max: '1440 minutes (24 h)' },
+  checkInPassTtlDays: { min: '1 day', max: '30 days' },
+  anonymousHoldTtlSeconds: { min: '300 seconds (5 min)', max: '1800 seconds (30 min)' },
+  anonymousMaxTablesPerBooking: { min: '1', max: '10' },
+};
+
+const SECTION_CONTROLS: Record<SectionKey, string[]> = {
+  operations: ['operatingTz', 'operatingDayCutoffHour', 'holdTtlSeconds'],
+  payments: [
+    'paymentLinkTtlMinutes',
+    'frequentPaymentLinkTtlMinutes',
+    'defaultPaymentDeadlineTime',
+    'rescheduleCutoffTime',
+  ],
+  liveUpdates: [
+    'dashboardPollingSeconds',
+    'tableAvailabilityPollingSeconds',
+    'clientAvailabilityPollingSeconds',
+    'urgentPaymentWindowMinutes',
+  ],
+  checkIn: ['checkInPassTtlDays'],
+  clientMap: [
+    'customerContactPhoneE164',
+    'sectionColorA',
+    'sectionColorB',
+    'sectionColorC',
+    'sectionColorD',
+    'sectionColorE',
+  ],
+  publicBooking: ['anonymousHoldTtlSeconds', 'anonymousMaxTablesPerBooking', 'turnstileSiteKey'],
+  accessAudit: [],
+};
 
 @Component({
   selector: 'app-admin-settings',
-  imports: [CommonModule, ReactiveFormsModule, HlmAlert, HlmButton, HlmInput],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    HlmAlert,
+    HlmBadge,
+    HlmButton,
+    HlmCheckbox,
+    HlmDialog,
+    HlmInput,
+    HlmNativeSelect,
+    HlmTimePicker,
+  ],
   templateUrl: './settings.html',
-  styleUrl: './settings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AdminSettings implements OnInit {
+export class AdminSettings implements OnInit, HasUnsavedChanges {
   private settingsApi = inject(SettingsService);
   private readonly hexColorPattern = /^#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6})$/;
 
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
+  readonly loadError = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly squareEnvMode = signal<'sandbox' | 'production' | null>(null);
+  readonly lastSavedAt = signal<number | null>(null);
+  readonly pendingConfirm = signal<{ keys: HighImpactKey[] } | null>(null);
+
+  readonly pendingConfirmLabels = computed<string[]>(() => {
+    const p = this.pendingConfirm();
+    if (!p) return [];
+    return p.keys.map((k) => HIGH_IMPACT_LABELS[k]);
+  });
+
+  private highImpactSnapshot: Record<HighImpactKey, boolean> = {
+    allowAnonymousPublicBooking: false,
+    allowPastEventPayments: false,
+    auditVerboseLogging: false,
+  };
+
+  readonly lastSavedLabel = computed<string | null>(() => {
+    const ts = this.lastSavedAt();
+    if (!ts) return null;
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `Saved at ${hh}:${mm}`;
+  });
 
   form = new FormGroup({
     operatingTz: new FormControl('America/Chicago', {
@@ -47,21 +164,13 @@ export class AdminSettings implements OnInit {
     }),
     autoSendSquareLinkSms: new FormControl(false, { nonNullable: true }),
     smsEnabled: new FormControl(true, { nonNullable: true }),
-    defaultPaymentDeadlineHour: new FormControl(0, {
+    defaultPaymentDeadlineTime: new FormControl('00:00', {
       nonNullable: true,
-      validators: [Validators.min(0), Validators.max(23)],
+      validators: [Validators.required, Validators.pattern(/^([01]\d|2[0-3]):[0-5]\d$/)],
     }),
-    defaultPaymentDeadlineMinute: new FormControl(0, {
+    rescheduleCutoffTime: new FormControl('22:00', {
       nonNullable: true,
-      validators: [Validators.min(0), Validators.max(59)],
-    }),
-    rescheduleCutoffHour: new FormControl(22, {
-      nonNullable: true,
-      validators: [Validators.min(0), Validators.max(23)],
-    }),
-    rescheduleCutoffMinute: new FormControl(0, {
-      nonNullable: true,
-      validators: [Validators.min(0), Validators.max(59)],
+      validators: [Validators.required, Validators.pattern(/^([01]\d|2[0-3]):[0-5]\d$/)],
     }),
     dashboardPollingSeconds: new FormControl(15, {
       nonNullable: true,
@@ -125,21 +234,107 @@ export class AdminSettings implements OnInit {
     auditVerboseLogging: new FormControl(false, { nonNullable: true }),
   });
 
+  private readonly formStatus = toSignal(
+    this.form.statusChanges.pipe(startWith(this.form.status)),
+    { initialValue: this.form.status },
+  );
+
+  readonly sectionInvalid = computed<Record<SectionKey, boolean>>(() => {
+    this.formStatus();
+    const out = {} as Record<SectionKey, boolean>;
+    for (const section of Object.keys(SECTION_CONTROLS) as SectionKey[]) {
+      out[section] = SECTION_CONTROLS[section].some(
+        (name) => this.form.get(name)?.invalid === true,
+      );
+    }
+    return out;
+  });
+
+  readonly sectionColorRows: ReadonlyArray<{
+    key: 'A' | 'B' | 'C' | 'D' | 'E';
+    control: FormControl<string>;
+    errorKey: string;
+  }> = (['A', 'B', 'C', 'D', 'E'] as const).map((key) => ({
+    key,
+    control: this.form.controls[`sectionColor${key}` as 'sectionColorA'],
+    errorKey: `sectionColor${key}`,
+  }));
+
+  trackBySectionKey(_index: number, row: { key: string }): string {
+    return row.key;
+  }
+
+  onColorPick(key: 'A' | 'B' | 'C' | 'D' | 'E', event: Event): void {
+    const ctrl = this.form.controls[`sectionColor${key}` as 'sectionColorA'];
+    const value = (event.target as HTMLInputElement).value;
+    ctrl.setValue(value);
+    ctrl.markAsTouched();
+    ctrl.markAsDirty();
+  }
+
+  squareEnvBadgeVariant(): 'success' | 'warning' | 'destructive' {
+    const mode = this.squareEnvMode();
+    if (mode === 'production') return 'success';
+    if (mode === 'sandbox') return 'warning';
+    return 'destructive';
+  }
+
+  squareEnvLabel(): string {
+    const mode = this.squareEnvMode();
+    if (mode === 'production') return 'Live';
+    if (mode === 'sandbox') return 'Test';
+    return 'Not configured';
+  }
+
+  isInvalid(controlName: string): boolean {
+    const ctrl = this.form.get(controlName);
+    return !!ctrl && ctrl.touched && ctrl.invalid;
+  }
+
+  controlError(controlName: string): string | null {
+    const ctrl = this.form.get(controlName) as AbstractControl | null;
+    if (!ctrl || !ctrl.touched || !ctrl.invalid) return null;
+    const errors = ctrl.errors ?? {};
+    if (errors['required']) return 'Required';
+    const hints = FIELD_HINTS[controlName];
+    if (errors['min'] !== undefined) {
+      const human = hints?.min ?? String(errors['min'].min);
+      return `Must be at least ${human}`;
+    }
+    if (errors['max'] !== undefined) {
+      const human = hints?.max ?? String(errors['max'].max);
+      return `Must be at most ${human}`;
+    }
+    if (errors['pattern']) {
+      if (controlName.endsWith('Time')) return 'Use 24-hour HH:MM (e.g. 14:30)';
+      return 'Use a color code like #FF0000';
+    }
+    return 'Please check this value';
+  }
+
   ngOnInit(): void {
     this.load();
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.form.dirty && !this.saving();
   }
 
   load(): void {
     this.loading.set(true);
     this.error.set(null);
+    this.loadError.set(null);
     this.notice.set(null);
     this.settingsApi.getAdminSettings().subscribe({
       next: (item) => {
         this.applySettings(item);
+        this.form.markAsPristine();
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.message || err?.message || 'Failed to load settings');
+        const msg = err?.error?.message || err?.message || 'Failed to load settings';
+        this.error.set(msg);
+        this.loadError.set(msg);
         this.loading.set(false);
       },
     });
@@ -150,6 +345,33 @@ export class AdminSettings implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
+    const flips = this.detectHighImpactFlips();
+    if (flips.length > 0) {
+      this.pendingConfirm.set({ keys: flips });
+      return;
+    }
+    this.doSave();
+  }
+
+  confirmSave(): void {
+    this.pendingConfirm.set(null);
+    this.doSave();
+  }
+
+  cancelSave(): void {
+    this.pendingConfirm.set(null);
+  }
+
+  private detectHighImpactFlips(): HighImpactKey[] {
+    const out: HighImpactKey[] = [];
+    for (const key of Object.keys(HIGH_IMPACT_LABELS) as HighImpactKey[]) {
+      const next = Boolean(this.form.controls[key].value);
+      if (next && !this.highImpactSnapshot[key]) out.push(key);
+    }
+    return out;
+  }
+
+  private doSave(): void {
     this.saving.set(true);
     this.error.set(null);
     this.notice.set(null);
@@ -159,6 +381,8 @@ export class AdminSettings implements OnInit {
         this.applySettings(item);
         this.saving.set(false);
         this.notice.set('Settings saved.');
+        this.lastSavedAt.set(Date.now());
+        this.form.markAsPristine();
       },
       error: (err) => {
         this.error.set(err?.error?.message || err?.message || 'Failed to save settings');
@@ -177,10 +401,8 @@ export class AdminSettings implements OnInit {
       frequentPaymentLinkTtlMinutes: Number(item.frequentPaymentLinkTtlMinutes ?? 1440),
       autoSendSquareLinkSms: Boolean(item.autoSendSquareLinkSms),
       smsEnabled: Boolean(item.smsEnabled),
-      defaultPaymentDeadlineHour: Number(item.defaultPaymentDeadlineHour ?? 0),
-      defaultPaymentDeadlineMinute: Number(item.defaultPaymentDeadlineMinute ?? 0),
-      rescheduleCutoffHour: Number(item.rescheduleCutoffHour ?? 22),
-      rescheduleCutoffMinute: Number(item.rescheduleCutoffMinute ?? 0),
+      defaultPaymentDeadlineTime: joinHm(item.defaultPaymentDeadlineHour, item.defaultPaymentDeadlineMinute, '00:00'),
+      rescheduleCutoffTime: joinHm(item.rescheduleCutoffHour, item.rescheduleCutoffMinute, '22:00'),
       dashboardPollingSeconds: Number(item.dashboardPollingSeconds ?? 15),
       tableAvailabilityPollingSeconds: Number(item.tableAvailabilityPollingSeconds ?? 10),
       clientAvailabilityPollingSeconds: Number(item.clientAvailabilityPollingSeconds ?? 15),
@@ -202,9 +424,16 @@ export class AdminSettings implements OnInit {
       auditVerboseLogging: Boolean(item.auditVerboseLogging),
     });
     this.squareEnvMode.set(item.squareEnvMode ?? null);
+    this.highImpactSnapshot = {
+      allowAnonymousPublicBooking: Boolean(item.allowAnonymousPublicBooking),
+      allowPastEventPayments: Boolean(item.allowPastEventPayments),
+      auditVerboseLogging: Boolean(item.auditVerboseLogging),
+    };
   }
 
   private toPatch(): Partial<AppSettings> {
+    const deadline = splitHm(this.form.controls.defaultPaymentDeadlineTime.value);
+    const reschedule = splitHm(this.form.controls.rescheduleCutoffTime.value);
     return {
       operatingTz: this.form.controls.operatingTz.value.trim(),
       operatingDayCutoffHour: Number(this.form.controls.operatingDayCutoffHour.value),
@@ -214,10 +443,10 @@ export class AdminSettings implements OnInit {
       frequentPaymentLinkTtlMinutes: Number(this.form.controls.frequentPaymentLinkTtlMinutes.value),
       autoSendSquareLinkSms: Boolean(this.form.controls.autoSendSquareLinkSms.value),
       smsEnabled: Boolean(this.form.controls.smsEnabled.value),
-      defaultPaymentDeadlineHour: Number(this.form.controls.defaultPaymentDeadlineHour.value),
-      defaultPaymentDeadlineMinute: Number(this.form.controls.defaultPaymentDeadlineMinute.value),
-      rescheduleCutoffHour: Number(this.form.controls.rescheduleCutoffHour.value),
-      rescheduleCutoffMinute: Number(this.form.controls.rescheduleCutoffMinute.value),
+      defaultPaymentDeadlineHour: deadline.hour,
+      defaultPaymentDeadlineMinute: deadline.minute,
+      rescheduleCutoffHour: reschedule.hour,
+      rescheduleCutoffMinute: reschedule.minute,
       dashboardPollingSeconds: Number(this.form.controls.dashboardPollingSeconds.value),
       tableAvailabilityPollingSeconds: Number(this.form.controls.tableAvailabilityPollingSeconds.value),
       clientAvailabilityPollingSeconds: Number(this.form.controls.clientAvailabilityPollingSeconds.value),

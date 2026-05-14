@@ -187,13 +187,6 @@ export function buildDefaults(env) {
       1440,
       360
     ),
-    maxReservationsPerPhonePerEvent: clampInteger(
-      env?.MAX_RESERVATIONS_PER_PHONE_PER_EVENT,
-      1,
-      50,
-      10
-    ),
-    maxPendingWindowMinutes: clampInteger(env?.MAX_PENDING_WINDOW_MINUTES, 5, 720, 120),
     checkInPassTtlDays: clampInteger(env?.CHECKIN_PASS_TTL_DAYS, 1, 30, 2),
     checkInPassBaseUrl: String(env?.CHECKIN_PASS_BASE_URL ?? "").trim(),
     showClientFacingMap: parseBoolean(env?.SHOW_CLIENT_FACING_MAP, false),
@@ -276,10 +269,6 @@ export function normalizeValueForKey(key, value, fallback) {
       return clampInteger(value, 5, 120, fallback);
     case "urgentPaymentWindowMinutes":
       return clampInteger(value, 5, 1440, fallback);
-    case "maxReservationsPerPhonePerEvent":
-      return clampInteger(value, 1, 50, fallback);
-    case "maxPendingWindowMinutes":
-      return clampInteger(value, 5, 720, fallback);
     case "checkInPassTtlDays":
       return clampInteger(value, 1, 30, fallback);
     case "checkInPassBaseUrl":

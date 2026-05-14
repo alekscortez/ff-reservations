@@ -8,18 +8,26 @@
 
     <div *ngIf="!loading()" class="grid gap-4 xl:grid-cols-2">
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4" open>
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Operations</summary>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Business Hours</span>
+          <span
+            *ngIf="sectionInvalid().operations"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
-            Operating Timezone
-            <input
-              type="text"
-              [formControl]="form.controls.operatingTz"
-              hlmInput size="lg"
-            />
+            Time zone
+            <hlm-native-select [formControl]="form.controls.operatingTz">
+              <option value="America/Chicago">America/Chicago (CT)</option>
+              <option value="America/Mexico_City">America/Mexico_City (CT)</option>
+            </hlm-native-select>
+            <span *ngIf="controlError('operatingTz') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Day Cutoff Hour
+            End of business day (hour, 0–23)
             <input
               type="number"
               min="0"
@@ -27,9 +35,13 @@
               [formControl]="form.controls.operatingDayCutoffHour"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Reservations after this hour count toward the previous business day. Typical: 5 (5 AM).
+            </span>
+            <span *ngIf="controlError('operatingDayCutoffHour') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Hold TTL (seconds)
+            Staff hold timeout (seconds)
             <input
               type="number"
               min="60"
@@ -37,15 +49,27 @@
               [formControl]="form.controls.holdTtlSeconds"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How long a staff-created hold lasts before auto-releasing the table. Typical: 300 (5 min).
+            </span>
+            <span *ngIf="controlError('holdTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4" open>
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Payments</summary>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Payments</span>
+          <span
+            *ngIf="sectionInvalid().payments"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Standard Link TTL (minutes)
+            Payment link expires after (minutes)
             <input
               type="number"
               min="1"
@@ -53,9 +77,13 @@
               [formControl]="form.controls.paymentLinkTtlMinutes"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How long a Square / Cash App link stays valid for new reservations. Typical: 10 min.
+            </span>
+            <span *ngIf="controlError('paymentLinkTtlMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Frequent Link TTL (minutes)
+            Frequent-client payment link expires after (minutes)
             <input
               type="number"
               min="10"
@@ -63,65 +91,62 @@
               [formControl]="form.controls.frequentPaymentLinkTtlMinutes"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Longer window for known clients. Typical: 1440 (24 h).
+            </span>
+            <span *ngIf="controlError('frequentPaymentLinkTtlMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Default Deadline Hour
-            <input
-              type="number"
-              min="0"
-              max="23"
-              [formControl]="form.controls.defaultPaymentDeadlineHour"
-              hlmInput size="lg"
+            Default payment deadline
+            <hlm-time-picker
+              [formControl]="form.controls.defaultPaymentDeadlineTime"
+              aria-label="Default payment deadline time"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              If a reservation has no explicit deadline, the customer must pay by this time on the event day.
+            </span>
+            <span *ngIf="controlError('defaultPaymentDeadlineTime') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Default Deadline Minute
-            <input
-              type="number"
-              min="0"
-              max="59"
-              [formControl]="form.controls.defaultPaymentDeadlineMinute"
-              hlmInput size="lg"
+            Reschedule cutoff
+            <hlm-time-picker
+              [formControl]="form.controls.rescheduleCutoffTime"
+              aria-label="Reschedule cutoff time"
             />
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Reschedule Cutoff Hour
-            <input
-              type="number"
-              min="0"
-              max="23"
-              [formControl]="form.controls.rescheduleCutoffHour"
-              hlmInput size="lg"
-            />
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Reschedule Cutoff Minute
-            <input
-              type="number"
-              min="0"
-              max="59"
-              [formControl]="form.controls.rescheduleCutoffMinute"
-              hlmInput size="lg"
-            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Last time of day a customer can reschedule. After this, they must call.
+            </span>
+            <span *ngIf="controlError('rescheduleCutoffTime') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
-        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.cashReceiptNumberRequired" />
-            <span>Require receipt number for cash payments</span>
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.autoSendSquareLinkSms" />
-            <span>Auto-send digital payment link SMS after reservation create</span>
-          </label>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+          <hlm-checkbox
+            [formControl]="form.controls.cashReceiptNumberRequired"
+            label="Require receipt number for cash payments"
+          />
+          <hlm-checkbox
+            [formControl]="form.controls.autoSendSquareLinkSms"
+            label="Auto-text the payment link after a new reservation"
+          />
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Live Updates</summary>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Auto-refresh</span>
+          <span
+            *ngIf="sectionInvalid().liveUpdates"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
+        <p class="mt-2 text-[11px] normal-case tracking-normal text-brand-500">
+          Lower numbers = more current data, higher numbers = less load on the server.
+        </p>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Dashboard Polling (seconds)
+            Dashboard refresh interval (seconds)
             <input
               type="number"
               min="5"
@@ -129,9 +154,13 @@
               [formControl]="form.controls.dashboardPollingSeconds"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the staff dashboard re-checks the server.
+            </span>
+            <span *ngIf="controlError('dashboardPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Table Polling (seconds)
+            Table availability refresh (seconds)
             <input
               type="number"
               min="5"
@@ -139,9 +168,13 @@
               [formControl]="form.controls.tableAvailabilityPollingSeconds"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the booking page re-checks which tables are open.
+            </span>
+            <span *ngIf="controlError('tableAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Topbar Polling (seconds)
+            Topbar refresh (seconds)
             <input
               type="number"
               min="5"
@@ -149,9 +182,13 @@
               [formControl]="form.controls.clientAvailabilityPollingSeconds"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the topbar checks for the active event.
+            </span>
+            <span *ngIf="controlError('clientAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Urgent Window (minutes)
+            Mark reservation urgent (minutes before deadline)
             <input
               type="number"
               min="5"
@@ -159,15 +196,27 @@
               [formControl]="form.controls.urgentPaymentWindowMinutes"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Reservations within this window of their payment deadline get the urgent flag.
+            </span>
+            <span *ngIf="controlError('urgentPaymentWindowMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Check-In</summary>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Check-In</span>
+          <span
+            *ngIf="sectionInvalid().checkIn"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
         <div class="mt-3 grid gap-3">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Check-In Pass TTL (days)
+            Check-in pass valid for (days)
             <input
               type="number"
               min="1"
@@ -175,112 +224,106 @@
               [formControl]="form.controls.checkInPassTtlDays"
               hlmInput size="lg"
             />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How long QR check-in passes stay scannable after issue. Typical: 2.
+            </span>
+            <span *ngIf="controlError('checkInPassTtlDays') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Client Map</summary>
-        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.showClientFacingMap" />
-            <span>Enable client-facing table map</span>
-          </label>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Public Map</span>
+          <span
+            *ngIf="sectionInvalid().clientMap"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+          <hlm-checkbox
+            [formControl]="form.controls.showClientFacingMap"
+            label="Show the table map to customers"
+          />
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Customer Contact Phone (E.164)
+            Customer contact phone
             <input
               type="tel"
-              placeholder="+18557656160"
+              placeholder="+15551234567"
               [formControl]="form.controls.customerContactPhoneE164"
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Shown as Call + WhatsApp buttons on the public map. Leave blank to hide.
+              International format (e.g. <code class="rounded bg-brand-100 px-1">+15551234567</code>). Shown as Call + WhatsApp buttons on the public map. Leave blank to hide.
             </span>
+            <span *ngIf="controlError('customerContactPhoneE164') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
 
         <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-brand-800">
           <p class="text-xs font-semibold uppercase tracking-[0.14em] text-brand-600">Section Colors</p>
+          <p class="text-[11px] normal-case tracking-normal text-brand-500">
+            Colors used for floor-plan sections A–E on the public map.
+          </p>
           <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-              Section A
+            <div *ngFor="let row of sectionColorRows; trackBy: trackBySectionKey" class="grid gap-1">
+              <span class="text-xs uppercase tracking-[0.12em] text-brand-500">Section {{ row.key }}</span>
               <div class="flex items-center gap-2">
                 <input
                   type="text"
-                  [formControl]="form.controls.sectionColorA"
+                  [formControl]="row.control"
+                  [attr.aria-label]="'Section ' + row.key + ' color hex'"
                   hlmInput size="lg"
+                  [class.border-danger-400]="isInvalid(row.errorKey)"
                 />
-                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorA.value"></span>
+                <label
+                  class="relative inline-block h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-md border border-brand-200"
+                  [style.background]="row.control.value"
+                  [attr.aria-label]="'Pick color for Section ' + row.key"
+                  title="Pick color"
+                >
+                  <input
+                    type="color"
+                    class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    [value]="row.control.value"
+                    (input)="onColorPick(row.key, $event)"
+                  />
+                </label>
               </div>
-            </label>
-            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-              Section B
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  [formControl]="form.controls.sectionColorB"
-                  hlmInput size="lg"
-                />
-                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorB.value"></span>
-              </div>
-            </label>
-            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-              Section C
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  [formControl]="form.controls.sectionColorC"
-                  hlmInput size="lg"
-                />
-                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorC.value"></span>
-              </div>
-            </label>
-            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-              Section D
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  [formControl]="form.controls.sectionColorD"
-                  hlmInput size="lg"
-                />
-                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorD.value"></span>
-              </div>
-            </label>
-            <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-              Section E
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  [formControl]="form.controls.sectionColorE"
-                  hlmInput size="lg"
-                />
-                <span class="h-7 w-7 rounded-full border border-brand-200" [style.background]="form.controls.sectionColorE.value"></span>
-              </div>
-            </label>
+              <span *ngIf="controlError(row.errorKey) as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+            </div>
           </div>
         </div>
       </details>
 
-      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Public Booking</summary>
-        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.allowAnonymousPublicBooking" />
-            <span>Allow customers to self-book on the public map</span>
-          </label>
+      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2" [open]="form.controls.allowAnonymousPublicBooking.value">
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Customer Self-Booking</span>
+          <span
+            *ngIf="sectionInvalid().publicBooking"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+          <hlm-checkbox
+            [formControl]="form.controls.allowAnonymousPublicBooking"
+            label="Allow customers to self-book on the public map"
+          />
           <p class="text-[11px] text-brand-500">
-            When off, customers can only see the map (read-only). When on,
-            tapping AVAILABLE tables opens a booking sheet with phone +
-            Turnstile + Square payment. Pre-flight checklist:
-            (1) Turnstile site key set below, (2) operating tz correct,
-            (3) Square in production mode.
+            When off, customers can only view the map. When on, tapping an available table
+            opens a booking sheet with phone, anti-bot check, and Square payment.
+            Before turning on, make sure: (1) the anti-bot key below is set,
+            (2) the time zone is correct, (3) Square mode is Live (see Connected Services).
           </p>
         </div>
 
         <div class="mt-3 grid gap-3 md:grid-cols-2 rounded-lg border border-brand-100 bg-white p-3">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Anonymous Hold TTL (seconds)
+            Customer payment window (seconds)
             <input
               type="number"
               min="300"
@@ -289,11 +332,12 @@
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How long the customer has to pay before the hold auto-releases. 300-1800.
+              How long a customer has to pay before their hold auto-releases. 300–1800 seconds (5–30 min). Typical: 600 (10 min).
             </span>
+            <span *ngIf="controlError('anonymousHoldTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Max Tables Per Booking
+            Maximum tables per booking
             <input
               type="number"
               min="1"
@@ -302,11 +346,12 @@
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Cap on tables per anonymous booking (1-10). Default 4.
+              Cap on tables per customer self-booking (1–10). Typical: 4.
             </span>
+            <span *ngIf="controlError('anonymousMaxTablesPerBooking') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
-            Cloudflare Turnstile Site Key
+            Anti-bot verification key (public)
             <input
               type="text"
               placeholder="0x4AAAA…"
@@ -314,39 +359,77 @@
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Public site key from dash.cloudflare.com → Turnstile. Required when public booking is on. The matching secret key lives in AWS Secrets Manager (TURNSTILE_SECRET_ARN env).
+              Cloudflare Turnstile site key. Required when self-booking is on.
+              Get one at dash.cloudflare.com → Turnstile.
+              The matching secret is set by your developer.
             </span>
+            <span *ngIf="controlError('turnstileSiteKey') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Access & Audit</summary>
-        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-800">
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.smsEnabled" />
-            <span>SMS sending enabled</span>
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.allowPastEventEdits" />
-            <span>Allow editing past events</span>
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.allowPastEventPayments" />
-            <span>Allow payments on past events</span>
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input type="checkbox" [formControl]="form.controls.auditVerboseLogging" />
-            <span>Enable verbose audit logging</span>
-          </label>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Permissions &amp; Logging</span>
+          <span
+            *ngIf="sectionInvalid().accessAudit"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
+        <div class="mt-3 grid gap-3 rounded-lg border border-brand-100 bg-white p-3">
+          <div class="grid gap-1">
+            <hlm-checkbox
+              [formControl]="form.controls.smsEnabled"
+              label="Send SMS to customers"
+            />
+            <span class="ml-6 text-[11px] normal-case tracking-normal text-brand-500">
+              Master switch for outgoing customer texts (payment links, check-in passes). OTP login texts are not affected.
+            </span>
+          </div>
+          <div class="grid gap-1">
+            <hlm-checkbox
+              [formControl]="form.controls.allowPastEventEdits"
+              label="Allow editing past events"
+            />
+            <span class="ml-6 text-[11px] normal-case tracking-normal text-brand-500">
+              Off = staff can't change events whose date has passed. Recommended: off.
+            </span>
+          </div>
+          <div class="grid gap-1">
+            <hlm-checkbox
+              [formControl]="form.controls.allowPastEventPayments"
+              label="Allow payments on past events"
+            />
+            <span class="ml-6 text-[11px] normal-case tracking-normal text-brand-500">
+              Off = no payments can be recorded for past events. Recommended: off.
+            </span>
+          </div>
+          <div class="grid gap-1">
+            <hlm-checkbox
+              [formControl]="form.controls.auditVerboseLogging"
+              label="Detailed activity logs (for support)"
+            />
+            <span class="ml-6 text-[11px] normal-case tracking-normal text-brand-500">
+              Logs extra detail to help your developer debug issues. Leave off normally.
+            </span>
+          </div>
         </div>
       </details>
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
-        <summary class="cursor-pointer text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Integrations</summary>
-        <div class="mt-3 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-700">
-          Square environment:
-          <span class="font-semibold text-brand-900">{{ squareEnvMode() || 'unknown' }}</span>
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Connected Services</span>
+        </summary>
+        <div class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-100 bg-white p-3 text-sm text-brand-700">
+          <span>Square mode:</span>
+          <span hlmBadge size="sm" [variant]="squareEnvBadgeVariant()">
+            {{ squareEnvLabel() }}
+          </span>
+          <span class="text-[11px] normal-case tracking-normal text-brand-500">
+            Set by your developer. Live = real charges; Test = sandbox.
+          </span>
         </div>
       </details>
     </div>
@@ -354,15 +437,53 @@
     <hlm-alert *ngIf="error()" variant="destructive" class="mt-3">{{ error() }}</hlm-alert>
     <hlm-alert *ngIf="notice()" variant="success" class="mt-3">{{ notice() }}</hlm-alert>
 
-    <div class="mt-4 flex justify-end">
+    <div class="sticky bottom-0 z-10 -mx-4 mt-4 flex flex-col items-stretch gap-2 border-t border-brand-100 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:flex-row md:items-center md:justify-between md:px-6">
+      <p class="text-xs text-brand-500">
+        <span *ngIf="form.invalid && form.touched">Some fields need fixing — look for the red dot in each section.</span>
+        <span *ngIf="form.dirty && !saving()">You have unsaved changes.</span>
+        <span *ngIf="lastSavedLabel()">{{ lastSavedLabel() }}</span>
+      </p>
       <button
         type="button"
         hlmBtn size="lg"
         (click)="save()"
-        [disabled]="loading() || saving() || form.invalid"
+        [disabled]="loading() || saving() || form.invalid || !form.dirty || !!loadError()"
       >
-        {{ saving() ? 'Saving…' : 'Save Settings' }}
+        {{ saving() ? 'Saving…' : 'Save changes' }}
       </button>
     </div>
   </section>
 </section>
+
+<hlm-dialog
+  *ngIf="pendingConfirm()"
+  (close)="cancelSave()"
+  panelClass="max-w-md"
+  ariaLabel="Confirm settings change"
+>
+  <h3 class="text-lg font-semibold text-brand-900">Heads up — you're about to turn on:</h3>
+  <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-brand-800">
+    <li *ngFor="let label of pendingConfirmLabels()">{{ label }}</li>
+  </ul>
+  <p class="mt-3 text-sm text-brand-600">
+    These take effect immediately. Are you sure?
+  </p>
+  <div class="mt-5 flex flex-wrap justify-end gap-2">
+    <button
+      type="button"
+      hlmBtn variant="outline"
+      (click)="cancelSave()"
+      [disabled]="saving()"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      hlmBtn variant="destructive"
+      (click)="confirmSave()"
+      [disabled]="saving()"
+    >
+      {{ saving() ? 'Saving…' : 'Save changes' }}
+    </button>
+  </div>
+</hlm-dialog>

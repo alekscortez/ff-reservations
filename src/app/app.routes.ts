@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { roleGuard } from './core/guards/role.guard';
+import { unsavedChangesGuard } from './core/guards/unsaved-changes.guard';
 import { Shell } from './core/layout/shell/shell';
 
 export const routes: Routes = [
@@ -136,6 +137,7 @@ export const routes: Routes = [
       },
       {
         path: 'settings',
+        canDeactivate: [unsavedChangesGuard],
         loadComponent: () =>
           import('./features/admin/settings/settings').then(
             (m) => m.AdminSettings

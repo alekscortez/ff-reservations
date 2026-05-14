@@ -29,10 +29,7 @@ export interface AppSettings {
   tableAvailabilityPollingSeconds: number;
   clientAvailabilityPollingSeconds: number;
   urgentPaymentWindowMinutes: number;
-  maxReservationsPerPhonePerEvent: number;
-  maxPendingWindowMinutes: number;
   checkInPassTtlDays: number;
-  checkInPassBaseUrl: string;
   showClientFacingMap: boolean;
   customerContactPhoneE164: string;
   allowAnonymousPublicBooking: boolean;
