@@ -27,6 +27,7 @@ import {
 import {
   buildCodeLookupKey,
   buildSlugLookupKey,
+  extractConfirmationCodeFromText,
   formatPublicConfirmationCode,
   generateConfirmationCode,
   generatePublicSlug,
@@ -1237,6 +1238,122 @@ export async function handlePublicBookingsRoute(ctx) {
   }
 
   // ─────────────────────────────────────────────────────────────────────
+  // POST /public/lookup-by-code — sibling of /lookup-by-phone. Customer
+  // types their FF-XXXXXX confirmation code (from Square receipt or
+  // original SMS) and we hand back the short URL. Safer than phone-only
+  // lookup because the code is a customer-supplied token they already
+  // possess — no PII enumeration risk. Resolves PAID + PENDING + every
+  // state except CANCELLED (cancelled reservations return found:false to
+  // avoid pointing customers at a dead row).
+  //
+  // Body: { code, turnstileToken }. Code accepts "FF-XXXXXX", "ff-xxxxxx",
+  // or bare "XXXXXX" — extractConfirmationCodeFromText canonicalises.
+  // Returns { found: true, shortUrl, paymentStatus, eventDate,
+  // confirmationCode } or { found: false }.
+  // ─────────────────────────────────────────────────────────────────────
+  if (method === "POST" && path === "/public/lookup-by-code") {
+    const settings = (await getAppSettings()) ?? {};
+    if (!settings.allowAnonymousPublicBooking) {
+      return bookingDisabled(json, cors);
+    }
+    if (typeof lookupReservationByConfirmationCode !== "function") {
+      return json(500, { message: "Lookup service not configured" }, cors);
+    }
+
+    const body = (await getBody(event)) ?? {};
+    const codeRaw = String(body?.code ?? "").trim();
+    const turnstileToken = String(body?.turnstileToken ?? "").trim();
+    if (!codeRaw) {
+      return json(
+        400,
+        { message: "code is required", code: "MISSING_CODE" },
+        cors
+      );
+    }
+    const code = extractConfirmationCodeFromText(codeRaw);
+    if (!code) {
+      // Bad shape (wrong length, contains 0/O/1/I/L, etc). Return a
+      // distinct code so the FE can surface a "double-check the code"
+      // hint instead of a generic not-found.
+      return json(
+        400,
+        {
+          message: "Booking code must be 6 letters/digits (FF-XXXXXX)",
+          code: "INVALID_CODE",
+        },
+        cors
+      );
+    }
+
+    // Turnstile gate — same posture as /lookup-by-phone. Without this the
+    // endpoint becomes a code-enumeration oracle (31^6 ≈ 887M combinations
+    // still scannable cheaply at a few RPS). Fail-closed when configured.
+    const turnstileSiteKey = String(settings.turnstileSiteKey ?? "").trim();
+    if (turnstileSiteKey) {
+      if (!turnstileToken) {
+        return json(
+          403,
+          { message: "Turnstile token is required", code: "TURNSTILE_FAILED" },
+          cors
+        );
+      }
+      const turnstileSecret =
+        typeof loadTurnstileSecret === "function"
+          ? await loadTurnstileSecret()
+          : "";
+      const verification = await verifyTurnstileToken({
+        token: turnstileToken,
+        secret: turnstileSecret,
+        remoteIp: getRemoteIp(event),
+      });
+      if (!verification.success) {
+        return json(
+          403,
+          {
+            message: "Turnstile verification failed",
+            code: "TURNSTILE_FAILED",
+            errorCodes: verification.errorCodes,
+          },
+          cors
+        );
+      }
+    }
+
+    const looked = await lookupReservationByConfirmationCode(code);
+    if (!looked?.reservationId || !looked?.eventDate) {
+      return json(200, { found: false }, cors);
+    }
+
+    let reservation;
+    try {
+      reservation = await getReservationById(looked.eventDate, looked.reservationId);
+    } catch (err) {
+      if (err?.statusCode === 404) {
+        return json(200, { found: false }, cors);
+      }
+      throw err;
+    }
+    if (String(reservation?.status ?? "").toUpperCase() === "CANCELLED") {
+      return json(200, { found: false }, cors);
+    }
+
+    const publicSlug = String(reservation?.publicSlug ?? "").trim();
+    const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
+    const shortUrl = publicSlug ? `${shortUrlBase}/p/${publicSlug}` : null;
+    return json(
+      200,
+      {
+        found: true,
+        shortUrl,
+        paymentStatus,
+        eventDate: looked.eventDate,
+        confirmationCode: String(reservation?.confirmationCode ?? "").trim() || code,
+      },
+      cors
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
   // POST /public/telemetry — frontend funnel events. NO auth, no DDB
   // write, just a structured CloudWatch log. Pairs with emitFunnel above
   // so the FE half of the abandonment journey is readable from the same
@@ -1269,6 +1386,17 @@ export async function handlePublicBookingsRoute(ctx) {
       "r_status_cancelled_seen",
       "r_release_clicked",
       "r_wallet_clicked",
+      // Find-modal flow (Tier S, 2026-05-14). One funnel covers both
+      // Phone and Booking-code lookup paths so we can compare which one
+      // customers actually reach for.
+      "find_modal_opened",
+      "find_modal_tab_changed",
+      "find_by_phone_submitted",
+      "find_by_phone_not_found",
+      "find_by_phone_found",
+      "find_by_code_submitted",
+      "find_by_code_not_found",
+      "find_by_code_found",
     ]);
     if (!allowed.has(eventName)) {
       // Silent 204 — frontend telemetry must never break the user flow,

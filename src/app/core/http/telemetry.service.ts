@@ -33,7 +33,18 @@ export type TelemetryEvent =
   | 'r_status_paid_seen'
   | 'r_status_cancelled_seen'
   | 'r_release_clicked'
-  | 'r_wallet_clicked';
+  | 'r_wallet_clicked'
+  // Find-modal flow (Tier S, 2026-05-14). Tracks both Phone and
+  // Booking-code lookup paths so we can compare which one customers
+  // reach for + measure not-found rate per channel.
+  | 'find_modal_opened'
+  | 'find_modal_tab_changed'
+  | 'find_by_phone_submitted'
+  | 'find_by_phone_not_found'
+  | 'find_by_phone_found'
+  | 'find_by_code_submitted'
+  | 'find_by_code_not_found'
+  | 'find_by_code_found';
 
 interface TelemetryPayload {
   eventDate?: string | null;

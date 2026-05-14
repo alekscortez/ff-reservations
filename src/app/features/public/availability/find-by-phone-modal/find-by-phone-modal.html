@@ -9,7 +9,7 @@
     <div>
       <h2 class="text-lg font-semibold text-brand-900">Find your reservation</h2>
       <p class="text-xs uppercase tracking-[0.14em] text-brand-500">
-        Enter your phone number
+        {{ isPhoneMode() ? 'Enter your phone number' : 'Enter your booking code' }}
       </p>
     </div>
     <button
@@ -21,12 +21,46 @@
   </header>
 
   <div class="grid gap-4 p-4">
+    <!-- Tab toggle. Phone is the existing path (active hold lookup);
+         Booking code resolves PAID + PENDING via the FF-XXXXXX code
+         from the customer's Square receipt or original SMS. -->
+    <div
+      class="inline-flex w-full rounded-full border border-brand-200 bg-white p-1"
+      role="tablist"
+      aria-label="Lookup method"
+    >
+      <button
+        hlmToggle
+        type="button"
+        class="flex-1"
+        role="tab"
+        [active]="isPhoneMode()"
+        [attr.aria-selected]="isPhoneMode()"
+        (click)="setMode('phone')"
+      >Phone</button>
+      <button
+        hlmToggle
+        type="button"
+        class="flex-1"
+        role="tab"
+        [active]="isCodeMode()"
+        [attr.aria-selected]="isCodeMode()"
+        (click)="setMode('code')"
+      >Booking code</button>
+    </div>
+
     <p class="text-sm text-brand-700">
-      We'll find your active hold so you can finish paying or release the table.
+      {{ isPhoneMode()
+        ? "We'll find your active hold so you can finish paying or release the table."
+        : "Type the FF-XXXXXX code from your Square receipt or confirmation SMS." }}
     </p>
 
     <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3">
-      <div class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+      <!-- Phone mode -->
+      <div
+        *ngIf="isPhoneMode()"
+        class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600"
+      >
         <span>Phone number</span>
         <div class="flex items-stretch gap-2">
           <hlm-native-select
@@ -56,6 +90,32 @@
         >{{ err }}</p>
       </div>
 
+      <!-- Code mode -->
+      <div
+        *ngIf="isCodeMode()"
+        class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600"
+      >
+        <span>Booking code</span>
+        <input
+          type="text"
+          autocomplete="one-time-code"
+          autocapitalize="characters"
+          spellcheck="false"
+          inputmode="text"
+          formControlName="code"
+          hlmInput size="lg"
+          class="font-mono tracking-[0.18em] text-brand-900 normal-case"
+          placeholder="FF-K7M3X2"
+          [disabled]="submitting()"
+          required
+        />
+        <p
+          *ngIf="fieldError('code') as err"
+          class="text-[11px] normal-case tracking-normal text-danger-700"
+          aria-live="polite"
+        >{{ err }}</p>
+      </div>
+
       <div *ngIf="hasTurnstile()" class="grid gap-1">
         <div #findTurnstileContainer></div>
         <p *ngIf="turnstileError() as err" class="text-xs text-danger-700">
@@ -67,18 +127,33 @@
         {{ err }}
       </hlm-alert>
 
+      <!-- Not-found state. Carries which mode the miss came from so we
+           can offer the OTHER channel as the next step. Includes
+           WhatsApp affordance so a stuck customer never hits a dead end. -->
       <article
-        *ngIf="notFound()"
+        *ngIf="notFound() as missMode"
         class="grid gap-2 rounded-lg border border-warm-200 bg-warm-50 p-3 text-sm text-warm-900"
         aria-live="polite"
       >
-        <p class="font-medium">We couldn't find a recent booking for that phone.</p>
-        <p class="text-xs text-warm-800">
-          Check your Square email for the link, or pick another table from the map.
-          <ng-container *ngIf="hasContactPhone()">
-            If you need help, message us:
-          </ng-container>
+        <p class="font-medium">
+          {{ missMode === 'phone'
+            ? "We couldn't find an active hold for that phone."
+            : "We couldn't find a booking with that code." }}
         </p>
+        <p class="text-xs text-warm-800">
+          {{ missMode === 'phone'
+            ? "If you already paid, try your booking code instead — it's on your Square receipt."
+            : "Double-check the code on your Square receipt, or try your phone number." }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            hlmBtn variant="outline" size="sm"
+            (click)="setMode(missMode === 'phone' ? 'code' : 'phone')"
+          >
+            {{ missMode === 'phone' ? 'Try booking code instead' : 'Try phone instead' }}
+          </button>
+        </div>
         <div *ngIf="hasContactPhone()" class="grid gap-2 sm:grid-cols-2">
           <a
             hlmBtn size="sm"
@@ -101,7 +176,9 @@
           hlmBtn size="lg"
           [disabled]="submitting() || form.invalid"
         >
-          {{ submitting() ? 'Searching…' : 'Find my booking' }}
+          {{ submitting()
+            ? 'Searching…'
+            : (isPhoneMode() ? 'Find by phone' : 'Find by code') }}
         </button>
       </div>
     </form>

@@ -721,3 +721,191 @@ describe("POST /public/reservations/{id}/wallet-pass?t={token}", () => {
     assert.equal(out.body.pkpassBase64, "AAAA");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// POST /public/lookup-by-code (Tier S, 2026-05-14)
+// ─────────────────────────────────────────────────────────────────────
+function codeLookupCtx({
+  json,
+  bodyOverride,
+  settings,
+  verifyTurnstileToken,
+  lookupReservationByConfirmationCode,
+  getReservationById,
+}) {
+  return {
+    method: "POST",
+    path: "/public/lookup-by-code",
+    event: {
+      requestContext: { http: { sourceIp: "203.0.113.5" } },
+      queryStringParameters: null,
+    },
+    cors: {},
+    json,
+    httpError,
+    getBody: async () => bodyOverride ?? {},
+    randomUUID: () => "uuid-fixed-1",
+    normalizePhoneE164: () => "",
+    normalizePhoneCountry: () => "US",
+    verifyTurnstileToken: verifyTurnstileToken ?? PASS_TURNSTILE,
+    loadTurnstileSecret: async () => "test-secret",
+    lookupReservationByConfirmationCode:
+      lookupReservationByConfirmationCode ??
+      (async () => ({ reservationId: "res-1", eventDate: "2026-05-16" })),
+    getReservationById:
+      getReservationById ??
+      (async () => ({
+        reservationId: "res-1",
+        eventDate: "2026-05-16",
+        publicSlug: "abcdefghijklmnop",
+        confirmationCode: "K7M3X2",
+        paymentStatus: "PAID",
+        status: "CONFIRMED",
+      })),
+    getAppSettings: async () =>
+      settings ?? {
+        allowAnonymousPublicBooking: true,
+        turnstileSiteKey: "0x4AAAA",
+      },
+    publicBookingShortUrlBase: "https://famosofuego.com",
+  };
+}
+
+describe("POST /public/lookup-by-code", () => {
+  it("410 BOOKING_DISABLED when settings flag is off", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2", turnstileToken: "tok" },
+        settings: { allowAnonymousPublicBooking: false },
+      })
+    );
+    assert.equal(out.statusCode, 410);
+    assert.equal(out.body.code, "BOOKING_DISABLED");
+  });
+
+  it("400 MISSING_CODE when code is empty", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { turnstileToken: "tok" },
+      })
+    );
+    assert.equal(out.statusCode, 400);
+    assert.equal(out.body.code, "MISSING_CODE");
+  });
+
+  it("400 INVALID_CODE on bad-shape code (too short)", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "ABC", turnstileToken: "tok" },
+      })
+    );
+    assert.equal(out.statusCode, 400);
+    assert.equal(out.body.code, "INVALID_CODE");
+  });
+
+  it("400 INVALID_CODE rejects ambiguous chars (0/O/1/I/L)", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K0M3X2", turnstileToken: "tok" },
+      })
+    );
+    assert.equal(out.statusCode, 400);
+    assert.equal(out.body.code, "INVALID_CODE");
+  });
+
+  it("403 TURNSTILE_FAILED when token missing", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2" },
+      })
+    );
+    assert.equal(out.statusCode, 403);
+    assert.equal(out.body.code, "TURNSTILE_FAILED");
+  });
+
+  it("403 TURNSTILE_FAILED when verify rejects", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2", turnstileToken: "bad" },
+        verifyTurnstileToken: FAIL_TURNSTILE,
+      })
+    );
+    assert.equal(out.statusCode, 403);
+    assert.equal(out.body.code, "TURNSTILE_FAILED");
+  });
+
+  it("200 found:false when code resolves to nothing", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2", turnstileToken: "tok" },
+        lookupReservationByConfirmationCode: async () => null,
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.found, false);
+  });
+
+  it("200 found:false when reservation is CANCELLED", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2", turnstileToken: "tok" },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          eventDate: "2026-05-16",
+          publicSlug: "abcdefghijklmnop",
+          status: "CANCELLED",
+          paymentStatus: "PENDING",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.found, false);
+  });
+
+  it("200 found:true with shortUrl + paymentStatus on happy hit", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "K7M3X2", turnstileToken: "tok" },
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.found, true);
+    assert.equal(
+      out.body.shortUrl,
+      "https://famosofuego.com/p/abcdefghijklmnop"
+    );
+    assert.equal(out.body.paymentStatus, "PAID");
+    assert.equal(out.body.eventDate, "2026-05-16");
+    assert.equal(out.body.confirmationCode, "K7M3X2");
+  });
+
+  it("accepts FF- prefix and case-insensitive code", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      codeLookupCtx({
+        json: j.json,
+        bodyOverride: { code: "ff-k7m3x2", turnstileToken: "tok" },
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.found, true);
+  });
+});

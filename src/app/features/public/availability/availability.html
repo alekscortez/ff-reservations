@@ -49,25 +49,26 @@
   ></hlm-confirm-dialog>
 
   <header class="rounded-2xl border border-brand-100 bg-white p-3 shadow-sm md:p-4">
-    <div class="flex items-center">
+    <div class="flex items-center justify-between gap-3">
       <img class="h-24 w-24 object-contain md:h-28 md:w-28" src="/assets/ff-logo.svg" alt="Famoso Fuego logo" />
+      <!-- Find-your-reservation affordance promoted from a buried text
+           link to a real button (Tier S, 2026-05-14). Sits beside the
+           logo on the same row so customers who landed here to manage
+           an existing booking — not browse — see the path immediately.
+           Hidden when a pending-hold banner already takes that role. -->
+      <button
+        *ngIf="bookingEnabled() && !pendingHold()"
+        type="button"
+        hlmBtn variant="outline" size="sm"
+        class="shrink-0"
+        (click)="openFindModal()"
+      >Find my reservation</button>
     </div>
-    <h1 class="mt-0 text-2xl font-semibold text-brand-900 md:text-3xl">Live Table Availability</h1>
+    <h1 class="mt-2 text-2xl font-semibold text-brand-900 md:text-3xl">Famoso Fuego — Reservations</h1>
     <p class="mt-2 text-sm text-brand-600">
       {{ bookingEnabled()
-        ? 'Tap an available table to book online. Hold lasts 10 minutes; pay to confirm.'
+        ? 'Browse available tables below to book online — or use Find my reservation if you already have one.'
         : 'Pick a table below, then contact us to reserve. Your table is held once payment is confirmed.' }}
-    </p>
-
-    <p
-      *ngIf="bookingEnabled() && !pendingHold()"
-      class="mt-2 text-xs text-brand-500"
-    >
-      Already booked? <button
-        type="button"
-        class="font-medium text-brand-700 underline underline-offset-2 hover:text-brand-900"
-        (click)="openFindModal()"
-      >Find your reservation</button>
     </p>
 
     <!-- Contact CTAs: only shown when self-booking is OFF (fallback), so

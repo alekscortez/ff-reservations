@@ -29,13 +29,20 @@ import { HlmButton } from '../../../../shared/ui/button';
 import { HlmDialog } from '../../../../shared/ui/dialog';
 import { HlmInput } from '../../../../shared/ui/input';
 import { HlmNativeSelect } from '../../../../shared/ui/native-select';
+import { HlmToggle } from '../../../../shared/ui/toggle';
 import { PublicBookingsService } from '../../../../core/http/public-bookings.service';
+import { TelemetryService } from '../../../../core/http/telemetry.service';
+
+// Find-your-reservation modal. Two lookup channels:
+//   - Phone:        /public/lookup-by-phone (PENDING holds only)
+//   - Booking code: /public/lookup-by-code  (any state except CANCELLED)
+//
+// File/selector name (`find-by-phone-modal`) is historical — the modal
+// gained Booking-code support in Tier S (2026-05-14). Renaming the file
+// would have churned imports + selector references on a Saturday-eve
+// without any user-visible benefit.
 
 // Shared with reserve-table-modal — same widget global, same lifecycle.
-// Adding the lookup form as a separate component instead of inlining
-// into availability.ts keeps two Turnstile widgets cleanly isolated
-// (each renders its own widgetId on its own DOM container) without
-// either component having to know about the other.
 interface TurnstileGlobal {
   render: (
     container: HTMLElement,
@@ -97,6 +104,22 @@ function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null
   return digits.length >= 10 ? null : { phoneDigits: true };
 }
 
+// Mirror backend extractConfirmationCodeFromText: 6 chars from the
+// reduced alphabet (no 0/O/1/I/L), with optional "FF-" prefix. Used
+// for client-side preflight so an obviously bad code doesn't even hit
+// the server.
+const CODE_ALPHABET_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
+function bookingCodeValidator(control: AbstractControl): ValidationErrors | null {
+  const v = String(control.value ?? '').trim();
+  if (!v) return null;
+  // Accept "FF-XXXXXX" or bare "XXXXXX". Strip + uppercase before checking.
+  const m = v.match(/^(?:ff-)?([A-Za-z0-9]{6})$/i);
+  if (!m) return { bookingCode: true };
+  return CODE_ALPHABET_RE.test(m[1].toUpperCase()) ? null : { bookingCode: true };
+}
+
+type FindMode = 'phone' | 'code';
+
 @Component({
   selector: 'app-find-by-phone-modal',
   standalone: true,
@@ -108,12 +131,14 @@ function phoneDigitsValidator(control: AbstractControl): ValidationErrors | null
     HlmDialog,
     HlmInput,
     HlmNativeSelect,
+    HlmToggle,
   ],
   templateUrl: './find-by-phone-modal.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FindByPhoneModal implements OnDestroy {
   private bookings = inject(PublicBookingsService);
+  private telemetry = inject(TelemetryService);
   private destroyRef = inject(DestroyRef);
 
   readonly open = input<boolean>(false);
@@ -126,6 +151,8 @@ export class FindByPhoneModal implements OnDestroy {
   @ViewChild('findTurnstileContainer', { static: false })
   turnstileContainer?: ElementRef<HTMLElement>;
 
+  readonly mode = signal<FindMode>('phone');
+
   readonly form = new FormGroup({
     countryCode: new FormControl<'+1' | '+52'>('+1', {
       nonNullable: true,
@@ -133,17 +160,30 @@ export class FindByPhoneModal implements OnDestroy {
     }),
     phone: new FormControl('', {
       nonNullable: true,
+      // Conditional validators: phone fields are only required when mode
+      // is 'phone'. Updated by the mode effect below.
       validators: [Validators.required, phoneDigitsValidator],
+    }),
+    code: new FormControl('', {
+      nonNullable: true,
+      // Same conditional treatment — code field only required in 'code'
+      // mode.
+      validators: [bookingCodeValidator],
     }),
   });
 
   readonly submitting = signal(false);
   readonly errorMessage = signal<string | null>(null);
-  readonly notFound = signal(false);
+  // notFound carries which mode the miss came from so the UI can offer
+  // the *other* channel as the next step instead of just shrugging.
+  readonly notFound = signal<FindMode | null>(null);
 
   readonly turnstileToken = signal<string>('');
   readonly turnstileError = signal<string | null>(null);
   private turnstileWidgetId: string | null = null;
+
+  readonly isPhoneMode = computed(() => this.mode() === 'phone');
+  readonly isCodeMode = computed(() => this.mode() === 'code');
 
   readonly hasTurnstile = computed(() =>
     Boolean(String(this.turnstileSiteKey() ?? '').trim()),
@@ -165,11 +205,18 @@ export class FindByPhoneModal implements OnDestroy {
     return digits ? `https://wa.me/${digits}` : '';
   });
 
-  readonly fieldError = (field: 'phone'): string | null => {
+  readonly fieldError = (field: 'phone' | 'code'): string | null => {
     const ctrl = this.form.controls[field];
     if (!ctrl.touched || !ctrl.errors) return null;
-    if (ctrl.errors['required']) return 'Phone number is required.';
+    if (ctrl.errors['required']) {
+      return field === 'phone'
+        ? 'Phone number is required.'
+        : 'Booking code is required.';
+    }
     if (ctrl.errors['phoneDigits']) return 'Use a 10-digit phone number.';
+    if (ctrl.errors['bookingCode']) {
+      return 'Booking code looks like FF-XXXXXX (6 letters/digits).';
+    }
     return null;
   };
 
@@ -178,11 +225,16 @@ export class FindByPhoneModal implements OnDestroy {
       const isOpen = this.open();
       const siteKey = String(this.turnstileSiteKey() ?? '').trim();
       if (!isOpen) {
+        // Reset everything on close so the next open is a fresh slate.
         this.errorMessage.set(null);
-        this.notFound.set(false);
+        this.notFound.set(null);
         this.turnstileToken.set('');
         this.turnstileError.set(null);
-        this.form.reset({ countryCode: '+1', phone: '' });
+        this.mode.set('phone');
+        this.form.reset({ countryCode: '+1', phone: '', code: '' });
+        this.applyValidatorsForMode('phone');
+      } else {
+        this.telemetry.fire('find_modal_opened');
       }
       if (!isOpen || !siteKey) {
         this.teardownTurnstile();
@@ -201,6 +253,35 @@ export class FindByPhoneModal implements OnDestroy {
     this.closed.emit();
   }
 
+  setMode(next: FindMode): void {
+    if (this.mode() === next) return;
+    this.mode.set(next);
+    this.errorMessage.set(null);
+    this.notFound.set(null);
+    this.applyValidatorsForMode(next);
+    this.telemetry.fire('find_modal_tab_changed', {
+      extra: { mode: next },
+    });
+  }
+
+  // Toggle Validators.required between the two fields. Without this the
+  // form would require BOTH phone and code regardless of mode (or
+  // neither, depending on initial config), and the submit button stays
+  // disabled forever.
+  private applyValidatorsForMode(mode: FindMode): void {
+    const phoneCtrl = this.form.controls.phone;
+    const codeCtrl = this.form.controls.code;
+    if (mode === 'phone') {
+      phoneCtrl.setValidators([Validators.required, phoneDigitsValidator]);
+      codeCtrl.setValidators([bookingCodeValidator]);
+    } else {
+      phoneCtrl.setValidators([phoneDigitsValidator]);
+      codeCtrl.setValidators([Validators.required, bookingCodeValidator]);
+    }
+    phoneCtrl.updateValueAndValidity({ emitEvent: false });
+    codeCtrl.updateValueAndValidity({ emitEvent: false });
+  }
+
   submit(): void {
     if (this.submitting()) return;
     if (this.form.invalid) {
@@ -213,13 +294,22 @@ export class FindByPhoneModal implements OnDestroy {
       );
       return;
     }
+    if (this.mode() === 'phone') {
+      this.submitPhone();
+    } else {
+      this.submitCode();
+    }
+  }
+
+  private submitPhone(): void {
     const rawPhone = this.form.controls.phone.value.trim();
     const phoneDigits = rawPhone.replace(/\D/g, '').slice(-10);
     const e164Phone = `${this.form.controls.countryCode.value}${phoneDigits}`;
 
     this.submitting.set(true);
     this.errorMessage.set(null);
-    this.notFound.set(false);
+    this.notFound.set(null);
+    this.telemetry.fire('find_by_phone_submitted');
 
     this.bookings
       .findByPhone(e164Phone, this.turnstileToken().trim())
@@ -228,45 +318,81 @@ export class FindByPhoneModal implements OnDestroy {
         next: (res) => {
           this.submitting.set(false);
           if (res.found && res.shortUrl) {
+            this.telemetry.fire('find_by_phone_found');
             this.found.emit({ shortUrl: res.shortUrl });
             return;
           }
-          // found:false OR found:true with no shortUrl (legacy hold
-          // without a slug — shouldn't happen for anon-public but
-          // defensively treated as miss).
-          this.notFound.set(true);
-          // Re-arm Turnstile so the customer can retry without
-          // re-rendering the dialog.
+          this.notFound.set('phone');
+          this.telemetry.fire('find_by_phone_not_found');
           this.resetTurnstileWidget();
         },
-        error: (err: unknown) => {
+        error: (err: unknown) => this.handleSubmitError(err),
+      });
+  }
+
+  private submitCode(): void {
+    const raw = this.form.controls.code.value.trim();
+    // Server canonicalises too, but normalising on the client gives the
+    // user immediate "what you typed → what we'll send" parity if they
+    // re-open the modal. Strip optional "FF-" prefix.
+    const cleaned = raw.replace(/^ff-/i, '').toUpperCase();
+
+    this.submitting.set(true);
+    this.errorMessage.set(null);
+    this.notFound.set(null);
+    this.telemetry.fire('find_by_code_submitted');
+
+    this.bookings
+      .findByCode(cleaned, this.turnstileToken().trim())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
           this.submitting.set(false);
-          if (err instanceof HttpErrorResponse) {
-            const code = String((err.error as { code?: string } | null)?.code ?? '');
-            if (code === 'TURNSTILE_FAILED') {
-              this.errorMessage.set(
-                'Verification expired. Please complete the widget again.',
-              );
-              this.resetTurnstileWidget();
-              return;
-            }
-            if (code === 'INVALID_PHONE') {
-              this.errorMessage.set(
-                'Please enter a valid US or Mexico phone number.',
-              );
-              return;
-            }
-            this.errorMessage.set(
-              String(
-                (err.error as { message?: string } | null)?.message ??
-                  'Could not search for your booking. Please try again.',
-              ),
-            );
+          if (res.found && res.shortUrl) {
+            this.telemetry.fire('find_by_code_found');
+            this.found.emit({ shortUrl: res.shortUrl });
             return;
           }
-          this.errorMessage.set('Network error. Please try again.');
+          this.notFound.set('code');
+          this.telemetry.fire('find_by_code_not_found');
+          this.resetTurnstileWidget();
         },
+        error: (err: unknown) => this.handleSubmitError(err),
       });
+  }
+
+  private handleSubmitError(err: unknown): void {
+    this.submitting.set(false);
+    if (err instanceof HttpErrorResponse) {
+      const code = String((err.error as { code?: string } | null)?.code ?? '');
+      if (code === 'TURNSTILE_FAILED') {
+        this.errorMessage.set(
+          'Verification expired. Please complete the widget again.',
+        );
+        this.resetTurnstileWidget();
+        return;
+      }
+      if (code === 'INVALID_PHONE') {
+        this.errorMessage.set(
+          'Please enter a valid US or Mexico phone number.',
+        );
+        return;
+      }
+      if (code === 'INVALID_CODE' || code === 'MISSING_CODE') {
+        this.errorMessage.set(
+          'Booking code looks like FF-XXXXXX. Double-check and try again.',
+        );
+        return;
+      }
+      this.errorMessage.set(
+        String(
+          (err.error as { message?: string } | null)?.message ??
+            'Could not search for your booking. Please try again.',
+        ),
+      );
+      return;
+    }
+    this.errorMessage.set('Network error. Please try again.');
   }
 
   private async renderTurnstile(siteKey: string): Promise<void> {

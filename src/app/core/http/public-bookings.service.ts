@@ -86,6 +86,20 @@ export type FindByPhoneResponse =
       confirmationCode: string | null;
     };
 
+// Code lookup. Same shape as FindByPhoneResponse but no expiresAt — a
+// code lookup can resolve to a PAID reservation that has no hold-expiry
+// clock, and to PENDING ones that still do (we just don't surface it
+// here; the customer hits /r and sees the countdown there).
+export type FindByCodeResponse =
+  | { found: false }
+  | {
+      found: true;
+      shortUrl: string | null;
+      paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | 'REFUNDED';
+      eventDate: string;
+      confirmationCode: string | null;
+    };
+
 @Injectable({ providedIn: 'root' })
 export class PublicBookingsService {
   private api = inject(ApiClient);
@@ -136,6 +150,18 @@ export class PublicBookingsService {
     return this.api.post<FindByPhoneResponse>(
       '/public/lookup-by-phone',
       { phone, turnstileToken: turnstileToken || undefined },
+    );
+  }
+
+  // Sibling of findByPhone. Trades the FF-XXXXXX confirmation code +
+  // Turnstile for the same short URL. Safer than phone lookup because
+  // the customer must already possess the code (Square receipt or
+  // original SMS), so it's not an enumeration oracle. Resolves PAID
+  // reservations too (phone lookup only covers PENDING holds).
+  findByCode(code: string, turnstileToken: string) {
+    return this.api.post<FindByCodeResponse>(
+      '/public/lookup-by-code',
+      { code, turnstileToken: turnstileToken || undefined },
     );
   }
 

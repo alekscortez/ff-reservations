@@ -123,11 +123,11 @@ export class PublicAvailability implements OnInit, OnDestroy {
   private queryEventDate = '';
 
   ngOnInit(): void {
-    this.titleService.setTitle('Famoso Fuego — Live Table Availability');
+    this.titleService.setTitle('Famoso Fuego — Reservations');
     this.metaService.updateTag({
       name: 'description',
       content:
-        'See which tables are open tonight at Famoso Fuego. Live availability updates every few seconds.',
+        'Reserve a table at Famoso Fuego. Browse live availability or look up an existing booking.',
     });
     this.telemetry.fire('map_loaded');
     // Hydrate any pending hold from a previous session; if its TTL has
