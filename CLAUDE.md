@@ -199,9 +199,9 @@ Tables: `EVENTS_TABLE`, `HOLDS_TABLE`, `RES_TABLE`, `FREQUENT_CLIENTS_TABLE`, `C
 - EventBridge `ff-reservations-overdue-release` rule fires `rate(1 minute)` → `runScheduledMaintenance`.
 - API Gateway JWT authorizer (`5ea6tk`) attached to every non-public route.
 - DynamoDB PITR on `ff-reservations`, `ff-table-holds`, `ff-clients`, `ff-checkin-passes` (35-day window).
-- CloudWatch alarms → SNS topic `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration-p95 ≥10s, errors / throttles / DLQ depth, SMS errors, history-write failures, auto-refund failed, refund orphaned.
+- CloudWatch alarms → SNS topic `ff-res-ops-alerts` (subscribers: `aws@redbone.mx`, `dev@alekscortez.com`): lambda duration-p95 ≥10s, errors / throttles / DLQ depth, SMS errors, history-write failures, auto-refund failed, refund orphaned, **square webhook `reservation_update_ignored`** (`ff-res-update-ignored-5m`, sum ≥1 over 5 min — the early-warning signal for any Day-shape orphan-payment incident).
 - Lambda async-invoke DLQ: SQS `ff-reservations-api-dlq` (14-day retention).
-- Log-metric filters extract SMS, history-write, auto-refund, refund-orphaned counts into `FFReservations/*` namespaces.
+- Log-metric filters extract SMS, history-write, auto-refund, refund-orphaned, **webhook update-ignored** (`ReservationUpdateIgnoredCount` in `FFReservations/Webhook`) counts into `FFReservations/*` namespaces.
 - API Gateway `$default` stage: `DetailedMetricsEnabled=true` + default-route throttle `200 burst / 100 rate` (sized for ~12 RPS peak with ~8× headroom).
 - SNS SMS delivery status logging at 100% sample rate → `sns/us-east-1/.../DirectPublishToPhoneNumber{,/Failure}`.
 
