@@ -67,6 +67,24 @@ const ANON_ACTOR = "anonymous-public";
 const DEFAULT_ANON_MAX_TABLES = 4;
 const DEFAULT_ANON_HOLD_TTL_SECONDS = 600;
 
+// Structured funnel emitter. Every decision point in the public-booking
+// flow emits one line with `step` set so the abandonment funnel is
+// readable from CloudWatch Insights:
+//   fields @timestamp, step, reservationId, phone
+//   | filter @message like "public_booking_event"
+//   | stats count() by step
+// Until 2026-05-14 we only logged failures + had no idea where customers
+// dropped off (Jasmine + Eric + Erika's first try all auto-cancelled with
+// cancellationReason: null). Steps map to ERROR_MESSAGES on the frontend
+// so emitted-step ↔ user-visible-error are 1:1.
+function emitFunnel(step, details = {}) {
+  try {
+    console.info("public_booking_event", { step, ...details });
+  } catch {
+    // Logging must never break the request path.
+  }
+}
+
 function newCustomerToken() {
   // 256-bit hex. Same shape as the existing Cash App session token. Fits
   // in a URL query param without escaping; opaque to humans.
@@ -213,6 +231,7 @@ export async function handlePublicBookingsRoute(ctx) {
   if (method === "POST" && path === "/public/reservations") {
     const settings = (await getAppSettings()) ?? {};
     if (!settings.allowAnonymousPublicBooking) {
+      emitFunnel("blocked_disabled", { ip: getRemoteIp(event) });
       return bookingDisabled(json, cors);
     }
 
@@ -227,12 +246,14 @@ export async function handlePublicBookingsRoute(ctx) {
       String(body?.idempotencyKey ?? "").trim() || randomUUID();
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      emitFunnel("blocked_bad_event_date", { eventDate });
       return json(400, { message: "eventDate must be YYYY-MM-DD" }, cors);
     }
     const tableIds = tableIdsRaw
       .map((v) => String(v ?? "").trim())
       .filter(Boolean);
     if (tableIds.length === 0) {
+      emitFunnel("blocked_no_tables", { eventDate });
       return json(400, { message: "tableIds is required" }, cors);
     }
     const maxTables = Math.min(
@@ -240,6 +261,11 @@ export async function handlePublicBookingsRoute(ctx) {
       MAX_TABLES_PER_RESERVATION
     );
     if (tableIds.length > maxTables) {
+      emitFunnel("blocked_max_tables", {
+        eventDate,
+        tableCount: tableIds.length,
+        maxTables,
+      });
       return json(
         400,
         {
@@ -250,17 +276,24 @@ export async function handlePublicBookingsRoute(ctx) {
       );
     }
     if (new Set(tableIds).size !== tableIds.length) {
+      emitFunnel("blocked_dup_tables", { eventDate });
       return json(400, { message: "tableIds must be unique" }, cors);
     }
     if (!customerNameRaw) {
+      emitFunnel("blocked_missing_name", { eventDate });
       return json(400, { message: "customer.name is required" }, cors);
     }
     if (!customerPhoneRaw) {
+      emitFunnel("blocked_missing_phone", { eventDate });
       return json(400, { message: "customer.phone is required" }, cors);
     }
     const phoneCountry = normalizePhoneCountry("US");
     const customerPhone = normalizePhoneE164(customerPhoneRaw, phoneCountry);
     if (!customerPhone) {
+      emitFunnel("blocked_invalid_phone", {
+        eventDate,
+        rawPhonePrefix: customerPhoneRaw.slice(0, 4),
+      });
       return json(
         400,
         {
@@ -276,6 +309,10 @@ export async function handlePublicBookingsRoute(ctx) {
     const turnstileSiteKey = String(settings.turnstileSiteKey ?? "").trim();
     if (turnstileSiteKey) {
       if (!turnstileToken) {
+        emitFunnel("blocked_turnstile_no_token", {
+          eventDate,
+          phone: customerPhone,
+        });
         return json(
           403,
           { message: "Turnstile token is required", code: "TURNSTILE_FAILED" },
@@ -295,6 +332,11 @@ export async function handlePublicBookingsRoute(ctx) {
         console.warn("public_booking_turnstile_rejected", {
           errorCodes: verification.errorCodes,
         });
+        emitFunnel("blocked_turnstile_verify", {
+          eventDate,
+          phone: customerPhone,
+          errorCodes: verification.errorCodes,
+        });
         return json(
           403,
           {
@@ -310,6 +352,10 @@ export async function handlePublicBookingsRoute(ctx) {
     // Resolve event + validate tableIds belong to this event + price them.
     const eventRecord = await getEventByDate(eventDate);
     if (!eventRecord) {
+      emitFunnel("blocked_event_not_found", {
+        eventDate,
+        phone: customerPhone,
+      });
       return json(
         404,
         { message: "Event not found for date", code: "EVENT_NOT_FOUND" },
@@ -320,6 +366,11 @@ export async function handlePublicBookingsRoute(ctx) {
     for (const tid of tableIds) {
       const price = getTablePriceForEvent(eventRecord, tid);
       if (price === null) {
+        emitFunnel("blocked_table_invalid", {
+          eventDate,
+          phone: customerPhone,
+          invalidTableId: tid,
+        });
         return json(
           404,
           {
@@ -336,6 +387,11 @@ export async function handlePublicBookingsRoute(ctx) {
     if (amountDue <= 0) {
       // Free tables don't make sense for anon flow — they'd sidestep the
       // payment-confirmed flip.
+      emitFunnel("blocked_amount_zero", {
+        eventDate,
+        phone: customerPhone,
+        tableIds,
+      });
       return json(
         400,
         { message: "Selected tables have no price configured" },
@@ -399,6 +455,11 @@ export async function handlePublicBookingsRoute(ctx) {
       });
     } catch (err) {
       if (err?.code === "ACTIVE_HOLD_EXISTS") {
+        emitFunnel("blocked_active_hold", {
+          eventDate,
+          phone: customerPhone,
+          existingReservationId: err.details?.existingReservationId ?? null,
+        });
         return json(
           429,
           {
@@ -406,6 +467,7 @@ export async function handlePublicBookingsRoute(ctx) {
             code: "ACTIVE_HOLD_EXISTS",
             existingReservationId: err.details?.existingReservationId ?? null,
             existingExpiresAt: err.details?.existingExpiresAt ?? null,
+            existingEventDate: err.details?.existingEventDate ?? null,
           },
           cors
         );
@@ -468,6 +530,11 @@ export async function handlePublicBookingsRoute(ctx) {
     }
     if (unavailableTableIds.length > 0) {
       await rollback();
+      emitFunnel("blocked_table_unavailable", {
+        eventDate,
+        phone: customerPhone,
+        unavailableTableIds,
+      });
       return json(
         409,
         {
@@ -516,6 +583,11 @@ export async function handlePublicBookingsRoute(ctx) {
       await rollback();
       // 409 from createReservation = hold expired or someone else won the race
       if (err?.statusCode === 409) {
+        emitFunnel("blocked_create_reservation_race", {
+          eventDate,
+          phone: customerPhone,
+          message: String(err?.message ?? ""),
+        });
         return json(
           409,
           { message: err.message, code: "TABLE_NOT_AVAILABLE" },
@@ -593,6 +665,12 @@ export async function handlePublicBookingsRoute(ctx) {
         phoneE164: customerPhone,
         reservationId,
       });
+      emitFunnel("blocked_square_link_failed", {
+        eventDate,
+        phone: customerPhone,
+        reservationId,
+        message: String(err?.message ?? ""),
+      });
       throw err;
     }
 
@@ -641,6 +719,15 @@ export async function handlePublicBookingsRoute(ctx) {
       }
     }
 
+    emitFunnel("created", {
+      eventDate,
+      phone: customerPhone,
+      reservationId,
+      confirmationCode,
+      tableCount: tableIds.length,
+      hasEmail: Boolean(customerEmailRaw),
+      amountDue,
+    });
     return json(
       201,
       {
@@ -817,6 +904,11 @@ export async function handlePublicBookingsRoute(ctx) {
     }
     const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
     if (paymentStatus === "PAID" || paymentStatus === "PARTIAL") {
+      emitFunnel("release_blocked_already_paid", {
+        eventDate,
+        reservationId,
+        paymentStatus,
+      });
       return json(
         409,
         {
@@ -828,6 +920,10 @@ export async function handlePublicBookingsRoute(ctx) {
     }
     if (String(reservation?.status ?? "").toUpperCase() === "CANCELLED") {
       // Idempotent: already released.
+      emitFunnel("release_idempotent_already_cancelled", {
+        eventDate,
+        reservationId,
+      });
       return json(
         200,
         { released: true, alreadyCancelled: true, reservationId },
@@ -881,6 +977,11 @@ export async function handlePublicBookingsRoute(ctx) {
         // Soft-fail.
       }
     }
+    emitFunnel("released", {
+      eventDate,
+      reservationId,
+      tableIds: getReservationTableIds(reservation),
+    });
     return json(200, { released: true, reservationId }, cors);
   }
 
