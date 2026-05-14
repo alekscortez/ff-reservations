@@ -297,12 +297,22 @@ describe('AuthService', () => {
       expect(window.sessionStorage.getItem('other_app')).toBe('keep');
     });
 
-    it('Cognito logout URL embeds the current origin as logout_uri', () => {
+    it('Cognito logout_uri targets origin + postLogoutPath, not bare origin', () => {
+      // Cognito's Hosted UI rejects logout_uri values that don't EXACTLY
+      // match an entry in the app client's LogoutURLs list. Bare origin
+      // (https://famosofuego.com) is not in the list — only the post-
+      // logout path is — so we always append it. Regression coverage for
+      // the 2026-05-14 "Invalid request" Hosted UI error.
       const stub = buildOidcStub();
       makeAuth(stub).logout();
       const url = replaceSpy.mock.calls[0][0] as string;
-      // jsdom's default origin is http://localhost:3000
-      expect(url).toContain(encodeURIComponent(window.location.origin));
+      const expected = encodeURIComponent(`${window.location.origin}/login`);
+      expect(url).toContain(`logout_uri=${expected}`);
+      // And specifically NOT the bare origin (no trailing path).
+      expect(url).not.toContain(`logout_uri=${encodeURIComponent(window.location.origin)}&`);
+      expect(url).not.toMatch(
+        new RegExp(`logout_uri=${encodeURIComponent(window.location.origin)}$`)
+      );
     });
   });
 });

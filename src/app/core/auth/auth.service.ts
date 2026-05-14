@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
-import { buildCognitoLogoutUrl } from '../config/app-config';
+import { APP_CONFIG, buildCognitoLogoutUrl, buildRedirectUrl } from '../config/app-config';
 import { decodeJwt, normalizeGroupsClaim, JwtClaims } from './jwt';
 import { Observable, combineLatest, distinctUntilChanged, map } from 'rxjs';
 
@@ -136,8 +136,14 @@ export class AuthService {
     this.oidc.logoffLocal();
     clearAppLocalStorage();
 
-    // Cognito Hosted UI logout
-    const logoutUrl = buildCognitoLogoutUrl(window.location.origin);
+    // Cognito Hosted UI logout. logout_uri MUST exactly match an entry in
+    // the app client's LogoutURLs list — bare origin doesn't (only the
+    // origin + the post-logout path do, by convention), so always include
+    // postLogoutPath. Mismatch → Cognito redirects to /login with the
+    // rejected param attached → user sees the "Invalid request" error.
+    const logoutUrl = buildCognitoLogoutUrl(
+      buildRedirectUrl(APP_CONFIG.cognito.postLogoutPath)
+    );
     window.location.replace(logoutUrl);
   }
 }
