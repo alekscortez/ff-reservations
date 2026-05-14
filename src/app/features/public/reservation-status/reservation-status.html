@@ -33,6 +33,13 @@
       <h2 class="text-2xl font-semibold text-warning-900">
         Finish to confirm your table
       </h2>
+      <p
+        *ngIf="countdownLabel() as label"
+        class="text-sm font-medium text-warning-800"
+        aria-live="polite"
+      >
+        Hold expires in <span class="font-mono tabular-nums">{{ label }}</span>
+      </p>
     </header>
     <dl class="grid gap-1 text-sm text-warning-900">
       <div class="flex justify-between">
@@ -159,6 +166,13 @@
           : "Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt." }}
       </p>
     </div>
+
+    <!-- Bring a friend's group? Bounce back to /map for another table. -->
+    <a
+      hlmBtn variant="outline" size="sm"
+      routerLink="/map"
+      class="w-fit"
+    >Book another table</a>
   </article>
 
   <!-- CANCELLED — auto-released (hold expired before payment) -->

@@ -58,6 +58,10 @@ export class ReservationStatus implements OnInit, OnDestroy {
   readonly walletDownloading = signal(false);
   readonly walletError = signal<string | null>(null);
   readonly customerContact = signal<PublicCustomerContact | null>(null);
+  // Seconds remaining on the payment hold. Driven by a 1Hz interval that
+  // reads reservation().paymentDeadlineAt and computes the diff. Null
+  // when the deadline isn't set or hasn't been parsed yet.
+  readonly secondsRemaining = signal<number | null>(null);
 
   // Arrival instructions shown on the PAID card. Hardcoded for v1 — same
   // three lines as the Apple Wallet pass back-fields (services-wallet-pass.mjs)
@@ -100,6 +104,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
   private customerToken = '';
   private eventDate = '';
   private pollSub: Subscription | null = null;
+  private countdownSub: Subscription | null = null;
 
   ngOnInit(): void {
     this.title.setTitle('Famoso Fuego — Your Reservation');
@@ -138,15 +143,32 @@ export class ReservationStatus implements OnInit, OnDestroy {
 
     this.fetchStatus();
     this.startPolling();
+    this.startCountdown();
   }
 
   ngOnDestroy(): void {
     this.pollSub?.unsubscribe();
     this.pollSub = null;
+    this.countdownSub?.unsubscribe();
+    this.countdownSub = null;
   }
 
   readonly isPaid = computed(() => this.status() === 'paid');
   readonly isPending = computed(() => this.status() === 'pending');
+
+  // Mm:ss countdown label rendered on the PENDING card. Returns null
+  // while the deadline isn't loaded yet, "Hold expired" once it lapses
+  // (we keep showing it briefly until the next poll flips status to
+  // cancelled), and "M:SS" otherwise.
+  readonly countdownLabel = computed(() => {
+    if (!this.isPending()) return null;
+    const s = this.secondsRemaining();
+    if (s === null) return null;
+    if (s <= 0) return 'Hold expired';
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  });
 
   // Differentiate the two CANCELLED shapes on /r so customers get useful
   // copy instead of a generic "this was cancelled" wall:
@@ -360,5 +382,32 @@ export class ReservationStatus implements OnInit, OnDestroy {
       }
       this.fetchStatus();
     });
+  }
+
+  // 1Hz countdown ticker: reads the reservation's paymentDeadlineAt and
+  // updates secondsRemaining. Naive parse — assumes the customer's
+  // browser TZ matches the venue (America/Chicago for McAllen). Worst
+  // case is a few-hour offset for cross-TZ customers, which is fine
+  // since the UX is just visual urgency; the server-side hold expiry
+  // is the authoritative gate.
+  private startCountdown(): void {
+    this.countdownSub?.unsubscribe();
+    this.countdownSub = interval(1000).subscribe(() => this.tickCountdown());
+    this.tickCountdown();
+  }
+
+  private tickCountdown(): void {
+    const deadlineStr = this.reservation()?.paymentDeadlineAt;
+    if (!deadlineStr) {
+      this.secondsRemaining.set(null);
+      return;
+    }
+    const deadlineMs = new Date(deadlineStr).getTime();
+    if (isNaN(deadlineMs)) {
+      this.secondsRemaining.set(null);
+      return;
+    }
+    const remaining = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
+    this.secondsRemaining.set(remaining);
   }
 }
