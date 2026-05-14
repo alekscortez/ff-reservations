@@ -75,6 +75,17 @@ export interface PublicWalletPassResponse {
   byteLength: number;
 }
 
+export type FindByPhoneResponse =
+  | { found: false }
+  | {
+      found: true;
+      shortUrl: string | null;
+      paymentStatus: 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | 'REFUNDED';
+      eventDate: string;
+      expiresAt: number | null;
+      confirmationCode: string | null;
+    };
+
 @Injectable({ providedIn: 'root' })
 export class PublicBookingsService {
   private api = inject(ApiClient);
@@ -113,6 +124,18 @@ export class PublicBookingsService {
       `/public/reservations/${encodeURIComponent(reservationId)}/release`,
       { eventDate },
       { t: customerToken }
+    );
+  }
+
+  // Find-my-booking: customer lost the /r URL (Square email in spam,
+  // closed the tab, switched device). Trades phone + Turnstile for the
+  // short URL of their currently-active anon booking. Returns
+  // { found: false } when no active hold exists for the phone — UI
+  // surfaces a friendly "we couldn't find a recent booking" message.
+  findByPhone(phone: string, turnstileToken: string) {
+    return this.api.post<FindByPhoneResponse>(
+      '/public/lookup-by-phone',
+      { phone, turnstileToken: turnstileToken || undefined },
     );
   }
 

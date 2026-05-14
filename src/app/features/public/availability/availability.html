@@ -56,6 +56,17 @@
         : 'Pick a table below, then contact us to reserve. Your table is held once payment is confirmed.' }}
     </p>
 
+    <p
+      *ngIf="bookingEnabled() && !pendingHold()"
+      class="mt-2 text-xs text-brand-500"
+    >
+      Already booked? <button
+        type="button"
+        class="font-medium text-brand-700 underline underline-offset-2 hover:text-brand-900"
+        (click)="openFindModal()"
+      >Find your reservation</button>
+    </p>
+
     <!-- Contact CTAs: only shown when self-booking is OFF (fallback), so
          customers who can self-serve aren't given two competing paths.
          When booking is enabled, the same numbers stay reachable from
@@ -227,4 +238,12 @@
     (removeTable)="onModalRemoveTable($event)"
     (submitted)="onReservationSubmitted($event)"
   ></app-reserve-table-modal>
+
+  <app-find-by-phone-modal
+    [open]="findOpen()"
+    [turnstileSiteKey]="turnstileSiteKey() || null"
+    [contactPhone]="contactPhone() || null"
+    (closed)="closeFindModal()"
+    (found)="onFindFound($event)"
+  ></app-find-by-phone-modal>
 </section>

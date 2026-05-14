@@ -15,6 +15,7 @@ import {
   CreatePublicReservationResponse,
   PublicBookingsService,
 } from '../../../core/http/public-bookings.service';
+import { TelemetryService } from '../../../core/http/telemetry.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { HlmAlert } from '../../../shared/ui/alert';
@@ -22,6 +23,7 @@ import { HlmButton } from '../../../shared/ui/button';
 import { HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
+import { FindByPhoneModal } from './find-by-phone-modal/find-by-phone-modal';
 import { ReserveTableModal } from './reserve-table-modal/reserve-table-modal';
 import {
   PendingHold,
@@ -47,6 +49,7 @@ interface PublicAvailabilityPickerOption {
     HlmConfirmDialog,
     HlmInput,
     HlmToggle,
+    FindByPhoneModal,
     ReserveTableModal,
   ],
   templateUrl: './availability.html',
@@ -56,6 +59,7 @@ interface PublicAvailabilityPickerOption {
 export class PublicAvailability implements OnInit, OnDestroy {
   private api = inject(PublicAvailabilityService);
   private bookings = inject(PublicBookingsService);
+  private telemetry = inject(TelemetryService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
@@ -94,6 +98,12 @@ export class PublicAvailability implements OnInit, OnDestroy {
   readonly releasing = signal(false);
   readonly releaseError = signal<string | null>(null);
 
+  // Find-my-booking dialog (B.3). Customer who lost their /r URL — Square
+  // email in spam, closed the tab, switched device — can recover via
+  // phone + Turnstile. Opens FindByPhoneModal; on `found` we redirect to
+  // the returned shortUrl which 302s to /r with their token attached.
+  readonly findOpen = signal(false);
+
   viewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
   search = new FormControl('', { nonNullable: true });
   availableOnly = new FormControl(true, { nonNullable: true });
@@ -119,11 +129,16 @@ export class PublicAvailability implements OnInit, OnDestroy {
       content:
         'See which tables are open tonight at Famoso Fuego. Live availability updates every few seconds.',
     });
+    this.telemetry.fire('map_loaded');
     // Hydrate any pending hold from a previous session; if its TTL has
     // already passed, drop it on the floor.
     const stored = readPendingHold();
     if (stored && !pendingHoldExpired(stored)) {
       this.pendingHold.set(stored);
+      this.telemetry.fire('map_pending_hold_seen', {
+        eventDate: stored.eventDate,
+        reservationId: stored.reservationId,
+      });
     } else if (stored) {
       clearPendingHold();
     }
@@ -260,6 +275,11 @@ export class PublicAvailability implements OnInit, OnDestroy {
     this.pendingHold.set(hold);
     this.modalOpen.set(false);
     this.selectedIds.set([]);
+    this.telemetry.fire('modal_redirect_to_square', {
+      eventDate: event.eventDate,
+      reservationId: event.response.reservationId,
+      confirmationCode: event.response.confirmationCode,
+    });
     // Redirect to Square hosted checkout. Customer returns via Square's
     // configured redirect URL → /r/{id}?t=... per backend setting.
     if (typeof window !== 'undefined' && event.response.paymentUrl) {
@@ -281,9 +301,14 @@ export class PublicAvailability implements OnInit, OnDestroy {
   // ACTIVE_HOLD_EXISTS trap that the previous "Hide" button created.
   openReleaseConfirm(): void {
     if (this.releasing()) return;
-    if (!this.pendingHold()) return;
+    const hold = this.pendingHold();
+    if (!hold) return;
     this.releaseError.set(null);
     this.releaseConfirming.set(true);
+    this.telemetry.fire('pending_release_clicked', {
+      eventDate: hold.eventDate,
+      reservationId: hold.reservationId,
+    });
   }
 
   cancelReleaseConfirm(): void {
@@ -307,6 +332,10 @@ export class PublicAvailability implements OnInit, OnDestroy {
         next: () => {
           this.releasing.set(false);
           this.releaseConfirming.set(false);
+          this.telemetry.fire('pending_release_confirmed', {
+            eventDate: hold.eventDate,
+            reservationId: hold.reservationId,
+          });
           clearPendingHold();
           this.pendingHold.set(null);
         },
@@ -324,6 +353,21 @@ export class PublicAvailability implements OnInit, OnDestroy {
           }
         },
       });
+  }
+
+  openFindModal(): void {
+    this.findOpen.set(true);
+  }
+
+  closeFindModal(): void {
+    this.findOpen.set(false);
+  }
+
+  onFindFound(event: { shortUrl: string }): void {
+    if (typeof window === 'undefined') return;
+    const url = String(event?.shortUrl ?? '').trim();
+    if (!url) return;
+    window.location.href = url;
   }
 
   // Memoized derivations of `data` + form-control filters. Computed

@@ -1,0 +1,109 @@
+<hlm-dialog
+  *ngIf="open()"
+  size="sheet"
+  panelClass="max-w-md p-0 sm:p-0"
+  ariaLabel="Find your reservation"
+  (close)="onClose()"
+>
+  <header class="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-brand-100 bg-white p-4">
+    <div>
+      <h2 class="text-lg font-semibold text-brand-900">Find your reservation</h2>
+      <p class="text-xs uppercase tracking-[0.14em] text-brand-500">
+        Enter your phone number
+      </p>
+    </div>
+    <button
+      type="button"
+      hlmBtn variant="ghost" size="icon-sm"
+      (click)="onClose()"
+      aria-label="Close"
+    >×</button>
+  </header>
+
+  <div class="grid gap-4 p-4">
+    <p class="text-sm text-brand-700">
+      We'll find your active hold so you can finish paying or release the table.
+    </p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="grid gap-3">
+      <div class="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-brand-600">
+        <span>Phone number</span>
+        <div class="flex items-stretch gap-2">
+          <hlm-native-select
+            formControlName="countryCode"
+            class="w-[5.5rem] flex-none text-sm font-normal normal-case tracking-normal h-11"
+            aria-label="Country code"
+          >
+            <option value="+1">US +1</option>
+            <option value="+52">MX +52</option>
+          </hlm-native-select>
+          <input
+            type="tel"
+            autocomplete="tel-national"
+            inputmode="tel"
+            formControlName="phone"
+            hlmInput size="lg"
+            class="flex-1 font-normal normal-case tracking-normal text-brand-900"
+            placeholder="956 555 1234"
+            [disabled]="submitting()"
+            required
+          />
+        </div>
+        <p
+          *ngIf="fieldError('phone') as err"
+          class="text-[11px] normal-case tracking-normal text-danger-700"
+          aria-live="polite"
+        >{{ err }}</p>
+      </div>
+
+      <div *ngIf="hasTurnstile()" class="grid gap-1">
+        <div #findTurnstileContainer></div>
+        <p *ngIf="turnstileError() as err" class="text-xs text-danger-700">
+          {{ err }}
+        </p>
+      </div>
+
+      <hlm-alert *ngIf="errorMessage() as err" variant="destructive">
+        {{ err }}
+      </hlm-alert>
+
+      <article
+        *ngIf="notFound()"
+        class="grid gap-2 rounded-lg border border-warm-200 bg-warm-50 p-3 text-sm text-warm-900"
+        aria-live="polite"
+      >
+        <p class="font-medium">We couldn't find a recent booking for that phone.</p>
+        <p class="text-xs text-warm-800">
+          Check your Square email for the link, or pick another table from the map.
+          <ng-container *ngIf="hasContactPhone()">
+            If you need help, message us:
+          </ng-container>
+        </p>
+        <div *ngIf="hasContactPhone()" class="grid gap-2 sm:grid-cols-2">
+          <a
+            hlmBtn size="sm"
+            [href]="telHref()"
+            aria-label="Call Famoso Fuego"
+          >Call us</a>
+          <a
+            hlmBtn variant="outline" size="sm"
+            [href]="whatsappHref()"
+            target="_blank"
+            rel="noopener"
+            aria-label="WhatsApp Famoso Fuego"
+          >WhatsApp</a>
+        </div>
+      </article>
+
+      <div class="sticky bottom-0 z-10 -mx-4 -mt-3 grid gap-2 border-t border-brand-100 bg-white px-4 py-3">
+        <button
+          type="submit"
+          hlmBtn size="lg"
+          [disabled]="submitting() || form.invalid"
+        >
+          {{ submitting() ? 'Searching…' : 'Find my booking' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</hlm-dialog>
