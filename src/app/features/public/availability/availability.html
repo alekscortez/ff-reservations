@@ -30,6 +30,9 @@
       class="text-xs text-danger-700"
       aria-live="polite"
     >{{ err }}</p>
+    <p *ngIf="whatsappHref() as href" class="text-xs text-warning-700">
+      Stuck? <a [href]="href" target="_blank" rel="noopener" class="font-medium underline underline-offset-2">Message us on WhatsApp</a>
+    </p>
   </article>
 
   <hlm-confirm-dialog

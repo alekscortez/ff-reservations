@@ -85,6 +85,13 @@
       class="text-xs text-danger-700"
       aria-live="polite"
     >{{ err }}</p>
+    <!-- Help affordance — customer stuck mid-payment can reach a human
+         without having to dig for the venue's WhatsApp. Uses the same
+         contactPhone we expose for the paid-but-cancelled card. Hidden
+         when no contact phone is configured. -->
+    <p *ngIf="contactWhatsappHref() as href" class="text-xs text-warning-700">
+      Trouble paying? <a [href]="href" target="_blank" rel="noopener" class="font-medium underline underline-offset-2">Message us on WhatsApp</a>
+    </p>
   </article>
 
   <hlm-confirm-dialog
@@ -223,8 +230,14 @@
   >
     <p class="font-semibold text-brand-900">Your hold expired.</p>
     <p>Holds last 10 minutes. Pop back to the map and pick another table to keep going.</p>
-    <div>
+    <div class="flex flex-wrap gap-2">
       <a hlmBtn size="lg" routerLink="/map">Pick another table</a>
+      <a
+        *ngIf="contactWhatsappHref() as href"
+        [href]="href"
+        hlmBtn variant="outline" size="lg"
+        target="_blank" rel="noopener"
+      >Message us</a>
     </div>
   </article>
 
