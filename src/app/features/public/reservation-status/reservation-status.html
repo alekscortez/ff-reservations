@@ -113,8 +113,10 @@
            - badge is used unmodified (no recolor, no overlay text)
            - opacity transitions only on hover/active/disabled
            - clear space (1/8 height) preserved via the parent's gap
-           - locale-aware (en vs es-mx) via walletBadgeSrc -->
+           - locale-aware (en vs es-mx) via walletBadgeSrc
+           Hidden on Android — Apple Wallet doesn't apply there. -->
       <button
+        *ngIf="!isAndroid()"
         type="button"
         class="inline-flex w-fit p-1 transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50 disabled:cursor-not-allowed"
         (click)="downloadWalletPass()"
@@ -129,43 +131,79 @@
         />
       </button>
       <p
-        *ngIf="walletDownloading()"
+        *ngIf="!isAndroid() && walletDownloading()"
         class="text-xs text-success-700"
       >Preparing your pass…</p>
       <p
-        *ngIf="walletError() as err"
+        *ngIf="!isAndroid() && walletError() as err"
         class="text-xs text-danger-700"
       >{{ err }}</p>
 
-      <!-- For Android customers and anyone without Apple Wallet — open
-           the dedicated check-in pass page (existing branded card with
-           the QR code). Routes through the short URL with ?to=pass so
-           the share-friendly version is what they get if they screenshot
-           or copy the address. -->
+      <!-- View check-in pass — primary CTA on Android (no Apple Wallet
+           option), outline secondary on Apple devices. Routes through the
+           short URL with ?to=pass so the share-friendly version is what
+           customers get if they screenshot or copy the address. -->
       <a
         *ngIf="r.shortUrl"
         [href]="r.shortUrl + '?to=pass'"
-        hlmBtn variant="outline" size="lg"
+        hlmBtn
+        [variant]="isAndroid() ? 'default' : 'outline'"
+        size="lg"
         target="_blank"
         rel="noopener"
       >View check-in pass</a>
 
       <p class="text-xs text-success-700">
-        Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt.
+        {{ isAndroid()
+          ? "Tap above to open your check-in pass with the QR code. Save this link — it's your reservation receipt."
+          : "Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt." }}
       </p>
     </div>
   </article>
 
-  <!-- CANCELLED -->
+  <!-- CANCELLED — auto-released (hold expired before payment) -->
   <article
-    *ngIf="status() === 'cancelled'"
+    *ngIf="status() === 'cancelled' && cancellationKind() === 'auto-released'"
     class="grid gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-6 text-sm text-brand-800"
+    aria-live="polite"
   >
-    <p class="font-semibold text-brand-900">This reservation has been cancelled.</p>
-    <p>If this was a mistake, please come back to the map and start a new booking.</p>
+    <p class="font-semibold text-brand-900">Your hold expired.</p>
+    <p>Holds last 10 minutes. Pop back to the map and pick another table to keep going.</p>
     <div>
-      <a hlmBtn variant="outline" size="lg" routerLink="/map">Back to map</a>
+      <a hlmBtn size="lg" routerLink="/map">Pick another table</a>
     </div>
+  </article>
+
+  <!-- CANCELLED — paid-but-cancelled (Day-shape: webhook missed) -->
+  <article
+    *ngIf="status() === 'cancelled' && cancellationKind() === 'paid-but-cancelled'"
+    class="grid gap-3 rounded-2xl border border-warning-300 bg-warning-50 p-6 text-sm text-warning-900"
+    aria-live="polite"
+  >
+    <p class="font-semibold text-warning-900">We need a moment to confirm your booking.</p>
+    <p>
+      If you completed payment, your money is safe — message us and we'll
+      sort the table out right away. We're sorry for the wait.
+    </p>
+    <div class="flex flex-wrap gap-2">
+      <a
+        *ngIf="contactWhatsappHref() as href"
+        [href]="href"
+        hlmBtn size="lg"
+        target="_blank" rel="noopener"
+      >Message us on WhatsApp</a>
+      <a
+        *ngIf="contactPhoneHref() as href"
+        [href]="href"
+        hlmBtn variant="outline" size="lg"
+      >Call the venue</a>
+    </div>
+    <p
+      *ngIf="reservation()?.confirmationCodeFormatted as code"
+      class="text-xs text-warning-700"
+    >
+      Reference your booking number when you message us: <span class="font-semibold">{{ code }}</span>
+    </p>
   </article>
 
   <!-- ERROR (token / not-found / network) -->

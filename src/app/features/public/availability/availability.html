@@ -32,7 +32,9 @@
     </div>
     <h1 class="mt-0 text-2xl font-semibold text-brand-900 md:text-3xl">Live Table Availability</h1>
     <p class="mt-2 text-sm text-brand-600">
-      Pick a table below, then contact us to reserve. Your table is held once payment is confirmed.
+      {{ bookingEnabled()
+        ? 'Tap an available table to book online. Hold lasts 10 minutes; pay to confirm.'
+        : 'Pick a table below, then contact us to reserve. Your table is held once payment is confirmed.' }}
     </p>
 
     <!-- Contact CTAs: only shown when self-booking is OFF (fallback), so

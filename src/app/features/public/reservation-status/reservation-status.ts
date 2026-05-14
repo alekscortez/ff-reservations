@@ -18,6 +18,7 @@ import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 import {
   PublicBookingsService,
+  PublicCustomerContact,
   PublicReservationView,
 } from '../../../core/http/public-bookings.service';
 import {
@@ -56,6 +57,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
   readonly errorMessage = signal<string | null>(null);
   readonly walletDownloading = signal(false);
   readonly walletError = signal<string | null>(null);
+  readonly customerContact = signal<PublicCustomerContact | null>(null);
 
   // Arrival instructions shown on the PAID card. Hardcoded for v1 — same
   // three lines as the Apple Wallet pass back-fields (services-wallet-pass.mjs)
@@ -83,6 +85,16 @@ export class ReservationStatus implements OnInit, OnDestroy {
       ? 'Agregar a Apple Wallet'
       : 'Add to Apple Wallet'
   );
+
+  // Android customers can't use Apple Wallet — hide the badge and
+  // promote the "View check-in pass" link as the primary CTA instead.
+  // (Google Wallet integration is on the backlog post-Saturday.) UA
+  // sniffing is fine here: the only thing it gates is which CTA looks
+  // primary; pressing the View pass button works on every browser.
+  readonly isAndroid = computed(() => {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android/i.test(ua);
+  });
 
   private reservationId = '';
   private customerToken = '';
@@ -135,6 +147,36 @@ export class ReservationStatus implements OnInit, OnDestroy {
 
   readonly isPaid = computed(() => this.status() === 'paid');
   readonly isPending = computed(() => this.status() === 'pending');
+
+  // Differentiate the two CANCELLED shapes on /r so customers get useful
+  // copy instead of a generic "this was cancelled" wall:
+  //   - 'auto-released' → hold expired before payment landed
+  //     (paymentStatus stays PENDING; just need to start over)
+  //   - 'paid-but-cancelled' → Day-shape: customer paid but webhook
+  //     missed and the reservation got auto-cancelled. They need to
+  //     contact us; the money is recoverable.
+  readonly cancellationKind = computed(() => {
+    if (this.status() !== 'cancelled') return null;
+    const ps = String(this.reservation()?.paymentStatus ?? '').toUpperCase();
+    if (ps === 'PAID' || ps === 'PARTIAL' || ps === 'COURTESY') {
+      return 'paid-but-cancelled' as const;
+    }
+    return 'auto-released' as const;
+  });
+
+  // Contact CTAs for the paid-but-cancelled card (Day-shape recovery).
+  // Mirrors the pattern in availability.ts so behavior matches /map.
+  readonly contactPhoneHref = computed<string | null>(() => {
+    const phone = String(this.customerContact()?.phone ?? '').trim();
+    return phone ? `tel:${phone}` : null;
+  });
+
+  readonly contactWhatsappHref = computed<string | null>(() => {
+    const phone = String(this.customerContact()?.phone ?? '').trim();
+    if (!phone) return null;
+    const digits = phone.replace(/[^\d]/g, '');
+    return digits ? `https://wa.me/${digits}` : null;
+  });
 
   continueToPayment(): void {
     const url = this.reservation()?.paymentLinkUrl;
@@ -208,15 +250,33 @@ export class ReservationStatus implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           this.reservation.set(res.reservation);
+          this.customerContact.set(res.customerContact ?? null);
           this.errorMessage.set(null);
           this.applyStatusFromReservation(res.reservation);
         },
         error: (err: unknown) => {
           if (err instanceof HttpErrorResponse) {
-            const code = String(
-              (err.error as { code?: string } | null)?.code ?? ''
-            );
+            const body = err.error as
+              | {
+                  code?: string;
+                  reservation?: PublicReservationView;
+                  customerContact?: PublicCustomerContact | null;
+                }
+              | null;
+            const code = String(body?.code ?? '');
             if (code === 'RESERVATION_CANCELLED') {
+              // Backend returns the sanitized reservation + contact in
+              // the 410 body so we can differentiate auto-release (hold
+              // expired, no payment) from a Day-shape paid-but-cancelled
+              // state. The template branches off paymentStatus, and
+              // customerContact powers the WhatsApp/Call CTAs in the
+              // paid-but-cancelled card.
+              if (body?.reservation) {
+                this.reservation.set(body.reservation);
+              }
+              if (body?.customerContact !== undefined) {
+                this.customerContact.set(body.customerContact ?? null);
+              }
               this.status.set('cancelled');
               clearPendingHold();
               this.pollSub?.unsubscribe();

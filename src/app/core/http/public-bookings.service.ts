@@ -59,8 +59,13 @@ export interface PublicReservationView {
   shortUrl: string | null;
 }
 
+export interface PublicCustomerContact {
+  phone: string;
+}
+
 export interface GetPublicReservationResponse {
   reservation: PublicReservationView;
+  customerContact?: PublicCustomerContact | null;
 }
 
 export interface PublicWalletPassResponse {

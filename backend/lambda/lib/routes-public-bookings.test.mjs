@@ -481,6 +481,36 @@ describe("GET /public/reservations/{id}?t={token}", () => {
     );
     assert.equal(out.statusCode, 410);
     assert.equal(out.body.code, "RESERVATION_CANCELLED");
+    // Frontend branches on paymentStatus to differentiate auto-release
+    // (PENDING) from paid-but-cancelled (PAID/PARTIAL/COURTESY).
+    assert.equal(out.body.reservation.paymentStatus, "PENDING");
+    // customerContact null when settings doesn't have a contact phone.
+    assert.equal(out.body.customerContact, null);
+  });
+
+  it("410 paid-but-cancelled exposes paymentStatus so /r can show recovery copy", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      baseCtx({
+        json: j.json,
+        methodOverride: "GET",
+        pathOverride: "/public/reservations/res-1",
+        queryOverride: { t: "tok", eventDate: "2026-05-16" },
+        settings: {
+          allowAnonymousPublicBooking: true,
+          customerContactPhoneE164: "+19561234567",
+        },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          customerToken: "tok",
+          status: "CANCELLED",
+          paymentStatus: "PAID",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 410);
+    assert.equal(out.body.reservation.paymentStatus, "PAID");
+    assert.deepEqual(out.body.customerContact, { phone: "+19561234567" });
   });
 
   it("200 happy path returns sanitized reservation", async () => {
@@ -496,6 +526,27 @@ describe("GET /public/reservations/{id}?t={token}", () => {
     assert.equal(out.body.reservation.eventName, "Saturday Night");
     assert.equal(out.body.reservation.tablesLabel, "Table 12");
     assert.equal(out.body.reservation.paymentStatus, "PENDING");
+    // customerContact field is included (null when settings doesn't carry it).
+    assert.equal("customerContact" in out.body, true);
+    assert.equal(out.body.customerContact, null);
+  });
+
+  it("200 includes customerContact when settings has customerContactPhoneE164", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      baseCtx({
+        json: j.json,
+        methodOverride: "GET",
+        pathOverride: "/public/reservations/res-1",
+        queryOverride: { t: "tok", eventDate: "2026-05-16" },
+        settings: {
+          allowAnonymousPublicBooking: true,
+          customerContactPhoneE164: "+19561234567",
+        },
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.deepEqual(out.body.customerContact, { phone: "+19561234567" });
   });
 });
 

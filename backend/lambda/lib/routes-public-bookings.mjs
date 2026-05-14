@@ -714,6 +714,20 @@ export async function handlePublicBookingsRoute(ctx) {
     if (!verifyCustomerToken(reservation, providedToken)) {
       return json(401, { message: "Invalid token", code: "INVALID_TOKEN" }, cors);
     }
+    // Customer contact (phone) is exposed on every /r response so the
+    // page can render Call/WhatsApp CTAs — particularly for the
+    // paid-but-cancelled (Day-shape) recovery state where the customer
+    // needs to reach us. Settings lookup is soft-fail (decorative).
+    let customerContact = null;
+    try {
+      const reservationSettings = (await getAppSettings()) ?? {};
+      const contactPhone = String(
+        reservationSettings?.customerContactPhoneE164 ?? ""
+      ).trim();
+      customerContact = contactPhone ? { phone: contactPhone } : null;
+    } catch {
+      customerContact = null;
+    }
     if (String(reservation?.status ?? "").toUpperCase() === "CANCELLED") {
       return json(
         410,
@@ -725,6 +739,7 @@ export async function handlePublicBookingsRoute(ctx) {
             null,
             shortUrlBase
           ),
+          customerContact,
         },
         cors
       );
@@ -744,6 +759,7 @@ export async function handlePublicBookingsRoute(ctx) {
           eventName,
           shortUrlBase
         ),
+        customerContact,
       },
       cors
     );
