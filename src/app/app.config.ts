@@ -23,6 +23,7 @@ import {
 import { retry, throwError, timer } from 'rxjs';
 import { AuthInterceptor } from './core/http/auth.interceptor';
 import { SessionWatcher } from './core/auth/session-watcher';
+import { TelemetryService } from './core/http/telemetry.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -41,6 +42,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
       const watcher = inject(SessionWatcher);
+      const telemetry = inject(TelemetryService);
       // Always resolve so a flaky OIDC discovery call doesn't brick the
       // entire app boot. Worst case the user lands on /login, which is
       // exactly where authGuard would route them anyway.
@@ -49,6 +51,8 @@ export const appConfig: ApplicationConfig = {
       // captive-portal interstitial mid-resume) — a single transient miss
       // here is the difference between "stays signed in" and "back to
       // /login" on mobile resume.
+      const startedAt = Date.now();
+      let retried = false;
       return new Promise<void>((resolve) => {
         oidc
           .checkAuth()
@@ -58,6 +62,7 @@ export const appConfig: ApplicationConfig = {
               delay: (err: unknown) => {
                 const status = Number((err as { status?: number })?.status ?? 0);
                 const transient = status === 0 || (status >= 500 && status < 600);
+                if (transient) retried = true;
                 return transient ? timer(400) : throwError(() => err);
               },
             })
@@ -65,10 +70,25 @@ export const appConfig: ApplicationConfig = {
           .subscribe({
             error: (e) => {
               console.warn('oidc_checkauth_failed_at_bootstrap', e);
+              telemetry.fire('auth_bootstrap_check', {
+                extra: {
+                  outcome: 'error',
+                  retried,
+                  elapsedMs: Date.now() - startedAt,
+                  status: Number((e as { status?: number })?.status ?? 0) || null,
+                },
+              });
               watcher.start();
               resolve();
             },
             complete: () => {
+              telemetry.fire('auth_bootstrap_check', {
+                extra: {
+                  outcome: retried ? 'recovered' : 'ok',
+                  retried,
+                  elapsedMs: Date.now() - startedAt,
+                },
+              });
               watcher.start();
               resolve();
             },

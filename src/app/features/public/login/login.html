@@ -7,6 +7,12 @@
     />
     <h1 class="mb-2 text-2xl font-semibold text-brand-900">Reservation System</h1>
     <p class="mb-5 text-sm text-brand-600">Sign in to manage events and reservations.</p>
+    @if (showSessionExpired()) {
+      <hlm-alert variant="warning" class="mb-4 text-left">
+        <strong class="block font-semibold">You were signed out</strong>
+        Your session expired. Sign in again to continue.
+      </hlm-alert>
+    }
     <button hlmBtn size="lg" type="button" (click)="login()">
       Log in
     </button>

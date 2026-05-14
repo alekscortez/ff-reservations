@@ -17,6 +17,14 @@ import {
   throwError,
 } from 'rxjs';
 import { decodeJwt } from './jwt';
+import { TelemetryService } from '../http/telemetry.service';
+
+export type RefreshSource =
+  | 'visibility'
+  | 'focus'
+  | 'heartbeat'
+  | 'event'
+  | 'interceptor';
 
 // Mobile browsers (iOS Safari + Chrome on iOS/Android) and desktop browsers
 // with backgrounded tabs aggressively throttle or freeze JS timers. The
@@ -42,6 +50,7 @@ export class SessionWatcher {
   private oidc = inject(OidcSecurityService);
   private events = inject(PublicEventsService);
   private zone = inject(NgZone);
+  private telemetry = inject(TelemetryService);
 
   private refresh$: Observable<unknown> | null = null;
   private hiddenSinceMs = 0;
@@ -54,7 +63,7 @@ export class SessionWatcher {
   private readonly LOW_FUEL_MS = 2 * 60_000; // 2 min
 
   // Test seam — emits whenever a refresh is triggered.
-  readonly refreshed$ = new Subject<'visibility' | 'focus' | 'heartbeat' | 'event' | 'interceptor'>();
+  readonly refreshed$ = new Subject<RefreshSource>();
 
   start(): void {
     if (this.started) return;
@@ -91,22 +100,37 @@ export class SessionWatcher {
    * REFRESH_DEBOUNCE_MS of a successful refresh is a no-op (returns of(null))
    * — used to coalesce visibility + focus + pageshow firing back-to-back.
    */
-  refreshOnce(
-    source: 'visibility' | 'focus' | 'heartbeat' | 'event' | 'interceptor' = 'event'
-  ): Observable<unknown> {
+  refreshOnce(source: RefreshSource = 'event'): Observable<unknown> {
     if (this.refresh$) return this.refresh$;
     if (Date.now() - this.lastRefreshAtMs < this.REFRESH_DEBOUNCE_MS) {
       return of(null);
     }
+
+    const startedAt = Date.now();
+    this.telemetry.fire('auth_renew_started', { extra: { source } });
 
     this.refresh$ = this.oidc.forceRefreshSession().pipe(
       tap({
         next: () => {
           this.lastRefreshAtMs = Date.now();
           this.refreshed$.next(source);
+          this.telemetry.fire('auth_renew_succeeded', {
+            extra: { source, elapsedMs: Date.now() - startedAt },
+          });
         },
       }),
-      catchError((err) => throwError(() => err)),
+      catchError((err) => {
+        this.telemetry.fire('auth_renew_failed', {
+          extra: {
+            source,
+            elapsedMs: Date.now() - startedAt,
+            // Avoid logging the whole error — just shape + status when present.
+            status: (err as { status?: number })?.status ?? null,
+            kind: errKind(err),
+          },
+        });
+        return throwError(() => err);
+      }),
       finalize(() => {
         this.refresh$ = null;
       }),
@@ -171,4 +195,10 @@ function readExp(token: string | null | undefined): number | null {
   if (!claims) return null;
   const exp = claims['exp'];
   return typeof exp === 'number' && Number.isFinite(exp) ? exp : null;
+}
+
+function errKind(err: unknown): string {
+  if (!err || typeof err !== 'object') return typeof err;
+  const name = (err as { name?: unknown }).name;
+  return typeof name === 'string' && name ? name : 'Error';
 }

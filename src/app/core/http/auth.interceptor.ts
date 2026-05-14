@@ -10,11 +10,13 @@ import { Observable, catchError, switchMap, take, throwError } from 'rxjs';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { APP_CONFIG } from '../config/app-config';
 import { SessionWatcher } from '../auth/session-watcher';
+import { SessionExpiry } from '../auth/session-expiry';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
   private oidc = inject(OidcSecurityService);
   private watcher = inject(SessionWatcher);
+  private expiry = inject(SessionExpiry);
 
   intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     const isApi = req.url.startsWith(APP_CONFIG.apiBaseUrl);
@@ -23,6 +25,7 @@ export class AuthInterceptor implements HttpInterceptor {
     return this.oidc.getAccessToken().pipe(
       take(1),
       switchMap((token) => {
+        const hadInitialToken = !!token;
         const first = next.handle(this.attach(req, token));
         return first.pipe(
           catchError((err: unknown) => {
@@ -37,7 +40,17 @@ export class AuthInterceptor implements HttpInterceptor {
             return this.watcher.refreshOnce('interceptor').pipe(
               switchMap(() => this.oidc.getAccessToken().pipe(take(1))),
               switchMap((newToken) => next.handle(this.attach(req, newToken))),
-              catchError(() => throwError(() => err))
+              catchError(() => {
+                // Definitive failure: refresh didn't recover the session.
+                // Only treat as "session expired" if the user *had* a
+                // token to begin with — otherwise this is a regular
+                // "not logged in" 401 on an authed route, which the
+                // route guard should already be handling.
+                if (hadInitialToken) {
+                  this.expiry.notifyExpired('interceptor');
+                }
+                return throwError(() => err);
+              })
             );
           })
         );

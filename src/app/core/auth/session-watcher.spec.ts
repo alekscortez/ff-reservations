@@ -4,8 +4,9 @@ import {
   OidcSecurityService,
   PublicEventsService,
 } from 'angular-auth-oidc-client';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { SessionWatcher } from './session-watcher';
+import { TelemetryService } from '../http/telemetry.service';
 
 function makeOidcStub(overrides: Partial<{
   forceRefreshSession: ReturnType<typeof vi.fn>;
@@ -21,6 +22,7 @@ function makeOidcStub(overrides: Partial<{
 function setup(overrides: Parameters<typeof makeOidcStub>[0] = {}) {
   const oidc = makeOidcStub(overrides);
   const eventsSubject = new Subject<{ type: EventTypes }>();
+  const fireSpy = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       { provide: OidcSecurityService, useValue: oidc },
@@ -28,10 +30,11 @@ function setup(overrides: Parameters<typeof makeOidcStub>[0] = {}) {
         provide: PublicEventsService,
         useValue: { registerForEvents: () => eventsSubject.asObservable() },
       },
+      { provide: TelemetryService, useValue: { fire: fireSpy } },
     ],
   });
   const watcher = TestBed.inject(SessionWatcher);
-  return { watcher, oidc, eventsSubject };
+  return { watcher, oidc, eventsSubject, fireSpy };
 }
 
 describe('SessionWatcher', () => {
@@ -81,5 +84,32 @@ describe('SessionWatcher', () => {
     eventsSubject.next({ type: EventTypes.UserDataChanged });
     eventsSubject.next({ type: EventTypes.CheckSessionReceived });
     expect(force).not.toHaveBeenCalled();
+  });
+
+  it('fires auth_renew_started + auth_renew_succeeded telemetry on success', () => {
+    const force = vi.fn(() => of({ isAuthenticated: true }));
+    const { watcher, fireSpy } = setup({ forceRefreshSession: force });
+
+    watcher.refreshOnce('visibility').subscribe();
+    const events = fireSpy.mock.calls.map((c) => c[0]);
+    expect(events).toContain('auth_renew_started');
+    expect(events).toContain('auth_renew_succeeded');
+    const succeededCall = fireSpy.mock.calls.find(
+      (c) => c[0] === 'auth_renew_succeeded'
+    );
+    expect(succeededCall?.[1]?.extra?.source).toBe('visibility');
+  });
+
+  it('fires auth_renew_failed telemetry on refresh error', () => {
+    const err: Error & { status?: number } = Object.assign(new Error('boom'), {
+      status: 0,
+    });
+    const force = vi.fn(() => throwError(() => err));
+    const { watcher, fireSpy } = setup({ forceRefreshSession: force });
+
+    watcher.refreshOnce('interceptor').subscribe({ error: () => undefined });
+    const events = fireSpy.mock.calls.map((c) => c[0]);
+    expect(events).toContain('auth_renew_started');
+    expect(events).toContain('auth_renew_failed');
   });
 });

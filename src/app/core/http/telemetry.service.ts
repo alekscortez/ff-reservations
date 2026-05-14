@@ -44,7 +44,16 @@ export type TelemetryEvent =
   | 'find_by_phone_found'
   | 'find_by_code_submitted'
   | 'find_by_code_not_found'
-  | 'find_by_code_found';
+  | 'find_by_code_found'
+  // Staff auth-renew observability (2026-05-14). Lets us confirm in CW
+  // that the visibility-driven refresh + interceptor 401 retry actually
+  // fire in the field. `extra` carries source ('visibility' / 'focus' /
+  // 'heartbeat' / 'event' / 'interceptor') + outcome ('ok' / 'error').
+  | 'auth_renew_started'
+  | 'auth_renew_succeeded'
+  | 'auth_renew_failed'
+  | 'auth_bootstrap_check'
+  | 'auth_session_expired_redirect';
 
 interface TelemetryPayload {
   eventDate?: string | null;

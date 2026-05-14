@@ -15,6 +15,7 @@ import { Observable, of } from 'rxjs';
 import { AuthInterceptor } from './auth.interceptor';
 import { APP_CONFIG } from '../config/app-config';
 import { SessionWatcher } from '../auth/session-watcher';
+import { SessionExpiry } from '../auth/session-expiry';
 
 const API = APP_CONFIG.apiBaseUrl;
 
@@ -27,6 +28,7 @@ function setup(opts: {
   refreshOnce?: () => Observable<unknown>;
 }) {
   const refreshSpy = vi.fn(() => opts.refreshOnce?.() ?? of(null));
+  const notifyExpiredSpy = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(withInterceptorsFromDi()),
@@ -34,12 +36,14 @@ function setup(opts: {
       { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
       { provide: OidcSecurityService, useValue: opts.oidc },
       { provide: SessionWatcher, useValue: { refreshOnce: refreshSpy } },
+      { provide: SessionExpiry, useValue: { notifyExpired: notifyExpiredSpy } },
     ],
   });
   return {
     http: TestBed.inject(HttpClient),
     httpTesting: TestBed.inject(HttpTestingController),
     refreshSpy,
+    notifyExpiredSpy,
   };
 }
 
@@ -130,7 +134,7 @@ describe('AuthInterceptor', () => {
   });
 
   it('surfaces the original 401 if the retried request also 401s (no infinite loop)', () => {
-    const { http, httpTesting, refreshSpy } = setup({
+    const { http, httpTesting, refreshSpy, notifyExpiredSpy } = setup({
       oidc: { getAccessToken: () => of('tok') },
       refreshOnce: () => of(null),
     });
@@ -142,6 +146,43 @@ describe('AuthInterceptor', () => {
     // Only one refresh was attempted across the two 401s on the same request.
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect((captured as { status?: number } | null)?.status).toBe(401);
+    // We had an initial token → definitive failure routes to /login.
+    expect(notifyExpiredSpy).toHaveBeenCalledWith('interceptor');
+    httpTesting.verify();
+  });
+
+  it('does NOT notify session-expired on 401 when no initial access token was present', () => {
+    // User wasn't logged in to start with — a 401 on an authed route is a
+    // route-guard concern, not a "your session expired" UI event.
+    const { http, httpTesting, refreshSpy, notifyExpiredSpy } = setup({
+      oidc: { getAccessToken: () => of('') },
+      refreshOnce: () => of(null),
+    });
+    let captured: unknown = null;
+    http.get(`${API}/x`).subscribe({ error: (e) => (captured = e) });
+    httpTesting.expectOne(`${API}/x`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    httpTesting.expectOne(`${API}/x`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(notifyExpiredSpy).not.toHaveBeenCalled();
+    expect((captured as { status?: number } | null)?.status).toBe(401);
+    httpTesting.verify();
+  });
+
+  it('does NOT notify session-expired when the retry succeeds', () => {
+    let calls = 0;
+    const { http, httpTesting, notifyExpiredSpy } = setup({
+      oidc: {
+        getAccessToken: () => {
+          calls += 1;
+          return of(calls === 1 ? 'old' : 'fresh');
+        },
+      },
+      refreshOnce: () => of(null),
+    });
+    http.get(`${API}/y`).subscribe();
+    httpTesting.expectOne(`${API}/y`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    httpTesting.expectOne(`${API}/y`).flush({ ok: true });
+    expect(notifyExpiredSpy).not.toHaveBeenCalled();
     httpTesting.verify();
   });
 });

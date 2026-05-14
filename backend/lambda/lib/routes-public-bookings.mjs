@@ -1397,6 +1397,19 @@ export async function handlePublicBookingsRoute(ctx) {
       "find_by_code_submitted",
       "find_by_code_not_found",
       "find_by_code_found",
+      // Staff auth-renew observability (2026-05-14). Confirms the
+      // visibility-driven refresh + interceptor retry path actually
+      // fires in the field. Public endpoint by design — when auth is
+      // broken on the FE, we still want the event to reach CW. Pairs
+      // with `frontend_funnel_event` in CW Insights:
+      //   filter @message like "frontend_funnel_event"
+      //   | filter event like /^auth_/
+      //   | stats count() by event, extra.source, extra.outcome
+      "auth_renew_started",
+      "auth_renew_succeeded",
+      "auth_renew_failed",
+      "auth_bootstrap_check",
+      "auth_session_expired_redirect",
     ]);
     if (!allowed.has(eventName)) {
       // Silent 204 — frontend telemetry must never break the user flow,
