@@ -97,6 +97,7 @@
           autocomplete="name"
           formControlName="name"
           hlmInput size="lg"
+          class="font-normal normal-case tracking-normal text-brand-900"
           [disabled]="submitting()"
           required
         />
@@ -112,7 +113,7 @@
         <div class="flex items-stretch gap-2">
           <hlm-native-select
             formControlName="countryCode"
-            class="w-[5.5rem] flex-none text-sm normal-case tracking-normal h-11"
+            class="w-[5.5rem] flex-none text-sm font-normal normal-case tracking-normal h-11"
             aria-label="Country code"
           >
             <option value="+1">US +1</option>
@@ -124,7 +125,7 @@
             inputmode="tel"
             formControlName="phone"
             hlmInput size="lg"
-            class="flex-1"
+            class="flex-1 font-normal normal-case tracking-normal text-brand-900"
             placeholder="956 555 1234"
             [disabled]="submitting()"
             required
@@ -148,6 +149,7 @@
           inputmode="email"
           formControlName="email"
           hlmInput size="lg"
+          class="font-normal normal-case tracking-normal text-brand-900"
           [disabled]="submitting()"
         />
         <p
