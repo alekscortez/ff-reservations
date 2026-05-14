@@ -16,6 +16,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { Subscription, interval } from 'rxjs';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmConfirmDialog } from '../../../shared/ui/dialog';
 import {
   PublicBookingsService,
   PublicCustomerContact,
@@ -39,7 +40,7 @@ type StatusKind =
 @Component({
   selector: 'app-reservation-status',
   standalone: true,
-  imports: [CommonModule, RouterLink, HlmAlert, HlmButton],
+  imports: [CommonModule, RouterLink, HlmAlert, HlmButton, HlmConfirmDialog],
   templateUrl: './reservation-status.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -61,6 +62,12 @@ export class ReservationStatus implements OnInit, OnDestroy {
   // reads reservation().paymentDeadlineAt and computes the diff. Null
   // when the deadline isn't set or hasn't been parsed yet.
   readonly secondsRemaining = signal<number | null>(null);
+  // Customer-initiated release of the PENDING hold. Two-stage:
+  // releaseConfirming opens the HlmConfirmDialog, releasing tracks the
+  // in-flight API call so the button can disable + show "Releasing…".
+  readonly releaseConfirming = signal(false);
+  readonly releasing = signal(false);
+  readonly releaseError = signal<string | null>(null);
 
   // Arrival instructions shown on the PAID card. Hardcoded for v1 — same
   // three lines as the Apple Wallet pass back-fields (services-wallet-pass.mjs)
@@ -208,6 +215,55 @@ export class ReservationStatus implements OnInit, OnDestroy {
 
   refresh(): void {
     this.fetchStatus();
+  }
+
+  openReleaseConfirm(): void {
+    if (this.releasing()) return;
+    this.releaseError.set(null);
+    this.releaseConfirming.set(true);
+  }
+
+  cancelReleaseConfirm(): void {
+    if (this.releasing()) return;
+    this.releaseConfirming.set(false);
+  }
+
+  // Customer-initiated release of the PENDING hold. The backend route
+  // is shared with the dismiss path on /map's pending-hold banner —
+  // it cancels the reservation, frees the table-holds, and clears
+  // the anon phone slot. After success, fetchStatus() picks up the
+  // CANCELLED row on the next poll and renders the auto-released
+  // card.
+  confirmRelease(): void {
+    if (this.releasing()) return;
+    this.releasing.set(true);
+    this.releaseError.set(null);
+    this.bookings
+      .releaseReservation(this.reservationId, this.customerToken, this.eventDate)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.releasing.set(false);
+          this.releaseConfirming.set(false);
+          // Pull the new state immediately — backend has flipped status
+          // to CANCELLED. The polling interval would also catch this in
+          // ~3s; this just makes the UI snappy.
+          this.fetchStatus();
+        },
+        error: (err: unknown) => {
+          this.releasing.set(false);
+          if (err instanceof HttpErrorResponse) {
+            this.releaseError.set(
+              String(
+                (err.error as { message?: string } | null)?.message ??
+                  'Could not release this hold. Please try again.',
+              ),
+            );
+          } else {
+            this.releaseError.set('Could not release this hold. Please try again.');
+          }
+        },
+      });
   }
 
   downloadWalletPass(): void {

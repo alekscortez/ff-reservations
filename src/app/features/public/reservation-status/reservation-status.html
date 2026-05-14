@@ -69,8 +69,36 @@
         hlmBtn variant="outline" size="lg"
         (click)="refresh()"
       >Refresh</button>
+      <!-- Self-release: changed your mind during the 10-min hold? Free
+           the table without paying. Backend cancels the reservation +
+           releases the hold + clears the anon phone slot. Confirmed
+           via dialog so it's not a one-click destructive action. -->
+      <button
+        type="button"
+        hlmBtn variant="ghost" size="lg"
+        (click)="openReleaseConfirm()"
+        [disabled]="releasing()"
+      >Release hold</button>
     </div>
+    <p
+      *ngIf="releaseError() as err"
+      class="text-xs text-danger-700"
+      aria-live="polite"
+    >{{ err }}</p>
   </article>
+
+  <hlm-confirm-dialog
+    *ngIf="releaseConfirming()"
+    title="Release this hold?"
+    message="This frees the table for other customers. You can book again from the map if you change your mind."
+    confirmText="Release"
+    cancelText="Keep hold"
+    loadingText="Releasing…"
+    destructive
+    [loading]="releasing()"
+    (confirm)="confirmRelease()"
+    (cancel)="cancelReleaseConfirm()"
+  ></hlm-confirm-dialog>
 
   <!-- PAID — show success + Wallet pass + QR -->
   <article
