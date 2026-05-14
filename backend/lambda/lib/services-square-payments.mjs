@@ -242,6 +242,16 @@ export function createSquarePaymentsService({
     // form. The webhook handler accepts both formats so back-compat
     // is intact for any payment in flight when this rolls out.
     confirmationCode,
+    // Optional /p/{slug} short URL components. When both are supplied,
+    // the payment_note picks up a "View your pass: {base}/p/{slug}" line
+    // so customers who close the browser tab before /r loads can still
+    // recover via the URL Square emails them in the receipt — and Cash
+    // App displays the same note inside the transaction. shortUrlBase
+    // MUST point at the API host (api.famosofuego.com) because /p is
+    // an API GW route, not an SPA route. Anonymous public booking is
+    // the only path that supplies these today.
+    publicSlug,
+    shortUrlBase,
     // Optional override for Square's accepted_payment_methods. Falls back
     // to the env-driven defaults (apple_pay/google_pay/cash_app_pay all
     // true) when omitted. Used by /me/cashapp-link to restrict the hosted
@@ -289,8 +299,21 @@ export function createSquarePaymentsService({
     const reservationRefText = codeText
       ? `Booking #FF-${codeText} • ${eventDateText}`
       : `Booking ${String(reservationId ?? "").trim()} • ${eventDateText}`;
+    // Only append the short-URL line when BOTH a slug and a base URL are
+    // supplied — staff/customer-app payment paths leave both null and the
+    // existing one-line format is preserved. Newline keeps the URL on its
+    // own line so Square + Cash App email clients auto-link it cleanly
+    // (most clients won't auto-detect a URL run-on with surrounding text).
+    const slugText = String(publicSlug ?? "").trim();
+    const trimmedShortBase = String(shortUrlBase ?? "").trim().replace(/\/+$/, "");
+    const passLineText =
+      slugText && trimmedShortBase
+        ? `\nView your pass: ${trimmedShortBase}/p/${slugText}`
+        : "";
     const noteText = String(note ?? "").trim();
-    const paymentNote = noteText ? `${noteText} | ${reservationRefText}` : reservationRefText;
+    const paymentNote = noteText
+      ? `${noteText} | ${reservationRefText}${passLineText}`
+      : `${reservationRefText}${passLineText}`;
     const eventDateLabel = formatEventDateForLabel(eventDate);
 
     // Render "Tables 1, 2, 3" for multi-table bookings; fall back to the

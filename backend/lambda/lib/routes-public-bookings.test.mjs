@@ -357,6 +357,54 @@ describe("POST /public/reservations — gating + validation", () => {
     assert.deepEqual(out.body.tableIds, ["12"]);
     assert.match(out.body.holdExpiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
+
+  // Locks down the /p/{slug} short URL routing — the customer-return URL
+  // and the response shortUrl must point at the API host, not the SPA web
+  // host, because /p is registered at API Gateway. Pointing at the web
+  // host produced a 404 (SPA has no /p/:slug route) and stranded paying
+  // customers — see audit finding 2.2.
+  it("happy path: shortUrl uses the API host + Square sees the same redirect URL", async () => {
+    const j = makeJson();
+    let squareArgs = null;
+    const out = await handlePublicBookingsRoute(
+      baseCtx({
+        json: j.json,
+        bodyOverride: VALID_BODY,
+        createSquarePaymentLink: async (args) => {
+          squareArgs = args;
+          return {
+            paymentLink: { id: "pl-1", url: "https://square/pay" },
+            squareEnv: "production",
+          };
+        },
+      })
+    );
+    assert.equal(out.statusCode, 201);
+    // Default shortUrlBase falls through to https://api.famosofuego.com
+    // when neither publicBookingShortUrlBase nor publicBookingReturnBaseUrl
+    // is supplied (test ctx doesn't set them).
+    assert.match(
+      out.body.shortUrl,
+      /^https:\/\/api\.famosofuego\.com\/p\/[A-Za-z0-9]+$/,
+      `expected shortUrl to use the API host, got ${out.body.shortUrl}`
+    );
+    // Square is given the same /p URL so the post-checkout redirect chains
+    // server-side: api.famosofuego.com/p/{slug} → 302 → /r/{id}.
+    assert.match(
+      String(squareArgs?.redirectUrlOverride ?? ""),
+      /^https:\/\/api\.famosofuego\.com\/p\//,
+      "createSquarePaymentLink redirectUrlOverride should point at API host"
+    );
+    // Slug + base are forwarded to createPaymentLink so the payment_note
+    // gets the "View your pass: …" line for customer recovery via the
+    // Square email receipt + Cash App in-app receipt.
+    assert.ok(squareArgs?.publicSlug, "publicSlug should be passed to Square");
+    assert.equal(
+      squareArgs?.shortUrlBase,
+      "https://api.famosofuego.com",
+      "shortUrlBase should be passed to Square"
+    );
+  });
 });
 
 describe("GET /public/reservations/{id}?t={token}", () => {
@@ -527,7 +575,7 @@ describe("POST /public/reservations/{id}/release?t={token}", () => {
     assert.equal(cancelCalled, false);
   });
 
-  it("happy path: 200 + cancelReservation called with anonymous-public actor", async () => {
+  it("happy path: 200 + cancelReservation called with positional args + anonymous-public actor", async () => {
     const j = makeJson();
     let cancelArgs = null;
     const out = await handlePublicBookingsRoute(
@@ -535,15 +583,30 @@ describe("POST /public/reservations/{id}/release?t={token}", () => {
         json: j.json,
         queryOverride: { t: "tok" },
         bodyOverride: { eventDate: "2026-05-16" },
-        cancelReservation: async (payload, actor) => {
-          cancelArgs = { payload, actor };
+        // Mirror the real positional signature in services-reservations.mjs:
+        // cancelReservation(eventDate, reservationId, tableId, user, reason, options).
+        // Earlier the mock used object-arg, which masked a real bug — the
+        // route was calling with object-arg + the real function would 400.
+        cancelReservation: async (
+          eventDate,
+          reservationId,
+          tableId,
+          user,
+          reason,
+          options
+        ) => {
+          cancelArgs = { eventDate, reservationId, tableId, user, reason, options };
         },
       })
     );
     assert.equal(out.statusCode, 200);
     assert.equal(out.body.released, true);
-    assert.equal(cancelArgs?.actor, "anonymous-public");
-    assert.equal(cancelArgs?.payload?.resolutionType, "CANCEL_NO_REFUND");
+    assert.equal(cancelArgs?.eventDate, "2026-05-16");
+    assert.equal(cancelArgs?.reservationId, "res-1");
+    assert.equal(cancelArgs?.tableId, null);
+    assert.equal(cancelArgs?.user, "anonymous-public");
+    assert.equal(cancelArgs?.reason, "Released by customer");
+    assert.equal(cancelArgs?.options?.resolutionType, "CANCEL_NO_REFUND");
   });
 });
 

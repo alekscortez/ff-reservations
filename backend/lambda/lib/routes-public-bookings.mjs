@@ -177,10 +177,18 @@ export async function handlePublicBookingsRoute(ctx) {
     issuePassForReservation,
     generateWalletPass,
     walletPassEnabled,
-    // base URL for the customer-facing return URL after Square checkout.
-    // Format: ${base}/r/{reservationId}?t={customerToken}. Defaults to
-    // https://famosofuego.com — overridable via env for staging.
+    // Base URL for /r/{id} customer-facing landing pages on the SPA web
+    // domain. Used by GET /p/{slug} when 302'ing the customer back to
+    // /r/{id}?t=…&eventDate=… (and to /check-in/pass for ?to=pass).
     publicBookingReturnBaseUrl,
+    // Base URL for /p/{slug} short URLs. /p is served by API Gateway, NOT
+    // by the SPA, so this MUST point at the API host (api.famosofuego.com)
+    // — pointing at the web host produces a 404 because the SPA has no
+    // /p/:slug route. Used for: (a) the customerReturnUrl passed to Square
+    // (b) the shortUrl field in API responses (c) the "View your pass: …"
+    // line we append to the Square payment_note. Falls back to the same
+    // value as publicBookingReturnBaseUrl for tests / backward compat.
+    publicBookingShortUrlBase,
     // ddb + table-name deps for the code/slug collision pre-check.
     // Anonymous-booking pre-flight: confirm the generated code + slug
     // aren't already taken before we ship them down through the
@@ -189,6 +197,15 @@ export async function handlePublicBookingsRoute(ctx) {
     ddb,
     tableNames,
   } = ctx;
+
+  // /p/{slug} short URL base — see destructure comment. Falls back twice:
+  // first to publicBookingReturnBaseUrl (legacy single-base callers), then
+  // to the production API host (so tests + bootstrap don't crash on a
+  // missing env var). Trimmed once here, reused everywhere a /p URL is
+  // constructed: customerReturnUrl, response.shortUrl, sanitize callers.
+  const shortUrlBase = String(
+    publicBookingShortUrlBase ?? publicBookingReturnBaseUrl ?? "https://api.famosofuego.com"
+  ).trim().replace(/\/+$/, "");
 
   // ─────────────────────────────────────────────────────────────────────
   // POST /public/reservations
@@ -508,15 +525,12 @@ export async function handlePublicBookingsRoute(ctx) {
       throw err;
     }
 
-    // Generate Square hosted checkout link for the full amount due.
-    // The customer-facing return URL goes through the short /p/{slug}
-    // alias (which 302s server-side to /r/{id}?t=...&eventDate=...).
-    // This keeps the URL the customer sees on Square + their email
-    // receipt + any browser history short — ~28 chars instead of ~200.
-    const returnBase = String(
-      publicBookingReturnBaseUrl ?? "https://famosofuego.com"
-    ).trim().replace(/\/+$/, "");
-    const customerReturnUrl = `${returnBase}/p/${encodeURIComponent(publicSlug)}`;
+    // customerReturnUrl uses shortUrlBase (= API host) because /p/{slug}
+    // is registered at API Gateway, not on the SPA. API GW 302s the
+    // customer back to publicBookingReturnBaseUrl/r/{id}?t=… so the SPA
+    // picks them up. Two hops, both server-side, the broken /p path on
+    // the web host is bypassed entirely.
+    const customerReturnUrl = `${shortUrlBase}/p/${encodeURIComponent(publicSlug)}`;
     let paymentLinkUrl = null;
     let paymentLinkId = null;
     try {
@@ -537,6 +551,13 @@ export async function handlePublicBookingsRoute(ctx) {
         buyerEmail: customerEmailRaw || undefined,
         redirectUrlOverride: customerReturnUrl,
         confirmationCode,
+        // publicSlug + shortUrlBase let createPaymentLink append a
+        // "View your pass: {base}/p/{slug}" line to the payment_note,
+        // which Square emails the customer + Cash App displays in the
+        // transaction. This is the customer's recovery path if they
+        // close the browser tab before /r loads.
+        publicSlug,
+        shortUrlBase,
       });
       const link = square?.paymentLink ?? {};
       paymentLinkUrl = String(link?.url ?? "").trim();
@@ -549,14 +570,18 @@ export async function handlePublicBookingsRoute(ctx) {
       // (rolls back holds + slot via shared cancellation path) and 502.
       try {
         if (typeof cancelReservation === "function") {
+          // Positional signature — see services-reservations.mjs.
+          // tableId=null because cancelReservation derives the hold-
+          // release list from reservation.tableIds[]. Using object-arg
+          // here previously threw 400 ("eventDate must be YYYY-MM-DD")
+          // and the holds stayed RESERVED until cron caught them.
           await cancelReservation(
-            {
-              eventDate,
-              reservationId,
-              resolutionType: "CANCEL_NO_REFUND",
-              reason: "Square payment link generation failed",
-            },
-            ANON_ACTOR
+            eventDate,
+            reservationId,
+            null,
+            ANON_ACTOR,
+            "Square payment link generation failed",
+            { resolutionType: "CANCEL_NO_REFUND" }
           );
         }
       } catch (cancelErr) {
@@ -624,7 +649,7 @@ export async function handlePublicBookingsRoute(ctx) {
         confirmationCode,
         confirmationCodeFormatted: formatPublicConfirmationCode(confirmationCode),
         publicSlug,
-        shortUrl: `${returnBase}/p/${publicSlug}`,
+        shortUrl: `${shortUrlBase}/p/${publicSlug}`,
         paymentUrl: paymentLinkUrl,
         amountDue,
         currency: "USD",
@@ -698,7 +723,7 @@ export async function handlePublicBookingsRoute(ctx) {
           reservation: sanitizeReservationForPublic(
             reservation,
             null,
-            publicBookingReturnBaseUrl
+            shortUrlBase
           ),
         },
         cors
@@ -717,7 +742,7 @@ export async function handlePublicBookingsRoute(ctx) {
         reservation: sanitizeReservationForPublic(
           reservation,
           eventName,
-          publicBookingReturnBaseUrl
+          shortUrlBase
         ),
       },
       cors
@@ -801,14 +826,17 @@ export async function handlePublicBookingsRoute(ctx) {
         cors
       );
     }
+    // Positional signature — see services-reservations.mjs. tableId=null
+    // because cancelReservation derives the hold-release list from
+    // reservation.tableIds[]. Object-arg previously threw 400 here and
+    // the customer-facing /release endpoint silently failed to cancel.
     await cancelReservation(
-      {
-        eventDate,
-        reservationId,
-        resolutionType: "CANCEL_NO_REFUND",
-        reason: "Released by customer",
-      },
-      ANON_ACTOR
+      eventDate,
+      reservationId,
+      null,
+      ANON_ACTOR,
+      "Released by customer",
+      { resolutionType: "CANCEL_NO_REFUND" }
     );
     try {
       await releaseAnonBookingPhoneSlot({

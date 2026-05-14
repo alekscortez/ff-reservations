@@ -97,6 +97,14 @@ const PACKAGES_TABLE = process.env.PACKAGES_TABLE;
 const TURNSTILE_SECRET_ARN = process.env.TURNSTILE_SECRET_ARN;
 const PUBLIC_BOOKING_RETURN_BASE_URL =
   process.env.PUBLIC_BOOKING_RETURN_BASE_URL ?? "https://famosofuego.com";
+// Used for /p/{slug} short URLs only. /p is registered at the API Gateway
+// custom domain, NOT on the SPA — Square's redirect target + the customer-
+// facing share URL must point at the API host so API GW can serve the 302
+// directly. The SPA hosts /r/{id} (the destination of that 302), so the
+// two base URLs intentionally diverge. Default api.famosofuego.com matches
+// the production custom domain mapping; override per-env if needed.
+const PUBLIC_BOOKING_SHORT_URL_BASE =
+  process.env.PUBLIC_BOOKING_SHORT_URL_BASE ?? "https://api.famosofuego.com";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TABLE_TEMPLATE_PATH = path.join(__dirname, "table-template.json");
@@ -658,6 +666,7 @@ export const handler = async (event) => {
       generateWalletPass: walletPassService.generatePkpassForReservation,
       walletPassEnabled: walletPassService.isEnabled,
       publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
+      publicBookingShortUrlBase: PUBLIC_BOOKING_SHORT_URL_BASE,
     });
     if (publicBookingsResponse) return publicBookingsResponse;
 
