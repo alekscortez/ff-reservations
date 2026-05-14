@@ -46,6 +46,7 @@ import {
   PublicBookingsService,
 } from '../../../../core/http/public-bookings.service';
 import { PublicAvailabilityTable } from '../../../../core/http/public-availability.service';
+import { TelemetryService } from '../../../../core/http/telemetry.service';
 import {
   clearPendingHold,
   readPendingHold,
@@ -172,6 +173,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 })
 export class ReserveTableModal implements OnDestroy {
   private bookings = inject(PublicBookingsService);
+  private telemetry = inject(TelemetryService);
   // DestroyRef injected at construction so `takeUntilDestroyed(this.destroyRef)`
   // can be called from event handlers (which don't run in injection context).
   // Without this, the bare `takeUntilDestroyed()` throws synchronously inside
@@ -202,6 +204,11 @@ export class ReserveTableModal implements OnDestroy {
         this.errorDetails.set(null);
         this.activeHoldDetail.set(null);
         this.activeHoldReleaseError.set(null);
+      } else {
+        this.telemetry.fire('modal_opened', {
+          eventDate: this.eventDate(),
+          extra: { tableCount: this.selectedTables().length },
+        });
       }
       if (!isOpen || !siteKey) {
         this.teardownTurnstile();
@@ -211,6 +218,23 @@ export class ReserveTableModal implements OnDestroy {
       // attaches it after the view re-renders. Defer one microtask so the
       // queryRef has the element.
       queueMicrotask(() => this.renderTurnstile(siteKey));
+    });
+
+    // Fire modal_active_hold_recovery_shown the first time the recovery
+    // card renders for any given submission attempt. Effect tracks the
+    // signal; flips back to null on submit reset → re-fires on the next
+    // ACTIVE_HOLD_EXISTS.
+    effect(() => {
+      const detail = this.activeHoldDetail();
+      if (detail?.existingReservationId) {
+        this.telemetry.fire('modal_active_hold_recovery_shown', {
+          eventDate: this.eventDate(),
+          extra: {
+            canReleaseLocal: this.canReleaseExistingHold(),
+            existingReservationId: detail.existingReservationId,
+          },
+        });
+      }
     });
   }
 
@@ -431,16 +455,27 @@ export class ReserveTableModal implements OnDestroy {
     if (this.submitting()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.telemetry.fire('modal_validation_error', {
+        eventDate: this.eventDate(),
+        extra: { reason: 'form_invalid' },
+      });
       return;
     }
     const eventDate = this.eventDate();
     if (!eventDate) {
       this.errorMessage.set(ERROR_MESSAGES['MISSING_EVENT_DATE']);
+      this.telemetry.fire('modal_validation_error', {
+        extra: { reason: 'missing_event_date' },
+      });
       return;
     }
     const tables = this.selectedTables();
     if (tables.length === 0) {
       this.errorMessage.set('Please select at least one table.');
+      this.telemetry.fire('modal_validation_error', {
+        eventDate,
+        extra: { reason: 'no_tables_selected' },
+      });
       return;
     }
 
@@ -451,8 +486,17 @@ export class ReserveTableModal implements OnDestroy {
       this.errorMessage.set(
         'Please complete the human-verification widget above before continuing.'
       );
+      this.telemetry.fire('modal_validation_error', {
+        eventDate,
+        extra: { reason: 'turnstile_token_missing' },
+      });
       return;
     }
+
+    this.telemetry.fire('modal_submitted', {
+      eventDate,
+      extra: { tableCount: tables.length, hasEmail: Boolean(this.form.controls.email.value.trim()) },
+    });
 
     this.errorMessage.set(null);
     this.errorDetails.set(null);
@@ -563,6 +607,10 @@ export class ReserveTableModal implements OnDestroy {
       );
       return;
     }
+    this.telemetry.fire('modal_active_hold_release_clicked', {
+      eventDate: stored.eventDate,
+      reservationId: stored.reservationId,
+    });
     this.activeHoldReleasing.set(true);
     this.activeHoldReleaseError.set(null);
     this.bookings

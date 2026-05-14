@@ -1,0 +1,111 @@
+import { Injectable, inject } from '@angular/core';
+import { ApiClient } from './api-client';
+
+// Whitelisted event names. The backend keeps the same list at
+// routes-public-bookings.mjs (POST /public/telemetry handler) — adding a
+// new event here without adding it to the backend whitelist results in a
+// silent 204 with the event dropped.
+//
+// The funnel mirrors the backend's emitFunnel (`public_booking_event`):
+//   map_loaded → modal_opened → modal_submitted → modal_redirect_to_square
+//                                    ↓
+//                       (backend created event)
+//                                    ↓
+//                       (Square checkout — invisible to us)
+//                                    ↓
+//                       r_page_loaded → r_status_paid_seen
+//
+// Read both halves together with one CW Insights query:
+//   filter @message like "_funnel_event"
+//   | stats count() by event
+export type TelemetryEvent =
+  | 'map_loaded'
+  | 'map_pending_hold_seen'
+  | 'modal_opened'
+  | 'modal_validation_error'
+  | 'modal_submitted'
+  | 'modal_active_hold_recovery_shown'
+  | 'modal_active_hold_release_clicked'
+  | 'modal_redirect_to_square'
+  | 'pending_release_clicked'
+  | 'pending_release_confirmed'
+  | 'r_page_loaded'
+  | 'r_status_paid_seen'
+  | 'r_status_cancelled_seen'
+  | 'r_release_clicked'
+  | 'r_wallet_clicked';
+
+interface TelemetryPayload {
+  eventDate?: string | null;
+  reservationId?: string | null;
+  confirmationCode?: string | null;
+  // Free-form extras. Stay JSON-serialisable. Avoid PII (no
+  // phone/email/name) — sessionId is the join key for one customer's
+  // journey, and the reservation row carries the human details.
+  extra?: Record<string, unknown>;
+}
+
+const SESSION_KEY = 'ff-fe-session';
+
+function safeStorage(): Storage | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+// Per-browser UUID. Persists across tabs/navs in localStorage; falls
+// back to a per-page UUID if storage is unavailable (incognito etc.).
+function readOrCreateSessionId(): string {
+  const storage = safeStorage();
+  if (!storage) {
+    // No persistence — per-page id is still better than nothing for
+    // grouping events within a single visit.
+    return crypto.randomUUID();
+  }
+  try {
+    const existing = storage.getItem(SESSION_KEY);
+    if (existing && existing.length > 0) return existing;
+    const fresh = crypto.randomUUID();
+    storage.setItem(SESSION_KEY, fresh);
+    return fresh;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class TelemetryService {
+  private api = inject(ApiClient);
+  private sessionId: string | null = null;
+
+  private getSessionId(): string {
+    if (!this.sessionId) this.sessionId = readOrCreateSessionId();
+    return this.sessionId;
+  }
+
+  // Fire-and-forget. Subscription is required for HttpClient to actually
+  // execute the request; we discard both success + error so telemetry
+  // never breaks the user flow. No await / no caller subscription —
+  // callers just call and move on.
+  fire(event: TelemetryEvent, payload: TelemetryPayload = {}): void {
+    try {
+      this.api
+        .post('/public/telemetry', {
+          event,
+          sessionId: this.getSessionId(),
+          eventDate: payload.eventDate ?? null,
+          reservationId: payload.reservationId ?? null,
+          confirmationCode: payload.confirmationCode ?? null,
+          extra: payload.extra ?? null,
+        })
+        .subscribe({
+          next: () => undefined,
+          error: () => undefined,
+        });
+    } catch {
+      // Belt and suspenders.
+    }
+  }
+}

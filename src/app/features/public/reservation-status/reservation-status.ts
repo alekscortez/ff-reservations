@@ -22,6 +22,7 @@ import {
   PublicCustomerContact,
   PublicReservationView,
 } from '../../../core/http/public-bookings.service';
+import { TelemetryService } from '../../../core/http/telemetry.service';
 import {
   clearPendingHold,
   readPendingHold,
@@ -48,9 +49,16 @@ export class ReservationStatus implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private bookings = inject(PublicBookingsService);
+  private telemetry = inject(TelemetryService);
   private destroyRef = inject(DestroyRef);
   private title = inject(Title);
   private meta = inject(Meta);
+
+  // Track which terminal status events we've already fired so the 3s
+  // poll doesn't spam r_status_paid_seen / r_status_cancelled_seen
+  // every tick. paymentLinkClicked is not a polled event but we still
+  // gate so the per-page lifecycle stays clean.
+  private firedStatusEvents = new Set<string>();
 
   readonly reservation = signal<PublicReservationView | null>(null);
   readonly status = signal<StatusKind>('loading');
@@ -144,8 +152,15 @@ export class ReservationStatus implements OnInit, OnDestroy {
       this.errorMessage.set(
         'Reservation link is incomplete. Please use the link from your Square email.'
       );
+      this.telemetry.fire('r_page_loaded', {
+        extra: { error: 'incomplete_link' },
+      });
       return;
     }
+    this.telemetry.fire('r_page_loaded', {
+      eventDate: this.eventDate,
+      reservationId: this.reservationId,
+    });
 
     this.fetchStatus();
     this.startPolling();
@@ -221,6 +236,10 @@ export class ReservationStatus implements OnInit, OnDestroy {
     if (this.releasing()) return;
     this.releaseError.set(null);
     this.releaseConfirming.set(true);
+    this.telemetry.fire('r_release_clicked', {
+      eventDate: this.eventDate,
+      reservationId: this.reservationId,
+    });
   }
 
   cancelReleaseConfirm(): void {
@@ -270,6 +289,10 @@ export class ReservationStatus implements OnInit, OnDestroy {
     if (this.walletDownloading()) return;
     this.walletDownloading.set(true);
     this.walletError.set(null);
+    this.telemetry.fire('r_wallet_clicked', {
+      eventDate: this.eventDate,
+      reservationId: this.reservationId,
+    });
     this.bookings
       .generateWalletPass(this.reservationId, this.customerToken, this.eventDate)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -392,6 +415,12 @@ export class ReservationStatus implements OnInit, OnDestroy {
       clearPendingHold();
       this.pollSub?.unsubscribe();
       this.pollSub = null;
+      this.fireStatusOnce('r_status_cancelled_seen', {
+        eventDate: reservation.eventDate,
+        reservationId: reservation.reservationId,
+        confirmationCode: reservation.confirmationCode ?? null,
+        extra: { paymentStatus },
+      });
       return;
     }
     if (paymentStatus === 'PAID' || paymentStatus === 'COURTESY') {
@@ -399,6 +428,11 @@ export class ReservationStatus implements OnInit, OnDestroy {
       clearPendingHold();
       this.pollSub?.unsubscribe();
       this.pollSub = null;
+      this.fireStatusOnce('r_status_paid_seen', {
+        eventDate: reservation.eventDate,
+        reservationId: reservation.reservationId,
+        confirmationCode: reservation.confirmationCode ?? null,
+      });
       return;
     }
 
@@ -449,6 +483,21 @@ export class ReservationStatus implements OnInit, OnDestroy {
     this.countdownSub?.unsubscribe();
     this.countdownSub = interval(1000).subscribe(() => this.tickCountdown());
     this.tickCountdown();
+  }
+
+  // Single-fire helper for terminal status events. The 3s poll calls
+  // applyStatusFromReservation on every tick; without this gate, paying
+  // customers would emit r_status_paid_seen on every poll until the
+  // page closes (poll stops on terminal status, but the first PAID +
+  // any subsequent visible re-render would still re-fire). Set keys
+  // are scoped per-page-load so a fresh /r visit re-fires.
+  private fireStatusOnce(
+    event: 'r_status_paid_seen' | 'r_status_cancelled_seen',
+    payload: Parameters<TelemetryService['fire']>[1],
+  ): void {
+    if (this.firedStatusEvents.has(event)) return;
+    this.firedStatusEvents.add(event);
+    this.telemetry.fire(event, payload);
   }
 
   private tickCountdown(): void {
