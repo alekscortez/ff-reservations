@@ -212,14 +212,20 @@ export class Reservations implements OnInit, OnDestroy {
       this.columnVisibility.set(next);
     },
     globalFilterFn: (row, _columnId, filterValue: string) => {
-      const q = String(filterValue ?? '').trim().toLowerCase();
-      if (!q) return true;
+      const raw = String(filterValue ?? '').trim().toLowerCase();
+      if (!raw) return true;
+      // Strip a "ff-" prefix so the existing in-table filter accepts the
+      // customer-friendly "FF-K7M3X2" shape too — narrows the loaded
+      // event without firing the cross-date search-by-code API.
+      const q = raw.startsWith('ff-') ? raw.slice(3) : raw;
       const r = row.original;
+      const code = String(r.confirmationCode ?? '').toLowerCase();
       return Boolean(
         (r.tableId || '').toLowerCase().includes(q) ||
           (r.customerName || '').toLowerCase().includes(q) ||
           (r.phone || '').includes(q) ||
-          formatTableLabelLower(r).includes(q),
+          formatTableLabelLower(r).includes(q) ||
+          (code && code.includes(q)),
       );
     },
     getCoreRowModel: getCoreRowModel(),
