@@ -86,6 +86,22 @@ describe('HlmDialog', () => {
     expect(panel).toContain('sm:w-[360px]');
   });
 
+  it('sheet size: panel max-h gates overflow + iOS safe-area insets honored', () => {
+    // Without max-h the panel grows past the viewport; combined with
+    // items-end this pushes the top (and the close button consumers
+    // sticky there) off-screen. dvh keeps the viewport gate honest as
+    // mobile chrome shows/hides.
+    const f = createHost({ size: 'sheet' });
+    const panel = panelSection(f).className;
+    expect(panel).toContain('max-h-[100dvh]');
+    expect(panel).toContain('pt-[env(safe-area-inset-top)]');
+    expect(panel).toContain('pb-[env(safe-area-inset-bottom)]');
+    // Desktop sheet starts ~68px from top (sm:pt-[68px] on the wrapper);
+    // shave a bit more so the bottom shadow doesn't clip on short screens.
+    expect(panel).toContain('sm:max-h-[calc(100dvh-84px)]');
+    expect(panel).toContain('sm:pt-0');
+  });
+
   it('panelClass merges with size defaults (consumer wins for conflicts)', () => {
     const f = createHost({ panelClass: 'max-w-md pb-28' });
     const panel = panelSection(f).className;

@@ -65,8 +65,13 @@ const panelVariants = cva(
         default: 'max-h-[92dvh] w-[92vw] max-w-2xl rounded-2xl',
         'full-on-mobile':
           'h-full w-full md:h-auto md:max-h-[92dvh] md:w-[92vw] md:max-w-2xl md:rounded-2xl',
+        // max-h-[100dvh] gates panel height so overflow-y-auto engages and the
+        // panel scrolls instead of growing past the viewport (which on
+        // mobile-anchored items-end pushes the top off-screen — the close
+        // button trap). pt-/pb- env() respects the iOS notch + home indicator
+        // so the sticky header consumers add (top-0) doesn't hide under chrome.
         sheet:
-          'w-full rounded-t-2xl border border-brand-100 sm:w-[360px] sm:rounded-2xl',
+          'max-h-[100dvh] w-full rounded-t-2xl border border-brand-100 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-h-[calc(100dvh-84px)] sm:w-[360px] sm:rounded-2xl sm:pt-0',
       },
     },
     defaultVariants: { size: 'default' },
