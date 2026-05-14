@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  BRAND_PREFIX,
   buildCheckInPassMessage,
   buildPaymentLinkExpiredMessage,
   buildPaymentLinkMessage,
@@ -24,6 +25,48 @@ import {
 describe("OPT_OUT_SUFFIX (10DLC compliance)", () => {
   it("is the exact phrase carriers expect", () => {
     assert.equal(OPT_OUT_SUFFIX, "Reply STOP to opt out.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BRAND_PREFIX — carrier-required sender identification (TFN rejection 2026-05-14)
+// ---------------------------------------------------------------------------
+
+describe("BRAND_PREFIX (carrier sender identification)", () => {
+  it("is the registered brand name with trailing ': '", () => {
+    assert.equal(BRAND_PREFIX, "Famoso Fuego: ");
+  });
+  it("buildPaymentLinkMessage starts with BRAND_PREFIX", () => {
+    const out = buildPaymentLinkMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableId: "A1",
+      paymentLinkUrl: "https://x",
+      ttlMinutes: 60,
+    });
+    assert.ok(
+      out.startsWith(BRAND_PREFIX),
+      `expected to start with BRAND_PREFIX, got: ${out}`
+    );
+  });
+  it("buildPaymentLinkExpiredMessage starts with BRAND_PREFIX", () => {
+    const out = buildPaymentLinkExpiredMessage({ customerName: "Alice", tableId: "A1" });
+    assert.ok(
+      out.startsWith(BRAND_PREFIX),
+      `expected to start with BRAND_PREFIX, got: ${out}`
+    );
+  });
+  it("buildCheckInPassMessage starts with BRAND_PREFIX", () => {
+    const out = buildCheckInPassMessage({
+      customerName: "Alice",
+      eventDate: "2026-05-09",
+      tableId: "A1",
+      passUrl: "https://x",
+    });
+    assert.ok(
+      out.startsWith(BRAND_PREFIX),
+      `expected to start with BRAND_PREFIX, got: ${out}`
+    );
   });
 });
 
@@ -165,7 +208,7 @@ describe("buildPaymentLinkMessage", () => {
       paymentLinkUrl: "https://sq.link/abc",
       ttlMinutes: 60,
     });
-    assert.match(out, /^Hi Alice,/);
+    assert.match(out, /^Famoso Fuego: Hi Alice,/);
     assert.match(out, /May 9, 2026/);
     assert.match(out, /Table A1/);
     assert.match(out, /https:\/\/sq\.link\/abc/);
@@ -181,7 +224,7 @@ describe("buildPaymentLinkMessage", () => {
       paymentLinkUrl: "https://x",
       ttlMinutes: 30,
     });
-    assert.match(out, /^Hi, pay /);
+    assert.match(out, /^Famoso Fuego: Hi, pay /);
   });
   it("omits date/table block when both are empty", () => {
     const out = buildPaymentLinkMessage({
@@ -191,7 +234,7 @@ describe("buildPaymentLinkMessage", () => {
       paymentLinkUrl: "https://x",
       ttlMinutes: 30,
     });
-    assert.match(out, /^Hi Alice, pay https:\/\/x\./);
+    assert.match(out, /^Famoso Fuego: Hi Alice, pay https:\/\/x\./);
   });
   it("always ends with OPT_OUT_SUFFIX (10DLC compliance regression)", () => {
     const out = buildPaymentLinkMessage({
@@ -217,7 +260,7 @@ describe("buildPaymentLinkExpiredMessage", () => {
     });
     assert.equal(
       out,
-      "Hi Alice, your payment link for Table A1 expired. Please call us to request a new link. " +
+      "Famoso Fuego: Hi Alice, your payment link for Table A1 expired. Please call us to request a new link. " +
         OPT_OUT_SUFFIX
     );
   });
@@ -228,13 +271,13 @@ describe("buildPaymentLinkExpiredMessage", () => {
     });
     assert.equal(
       out,
-      "Hi Alice, your payment link expired. Please call us to request a new link. " +
+      "Famoso Fuego: Hi Alice, your payment link expired. Please call us to request a new link. " +
         OPT_OUT_SUFFIX
     );
   });
   it("falls back to 'Hi,' when name is missing", () => {
     const out = buildPaymentLinkExpiredMessage({ customerName: "", tableId: "A1" });
-    assert.match(out, /^Hi, /);
+    assert.match(out, /^Famoso Fuego: Hi, /);
   });
   it("ends with OPT_OUT_SUFFIX (10DLC regression)", () => {
     const out = buildPaymentLinkExpiredMessage({ customerName: "X", tableId: "Y" });
@@ -307,7 +350,7 @@ describe("buildCheckInPassMessage", () => {
       tableId: "A1",
       passUrl: "https://app/pass?t=xyz",
     });
-    assert.match(out, /^Hi Alice,/);
+    assert.match(out, /^Famoso Fuego: Hi Alice,/);
     assert.match(out, /thank you for your reservation/);
     assert.match(out, /May 9, 2026/);
     assert.match(out, /Table A1/);
@@ -321,7 +364,7 @@ describe("buildCheckInPassMessage", () => {
       tableId: "A1",
       passUrl: "https://x",
     });
-    assert.match(out, /^Hi, /);
+    assert.match(out, /^Famoso Fuego: Hi, /);
   });
   it("omits date/table block when both are empty", () => {
     const out = buildCheckInPassMessage({

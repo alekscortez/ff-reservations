@@ -14,6 +14,14 @@
 // Don't drop this from message templates without legal review.
 export const OPT_OUT_SUFFIX = "Reply STOP to opt out.";
 
+// Carrier review (AWS TFN registration, 2026-05-14 rejection) requires every
+// message to clearly identify the sender. Every builder below MUST start with
+// BRAND_PREFIX so the recipient knows who is texting them. If the brand name
+// ever changes, also update the registered Message Samples in AWS End User
+// Messaging — drift between this constant and the registered samples is a
+// re-rejection risk on future re-reviews.
+export const BRAND_PREFIX = "Famoso Fuego: ";
+
 const MONTH_NAMES = [
   "Jan",
   "Feb",
@@ -112,7 +120,7 @@ export function buildPaymentLinkMessage({
     .join(" ");
   const dateAndTableText = dateAndTable ? `${dateAndTable}: ` : "";
   const expiresPhrase = formatTtlPhrase(ttlMinutes);
-  return `${greeting} pay ${dateAndTableText}${url}. ${expiresPhrase} Reservation confirms after payment. ${OPT_OUT_SUFFIX}`;
+  return `${BRAND_PREFIX}${greeting} pay ${dateAndTableText}${url}. ${expiresPhrase} Reservation confirms after payment. ${OPT_OUT_SUFFIX}`;
 }
 
 export function buildPaymentLinkExpiredMessage({ customerName, tableId, tableIds }) {
@@ -120,7 +128,7 @@ export function buildPaymentLinkExpiredMessage({ customerName, tableId, tableIds
   const tablesLabel = formatTablesLabelForSms({ tableId, tableIds });
   const greeting = name ? `Hi ${name},` : "Hi,";
   const tableText = tablesLabel ? ` for ${tablesLabel}` : "";
-  return `${greeting} your payment link${tableText} expired. Please call us to request a new link. ${OPT_OUT_SUFFIX}`;
+  return `${BRAND_PREFIX}${greeting} your payment link${tableText} expired. Please call us to request a new link. ${OPT_OUT_SUFFIX}`;
 }
 
 export function buildCheckInPassMessage({ customerName, eventDate, tableId, tableIds, passUrl }) {
@@ -133,5 +141,5 @@ export function buildCheckInPassMessage({ customerName, eventDate, tableId, tabl
     .filter(Boolean)
     .join(" ");
   const dateAndTableText = dateAndTable ? `${dateAndTable}: ` : "";
-  return `${greeting} thank you for your reservation. Here is your confirmation for ${dateAndTableText}${url} ${OPT_OUT_SUFFIX}`;
+  return `${BRAND_PREFIX}${greeting} thank you for your reservation. Here is your confirmation for ${dateAndTableText}${url} ${OPT_OUT_SUFFIX}`;
 }
