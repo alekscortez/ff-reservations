@@ -62,6 +62,11 @@ backend/cognito-customer-auth/function.zip
 # markdown notes; just exclude binary screenshots).
 .tmp-*.png
 
+# Visual QA screenshots from chrome-devtools-mcp passes — kept local for
+# diffing future runs against current state. Regenerated on demand via
+# `bash scripts/saturday_eve_check.sh` style flows.
+.qa-screenshots/
+
 # Unattended-session log (local only)
 UNATTENDED_LOG.md
 
