@@ -383,10 +383,17 @@ describe("createWalletPassService — generatePkpassForReservation", () => {
     // Secondary has TABLE + DEPOSIT
     const secondaryKeys = instance.secondaryFields.map((f) => f.key);
     assert.deepEqual(secondaryKeys, ["table", "deposit"]);
-    // Back has reservationId + terms
+    // Back has venue + arrival instructions + reservationId + terms.
+    // Arrival is the load-bearing one — it tells the customer what to
+    // do at the door (matches the /r PAID page so wording is the same
+    // on both surfaces).
     const backKeys = instance.backFields.map((f) => f.key);
     assert.ok(backKeys.includes("reservationId"));
     assert.ok(backKeys.includes("terms"));
+    assert.ok(backKeys.includes("arrival"));
+    const arrival = instance.backFields.find((f) => f.key === "arrival");
+    assert.equal(arrival?.label, "When you arrive");
+    assert.match(arrival?.value, /Head straight to your table/);
   });
 
   it("happy path: barcode is QR ffr-checkin:{token}", async () => {

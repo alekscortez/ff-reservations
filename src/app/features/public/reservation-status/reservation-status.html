@@ -92,6 +92,22 @@
         <dd class="font-medium">{{ r.customerName }}</dd>
       </div>
     </dl>
+
+    <!-- Arrival instructions. Same three lines as the Wallet pass back-
+         fields (backend services-wallet-pass.mjs) so the customer reads
+         identical wording on both surfaces. Hardcoded for v1; promote
+         to a setting if it needs to vary. -->
+    <section class="grid gap-1 rounded-lg border border-success-200 bg-white/70 p-3">
+      <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-success-700">
+        When you arrive
+      </p>
+      <ul class="grid gap-1 text-sm text-success-900">
+        <li>{{ arrivalInstructions[0] }}</li>
+        <li>{{ arrivalInstructions[1] }}</li>
+        <li>{{ arrivalInstructions[2] }}</li>
+      </ul>
+    </section>
+
     <div class="grid gap-2">
       <!-- Apple's official "Add to Apple Wallet" badge. Per Apple guidelines:
            - badge is used unmodified (no recolor, no overlay text)

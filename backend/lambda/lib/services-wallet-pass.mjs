@@ -170,6 +170,18 @@ export function createWalletPassService({
           label: "Venue",
           value: "Famoso Fuego",
         },
+        // Arrival instructions sit near the top of the back so they're
+        // the first thing the customer sees when they tap to flip the
+        // pass. Plain-text sentences with newlines render cleanly in
+        // Apple Wallet — bullet markers don't add value here. Mirrors
+        // the "When you arrive" block on the /r confirmation page so
+        // customers see the same words on both surfaces.
+        {
+          key: "arrival",
+          label: "When you arrive",
+          value:
+            "Head straight to your table — no check-in line.\nReserved all night — come whenever you like.\nShow this pass to any staff member if you need help.",
+        },
         {
           key: "reservationId",
           label: "Reservation ID",
@@ -179,7 +191,7 @@ export function createWalletPassService({
           key: "terms",
           label: "Terms",
           value:
-            "Show this pass at check-in. Self-cancellation requires at least 24 hours before the event.",
+            "Self-cancellation requires at least 24 hours before the event.",
         },
       ],
     };

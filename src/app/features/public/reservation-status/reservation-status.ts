@@ -57,6 +57,16 @@ export class ReservationStatus implements OnInit, OnDestroy {
   readonly walletDownloading = signal(false);
   readonly walletError = signal<string | null>(null);
 
+  // Arrival instructions shown on the PAID card. Hardcoded for v1 — same
+  // three lines as the Apple Wallet pass back-fields (services-wallet-pass.mjs)
+  // so the customer sees identical wording on both surfaces. Promote to a
+  // setting if/when this needs to vary by event or tier.
+  readonly arrivalInstructions: readonly string[] = [
+    'Head straight to your table — no check-in line',
+    'Reserved all night — come whenever you like',
+    'Show this pass to any staff member if you need help',
+  ];
+
   // Apple's official "Add to Apple Wallet" badge — locale-aware. Uses the
   // Spanish (Mexico) variant for `es-*` browsers, English elsewhere. Apple
   // ships 46+ locales but EN + ES-MX cover FF's McAllen audience.
