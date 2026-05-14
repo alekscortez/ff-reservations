@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Meta, Title } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
@@ -10,11 +11,15 @@ import {
   PublicAvailabilityService,
   PublicAvailabilityTable,
 } from '../../../core/http/public-availability.service';
-import { CreatePublicReservationResponse } from '../../../core/http/public-bookings.service';
+import {
+  CreatePublicReservationResponse,
+  PublicBookingsService,
+} from '../../../core/http/public-bookings.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
+import { HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmToggle } from '../../../shared/ui/toggle';
 import { ReserveTableModal } from './reserve-table-modal/reserve-table-modal';
@@ -39,6 +44,7 @@ interface PublicAvailabilityPickerOption {
     TableMap,
     HlmAlert,
     HlmButton,
+    HlmConfirmDialog,
     HlmInput,
     HlmToggle,
     ReserveTableModal,
@@ -49,6 +55,7 @@ interface PublicAvailabilityPickerOption {
 })
 export class PublicAvailability implements OnInit, OnDestroy {
   private api = inject(PublicAvailabilityService);
+  private bookings = inject(PublicBookingsService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
@@ -76,6 +83,16 @@ export class PublicAvailability implements OnInit, OnDestroy {
   // modal submit / release. Auto-clears if the stored hold is past its
   // expiry epoch.
   readonly pendingHold = signal<PendingHold | null>(null);
+
+  // Customer-initiated release of the banner's pending hold. Two-stage:
+  // releaseConfirming opens HlmConfirmDialog; releasing tracks the
+  // in-flight POST so the button can disable + show "Releasing…". Reuses
+  // the same backend route that /r → "Release hold" calls. Without this,
+  // the previous "Hide" button cleared localStorage but left the backend
+  // hold + phone slot — direct cause of the ACTIVE_HOLD_EXISTS deadlock.
+  readonly releaseConfirming = signal(false);
+  readonly releasing = signal(false);
+  readonly releaseError = signal<string | null>(null);
 
   viewMode = new FormControl<'MAP' | 'LIST'>('MAP', { nonNullable: true });
   search = new FormControl('', { nonNullable: true });
@@ -258,12 +275,55 @@ export class PublicAvailability implements OnInit, OnDestroy {
     }
   }
 
-  onDismissPending(): void {
-    // Dismiss only — don't release. Lets the customer hide the banner
-    // without forfeiting the hold (they can come back via Square's
-    // email receipt or the /r/{id} URL).
-    clearPendingHold();
-    this.pendingHold.set(null);
+  // Two-step release with confirm dialog. Only fires when the banner has
+  // a real hold; the confirm cancels the reservation backend-side, frees
+  // the table holds, and clears the anon phone slot — closing the
+  // ACTIVE_HOLD_EXISTS trap that the previous "Hide" button created.
+  openReleaseConfirm(): void {
+    if (this.releasing()) return;
+    if (!this.pendingHold()) return;
+    this.releaseError.set(null);
+    this.releaseConfirming.set(true);
+  }
+
+  cancelReleaseConfirm(): void {
+    if (this.releasing()) return;
+    this.releaseConfirming.set(false);
+  }
+
+  confirmReleasePending(): void {
+    if (this.releasing()) return;
+    const hold = this.pendingHold();
+    if (!hold) {
+      this.releaseConfirming.set(false);
+      return;
+    }
+    this.releasing.set(true);
+    this.releaseError.set(null);
+    this.bookings
+      .releaseReservation(hold.reservationId, hold.customerToken, hold.eventDate)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.releasing.set(false);
+          this.releaseConfirming.set(false);
+          clearPendingHold();
+          this.pendingHold.set(null);
+        },
+        error: (err: unknown) => {
+          this.releasing.set(false);
+          if (err instanceof HttpErrorResponse) {
+            this.releaseError.set(
+              String(
+                (err.error as { message?: string } | null)?.message ??
+                  'Could not release this hold. Please try again.',
+              ),
+            );
+          } else {
+            this.releaseError.set('Could not release this hold. Please try again.');
+          }
+        },
+      });
   }
 
   // Memoized derivations of `data` + form-control filters. Computed

@@ -21,10 +21,29 @@
       >Continue to payment</button>
       <button
         hlmBtn variant="outline" size="sm" type="button"
-        (click)="onDismissPending()"
-      >Hide</button>
+        (click)="openReleaseConfirm()"
+        [disabled]="releasing()"
+      >Release hold</button>
     </div>
+    <p
+      *ngIf="releaseError() as err"
+      class="text-xs text-danger-700"
+      aria-live="polite"
+    >{{ err }}</p>
   </article>
+
+  <hlm-confirm-dialog
+    *ngIf="releaseConfirming()"
+    title="Release this hold?"
+    message="This frees the table for other customers. You can pick another from the map if you change your mind."
+    confirmText="Release"
+    cancelText="Keep hold"
+    loadingText="Releasing…"
+    [destructive]="true"
+    [loading]="releasing()"
+    (confirm)="confirmReleasePending()"
+    (cancel)="cancelReleaseConfirm()"
+  ></hlm-confirm-dialog>
 
   <header class="rounded-2xl border border-brand-100 bg-white p-3 shadow-sm md:p-4">
     <div class="flex items-center">
