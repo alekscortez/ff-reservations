@@ -94,7 +94,7 @@
     confirmText="Release"
     cancelText="Keep hold"
     loadingText="Releasing…"
-    destructive
+    [destructive]="true"
     [loading]="releasing()"
     (confirm)="confirmRelease()"
     (cancel)="cancelReleaseConfirm()"
