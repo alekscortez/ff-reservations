@@ -654,6 +654,7 @@ export const handler = async (event) => {
         anonBookingsService.acquireAnonBookingPhoneSlot,
       releaseAnonBookingPhoneSlot:
         anonBookingsService.releaseAnonBookingPhoneSlot,
+      getAnonBookingPhoneSlot: anonBookingsService.getAnonBookingPhoneSlot,
       verifyCustomerToken: anonBookingsService.verifyCustomerToken,
       verifyTurnstileToken: turnstileService.verifyTurnstileToken,
       loadTurnstileSecret,

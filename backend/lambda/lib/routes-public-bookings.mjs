@@ -214,6 +214,8 @@ export async function handlePublicBookingsRoute(ctx) {
     // already using elsewhere indirectly.
     ddb,
     tableNames,
+    // Anon-bookings registry read for /lookup-by-phone (B.3 find-my-booking).
+    getAnonBookingPhoneSlot,
   } = ctx;
 
   // /p/{slug} short URL base — see destructure comment. Falls back twice:
@@ -1114,6 +1116,182 @@ export async function handlePublicBookingsRoute(ctx) {
   // yet PAID — better than a confusing error for a customer who
   // taps the link before the webhook lands.
   // ─────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────
+  // POST /public/lookup-by-phone — customer lost their /r URL (Square
+  // email in spam, closed the tab, switched devices). Trades phone +
+  // Turnstile for the short URL of their active anon booking. From
+  // there the existing /r flow handles continue/release/wallet.
+  //
+  // Returns { found: true, shortUrl, paymentStatus, eventDate, expiresAt }
+  // on hit, { found: false } on miss. Never reveals whether a phone
+  // number is registered without a successful Turnstile (so a 200 with
+  // found:false is safe to expose to enumeration). The phone slot is
+  // single-active-per-phone, so this is the canonical "active booking
+  // for this phone right now" lookup.
+  // ─────────────────────────────────────────────────────────────────────
+  if (method === "POST" && path === "/public/lookup-by-phone") {
+    const settings = (await getAppSettings()) ?? {};
+    if (!settings.allowAnonymousPublicBooking) {
+      return bookingDisabled(json, cors);
+    }
+    if (typeof getAnonBookingPhoneSlot !== "function") {
+      return json(500, { message: "Lookup service not configured" }, cors);
+    }
+
+    const body = (await getBody(event)) ?? {};
+    const customerPhoneRaw = String(body?.phone ?? "").trim();
+    const turnstileToken = String(body?.turnstileToken ?? "").trim();
+    if (!customerPhoneRaw) {
+      return json(
+        400,
+        { message: "phone is required", code: "MISSING_PHONE" },
+        cors
+      );
+    }
+    const phoneCountry = normalizePhoneCountry("US");
+    const customerPhone = normalizePhoneE164(customerPhoneRaw, phoneCountry);
+    if (!customerPhone) {
+      return json(
+        400,
+        {
+          message: "phone must be a valid US or MX number",
+          code: "INVALID_PHONE",
+        },
+        cors
+      );
+    }
+
+    // Turnstile gate — same as POST /public/reservations. Without this
+    // the endpoint is a phone-enumeration oracle (rate-limited at API
+    // GW but still cheap to scan). Fail-closed when configured.
+    const turnstileSiteKey = String(settings.turnstileSiteKey ?? "").trim();
+    if (turnstileSiteKey) {
+      if (!turnstileToken) {
+        return json(
+          403,
+          { message: "Turnstile token is required", code: "TURNSTILE_FAILED" },
+          cors
+        );
+      }
+      const turnstileSecret =
+        typeof loadTurnstileSecret === "function"
+          ? await loadTurnstileSecret()
+          : "";
+      const verification = await verifyTurnstileToken({
+        token: turnstileToken,
+        secret: turnstileSecret,
+        remoteIp: getRemoteIp(event),
+      });
+      if (!verification.success) {
+        return json(
+          403,
+          {
+            message: "Turnstile verification failed",
+            code: "TURNSTILE_FAILED",
+            errorCodes: verification.errorCodes,
+          },
+          cors
+        );
+      }
+    }
+
+    const slot = await getAnonBookingPhoneSlot(customerPhone);
+    if (!slot?.reservationId || !slot?.eventDate) {
+      return json(200, { found: false }, cors);
+    }
+    // Stale slot whose TTL has passed but the cron sweep hasn't released
+    // yet → treat as miss to avoid pointing the customer at a doomed row.
+    const slotExpiresAt = Number(slot.expiresAt ?? 0);
+    if (Number.isFinite(slotExpiresAt) && slotExpiresAt > 0 && slotExpiresAt < Math.floor(Date.now() / 1000)) {
+      return json(200, { found: false }, cors);
+    }
+
+    let reservation;
+    try {
+      reservation = await getReservationById(slot.eventDate, slot.reservationId);
+    } catch (err) {
+      if (err?.statusCode === 404) {
+        return json(200, { found: false }, cors);
+      }
+      throw err;
+    }
+    if (String(reservation?.status ?? "").toUpperCase() === "CANCELLED") {
+      return json(200, { found: false }, cors);
+    }
+
+    const publicSlug = String(reservation?.publicSlug ?? "").trim();
+    const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
+    const shortUrl = publicSlug ? `${shortUrlBase}/p/${publicSlug}` : null;
+    return json(
+      200,
+      {
+        found: true,
+        shortUrl,
+        paymentStatus,
+        eventDate: slot.eventDate,
+        expiresAt: slotExpiresAt || null,
+        confirmationCode: String(reservation?.confirmationCode ?? "").trim() || null,
+      },
+      cors
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // POST /public/telemetry — frontend funnel events. NO auth, no DDB
+  // write, just a structured CloudWatch log. Pairs with emitFunnel above
+  // so the FE half of the abandonment journey is readable from the same
+  // CW Insights query (filter on `frontend_funnel_event` instead of
+  // `public_booking_event`). Whitelisted event names so we don't grow
+  // an unbounded log namespace as the frontend evolves.
+  //
+  // Body: { event, sessionId?, ...extra }. SessionId is a per-browser UUID
+  // the frontend stores in localStorage so a customer's events thread
+  // together. No PII in the recommended payload (no phone/email/name) —
+  // sessionId is the join key, the actual reservation row carries the
+  // human details.
+  // ─────────────────────────────────────────────────────────────────────
+  if (method === "POST" && path === "/public/telemetry") {
+    const body = (await getBody(event)) ?? {};
+    const eventName = String(body?.event ?? "").trim();
+    const allowed = new Set([
+      "map_loaded",
+      "map_pending_hold_seen",
+      "modal_opened",
+      "modal_validation_error",
+      "modal_submitted",
+      "modal_active_hold_recovery_shown",
+      "modal_active_hold_release_clicked",
+      "modal_redirect_to_square",
+      "pending_release_clicked",
+      "pending_release_confirmed",
+      "r_page_loaded",
+      "r_status_paid_seen",
+      "r_status_cancelled_seen",
+      "r_release_clicked",
+      "r_wallet_clicked",
+    ]);
+    if (!allowed.has(eventName)) {
+      // Silent 204 — frontend telemetry must never break the user flow,
+      // so we don't return an error code that the caller might log.
+      return json(204, {}, cors);
+    }
+    try {
+      console.info("frontend_funnel_event", {
+        event: eventName,
+        sessionId: String(body?.sessionId ?? "").trim() || null,
+        eventDate: String(body?.eventDate ?? "").trim() || null,
+        reservationId: String(body?.reservationId ?? "").trim() || null,
+        confirmationCode: String(body?.confirmationCode ?? "").trim() || null,
+        userAgent: String(event?.headers?.["user-agent"] ?? "").slice(0, 200),
+        ip: getRemoteIp(event),
+        extra: body?.extra ?? null,
+      });
+    } catch {
+      // Logging must never break the request.
+    }
+    return json(204, {}, cors);
+  }
+
   const publicSlugMatch = path.match(/^\/p\/([^/]+)$/);
   if (publicSlugMatch && method === "GET") {
     const slug = publicSlugMatch[1];
