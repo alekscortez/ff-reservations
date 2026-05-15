@@ -53,7 +53,15 @@ export type TelemetryEvent =
   | 'auth_renew_succeeded'
   | 'auth_renew_failed'
   | 'auth_bootstrap_check'
-  | 'auth_session_expired_redirect';
+  | 'auth_session_expired_redirect'
+  // Phase 0 diagnostic (2026-05-14). Captures the raw Cognito /oauth2/token
+  // response status + error_description so we can see why refresh is failing
+  // ~67% of the time on WebKit (the OIDC library wraps the underlying
+  // HttpErrorResponse in `new Error(error)` before our SessionWatcher sees it,
+  // which destroys the status code). `extra` carries: status (HTTP),
+  // errorCode (Cognito's `error` field, e.g. invalid_grant), errorDescription,
+  // grantType, elapsedMs.
+  | 'auth_cognito_token_error';
 
 interface TelemetryPayload {
   eventDate?: string | null;

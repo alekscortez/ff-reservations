@@ -1410,6 +1410,9 @@ export async function handlePublicBookingsRoute(ctx) {
       "auth_renew_failed",
       "auth_bootstrap_check",
       "auth_session_expired_redirect",
+      // Phase 0 diagnostic (2026-05-14). Captures raw Cognito /oauth2/token
+      // response details that the OIDC library swallows.
+      "auth_cognito_token_error",
     ]);
     if (!allowed.has(eventName)) {
       // Silent 204 — frontend telemetry must never break the user flow,

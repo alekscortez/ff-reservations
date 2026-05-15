@@ -22,6 +22,7 @@ import {
 } from 'angular-auth-oidc-client';
 import { retry, throwError, timer } from 'rxjs';
 import { AuthInterceptor } from './core/http/auth.interceptor';
+import { CognitoDebugInterceptor } from './core/http/cognito-debug.interceptor';
 import { SessionWatcher } from './core/auth/session-watcher';
 import { TelemetryService } from './core/http/telemetry.service';
 
@@ -39,6 +40,10 @@ export const appConfig: ApplicationConfig = {
     // the refresh token was nowhere near its TTL.
     { provide: AbstractSecurityStorage, useClass: DefaultLocalStorageService },
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
+    // Phase 0 diagnostic — observes Cognito /oauth2/token errors before the
+    // OIDC library swallows the status code. Pass-through only; no behavior
+    // change. Remove once we've collected the data we need.
+    { provide: HTTP_INTERCEPTORS, useClass: CognitoDebugInterceptor, multi: true },
     provideAppInitializer(() => {
       const oidc = inject(OidcSecurityService);
       const watcher = inject(SessionWatcher);
