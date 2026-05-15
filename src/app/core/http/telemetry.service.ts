@@ -54,13 +54,22 @@ export type TelemetryEvent =
   | 'auth_renew_failed'
   | 'auth_bootstrap_check'
   | 'auth_session_expired_redirect'
-  // Phase 0 diagnostic (2026-05-14). Captures the raw Cognito /oauth2/token
-  // response status + error_description so we can see why refresh is failing
-  // ~67% of the time on WebKit (the OIDC library wraps the underlying
-  // HttpErrorResponse in `new Error(error)` before our SessionWatcher sees it,
-  // which destroys the status code). `extra` carries: status (HTTP),
-  // errorCode (Cognito's `error` field, e.g. invalid_grant), errorDescription,
-  // grantType, elapsedMs.
+  // Phase 0 diagnostic (2026-05-14). Captures the raw Cognito response on
+  // every request the OIDC library makes — /oauth2/token, /jwks.json,
+  // /oauth2/userInfo, the authority discovery doc. The OIDC library wraps
+  // the underlying HttpErrorResponse in `new Error(error)` before our
+  // SessionWatcher sees it (status + error_description are destroyed), so
+  // we observe at the HTTP layer instead.
+  //
+  // auth_cognito_observed → fires on success. Confirms the interceptor is
+  //   wired and lets us see which Cognito URLs the library is hitting.
+  //   `extra` carries: urlPath, status, method, elapsedMs.
+  //
+  // auth_cognito_token_error → fires on error (name kept for backwards
+  //   compatibility — covers all Cognito errors, not just /oauth2/token).
+  //   `extra` carries: urlPath, status, errorCode (Cognito's `error` field,
+  //   e.g. invalid_grant), errorDescription, grantType, method, elapsedMs.
+  | 'auth_cognito_observed'
   | 'auth_cognito_token_error';
 
 interface TelemetryPayload {

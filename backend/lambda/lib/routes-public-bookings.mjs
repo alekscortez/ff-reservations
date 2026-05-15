@@ -1410,8 +1410,11 @@ export async function handlePublicBookingsRoute(ctx) {
       "auth_renew_failed",
       "auth_bootstrap_check",
       "auth_session_expired_redirect",
-      // Phase 0 diagnostic (2026-05-14). Captures raw Cognito /oauth2/token
-      // response details that the OIDC library swallows.
+      // Phase 0 diagnostic (2026-05-14). Captures raw Cognito response
+      // details on every request the OIDC library makes — /oauth2/token,
+      // /.well-known/jwks.json, /oauth2/userInfo, the discovery doc.
+      // `observed` = success, `token_error` = any error. urlPath in extras.
+      "auth_cognito_observed",
       "auth_cognito_token_error",
     ]);
     if (!allowed.has(eventName)) {
