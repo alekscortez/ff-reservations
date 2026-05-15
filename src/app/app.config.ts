@@ -25,6 +25,12 @@ import { AuthInterceptor } from './core/http/auth.interceptor';
 import { CognitoDebugInterceptor } from './core/http/cognito-debug.interceptor';
 import { SessionWatcher } from './core/auth/session-watcher';
 import { TelemetryService } from './core/http/telemetry.service';
+import { RefreshTokenVault } from './core/auth/refresh-token-vault';
+import { DirectRefreshClient } from './core/auth/direct-refresh-client';
+import { LibraryStorageBridge } from './core/auth/library-storage-bridge';
+
+// 30 days — matches Cognito staff app client RefreshTokenValidity.
+const RT_TTL_SEC = 30 * 24 * 60 * 60;
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -48,17 +54,84 @@ export const appConfig: ApplicationConfig = {
       const oidc = inject(OidcSecurityService);
       const watcher = inject(SessionWatcher);
       const telemetry = inject(TelemetryService);
+      const vault = inject(RefreshTokenVault);
+      const direct = inject(DirectRefreshClient);
+      const storageBridge = inject(LibraryStorageBridge);
       // Always resolve so a flaky OIDC discovery call doesn't brick the
       // entire app boot. Worst case the user lands on /login, which is
       // exactly where authGuard would route them anyway.
       //
-      // Retry once on a transient failure (network blip, Cognito 5xx,
-      // captive-portal interstitial mid-resume) — a single transient miss
-      // here is the difference between "stays signed in" and "back to
-      // /login" on mobile resume.
+      // Phase 1 recovery: if checkAuth() concludes the user is not
+      // authenticated (either via emission or thrown error) but the shadow
+      // vault holds a refresh token, attempt a direct /oauth2/token call.
+      // On success, write tokens into the library's storage and re-run
+      // checkAuth so isAuthenticated$ flips to true without a /login hop.
+      // This is the deploy-causes-logout fix: when a new bundle ships and
+      // the library can't resume the session from its storage for whatever
+      // reason, the shadow recovers it.
       const startedAt = Date.now();
       let retried = false;
+      let lastResult: { isAuthenticated?: boolean } | null = null;
+
       return new Promise<void>((resolve) => {
+        const finishBootstrap = (extra: Record<string, unknown>): void => {
+          telemetry.fire('auth_bootstrap_check', { extra });
+          watcher.start();
+          resolve();
+        };
+
+        const attemptShadowRecovery = (
+          baseExtras: Record<string, unknown>
+        ): void => {
+          if (!vault.hasFresh()) {
+            finishBootstrap({ ...baseExtras, shadowRecovery: 'skipped_no_token' });
+            return;
+          }
+          const entry = vault.read();
+          if (!entry) {
+            finishBootstrap({ ...baseExtras, shadowRecovery: 'skipped_no_token' });
+            return;
+          }
+          const recoveryStart = Date.now();
+          direct.refresh(entry.refreshToken).subscribe({
+            next: (resp) => {
+              storageBridge.applyTokenResponse(resp);
+              const newRt = resp.refresh_token ?? entry.refreshToken;
+              vault.write(newRt, Math.floor(Date.now() / 1000) + RT_TTL_SEC);
+              // Re-run checkAuth so the library's in-memory auth state
+              // re-syncs with the storage we just updated.
+              oidc.checkAuth().subscribe({
+                next: () => {
+                  telemetry.fire('auth_shadow_restored', {
+                    extra: { elapsedMs: Date.now() - recoveryStart },
+                  });
+                  finishBootstrap({
+                    ...baseExtras,
+                    shadowRecovery: 'succeeded',
+                  });
+                },
+                error: () => {
+                  finishBootstrap({
+                    ...baseExtras,
+                    shadowRecovery: 'checkauth_failed',
+                  });
+                },
+              });
+            },
+            error: (e: unknown) => {
+              // Direct refresh failed definitively. Clear the shadow so we
+              // don't keep retrying a dead refresh token; user will land
+              // at /login via authGuard.
+              vault.clear();
+              finishBootstrap({
+                ...baseExtras,
+                shadowRecovery: 'direct_refresh_failed',
+                shadowStatus: Number((e as { status?: number })?.status ?? 0) || null,
+              });
+            },
+          });
+        };
+
         oidc
           .checkAuth()
           .pipe(
@@ -73,29 +146,32 @@ export const appConfig: ApplicationConfig = {
             })
           )
           .subscribe({
+            next: (result) => {
+              lastResult = result as { isAuthenticated?: boolean };
+            },
             error: (e) => {
               console.warn('oidc_checkauth_failed_at_bootstrap', e);
-              telemetry.fire('auth_bootstrap_check', {
-                extra: {
-                  outcome: 'error',
-                  retried,
-                  elapsedMs: Date.now() - startedAt,
-                  status: Number((e as { status?: number })?.status ?? 0) || null,
-                },
+              attemptShadowRecovery({
+                outcome: 'error',
+                retried,
+                elapsedMs: Date.now() - startedAt,
+                status: Number((e as { status?: number })?.status ?? 0) || null,
               });
-              watcher.start();
-              resolve();
             },
             complete: () => {
-              telemetry.fire('auth_bootstrap_check', {
-                extra: {
+              if (lastResult?.isAuthenticated) {
+                finishBootstrap({
                   outcome: retried ? 'recovered' : 'ok',
                   retried,
                   elapsedMs: Date.now() - startedAt,
-                },
+                });
+                return;
+              }
+              attemptShadowRecovery({
+                outcome: 'not_authed',
+                retried,
+                elapsedMs: Date.now() - startedAt,
               });
-              watcher.start();
-              resolve();
             },
           });
       });

@@ -10,47 +10,57 @@ import {
   catchError,
   filter,
   finalize,
+  from,
   of,
   shareReplay,
+  switchMap,
   take,
   tap,
   throwError,
 } from 'rxjs';
 import { decodeJwt } from './jwt';
 import { TelemetryService } from '../http/telemetry.service';
+import { RefreshTokenVault } from './refresh-token-vault';
+import { DirectRefreshClient } from './direct-refresh-client';
+import { LibraryStorageBridge } from './library-storage-bridge';
 
 export type RefreshSource =
   | 'visibility'
   | 'focus'
   | 'heartbeat'
   | 'event'
-  | 'interceptor';
+  | 'interceptor'
+  | 'bootstrap';
 
 // Mobile browsers (iOS Safari + Chrome on iOS/Android) and desktop browsers
 // with backgrounded tabs aggressively throttle or freeze JS timers. The
 // angular-auth-oidc-client silent-renew is a single setTimeout keyed off
 // "expires_at - 90s" — when the tab isn't visible at that moment, the timer
-// never fires, the access token rots, and the next API call 401s. By the time
-// the user notices they've been "logged out" and the cached isAuthenticated
-// state has flipped to false, the only recovery the app offers is /login.
+// never fires, the access token rots, and the next API call 401s.
 //
-// SessionWatcher closes that gap:
-//   1. On visibilitychange/focus/pageshow, if the tab has been hidden for
-//      more than HIDDEN_THRESHOLD_MS, force a refresh.
-//   2. Every HEARTBEAT_MS while visible, if the access token has less than
-//      LOW_FUEL_MS remaining, force a refresh. Belt + suspenders against
-//      the library's single-timer renew getting throttled away even on a
-//      visible tab.
-//   3. On TokenExpired / SilentRenewFailed, force a refresh once.
-//   4. Exposes refreshOnce() so the auth interceptor can share the same
-//      in-flight refresh observable when retrying a 401 — concurrent 401s
-//      across N parallel API calls collapse to one /oauth2/token round trip.
+// Worse: when the library's renew DOES fire and fails (any reason — Cognito
+// 4xx, network blip, internal validation error), it calls
+// `resetAuthorizationData()` which WIPES the refresh token from storage.
+// All subsequent renews then throw "no refresh token found" synchronously,
+// with no HTTP call and no recovery.
+//
+// Phase 1 fix: replace `oidc.forceRefreshSession()` with a direct call to
+// Cognito's /oauth2/token that retries transients and never wipes the
+// refresh token on failure. We read the refresh token from our shadow
+// vault (or the library's storage as fallback), POST to Cognito, write
+// new tokens back into the library's storage, then call `oidc.checkAuth()`
+// so the library's in-memory `isAuthenticated$` re-syncs. The shadow vault
+// + storage bridge persist across library wipes, so a failed renew never
+// cascades into a permanent logout.
 @Injectable({ providedIn: 'root' })
 export class SessionWatcher {
   private oidc = inject(OidcSecurityService);
   private events = inject(PublicEventsService);
   private zone = inject(NgZone);
   private telemetry = inject(TelemetryService);
+  private vault = inject(RefreshTokenVault);
+  private direct = inject(DirectRefreshClient);
+  private storageBridge = inject(LibraryStorageBridge);
 
   private refresh$: Observable<unknown> | null = null;
   private hiddenSinceMs = 0;
@@ -61,6 +71,8 @@ export class SessionWatcher {
   private readonly REFRESH_DEBOUNCE_MS = 30_000; // 30 s
   private readonly HEARTBEAT_MS = 4 * 60_000; // 4 min
   private readonly LOW_FUEL_MS = 2 * 60_000; // 2 min
+  // 30 days — matches Cognito staff app client RefreshTokenValidity.
+  private readonly RT_TTL_SEC = 30 * 24 * 60 * 60;
 
   // Test seam — emits whenever a refresh is triggered.
   readonly refreshed$ = new Subject<RefreshSource>();
@@ -69,6 +81,9 @@ export class SessionWatcher {
     if (this.started) return;
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     this.started = true;
+
+    // Make sure the vault starts capturing library refresh tokens.
+    this.vault.start();
 
     // Run listeners outside Angular's zone — these fire on every tab switch
     // and we don't want to wake change detection unless an actual refresh
@@ -109,7 +124,7 @@ export class SessionWatcher {
     const startedAt = Date.now();
     this.telemetry.fire('auth_renew_started', { extra: { source } });
 
-    this.refresh$ = this.oidc.forceRefreshSession().pipe(
+    this.refresh$ = this.runDirectRefresh().pipe(
       tap({
         next: () => {
           this.lastRefreshAtMs = Date.now();
@@ -124,9 +139,9 @@ export class SessionWatcher {
           extra: {
             source,
             elapsedMs: Date.now() - startedAt,
-            // Avoid logging the whole error — just shape + status when present.
             status: (err as { status?: number })?.status ?? null,
             kind: errKind(err),
+            reason: (err as { ffReason?: string })?.ffReason ?? null,
           },
         });
         return throwError(() => err);
@@ -137,6 +152,42 @@ export class SessionWatcher {
       shareReplay(1)
     );
     return this.refresh$;
+  }
+
+  /**
+   * The actual refresh chain. Read refresh token → POST to Cognito →
+   * write tokens back into library storage → trigger oidc.checkAuth()
+   * so isAuthenticated$ updates.
+   */
+  private runDirectRefresh(): Observable<unknown> {
+    const refreshToken = this.readRefreshToken();
+    if (!refreshToken) {
+      const err = new Error('no refresh token available') as Error & {
+        ffReason: string;
+      };
+      err.ffReason = 'no_refresh_token';
+      return throwError(() => err);
+    }
+    return this.direct.refresh(refreshToken).pipe(
+      tap((resp) => {
+        this.storageBridge.applyTokenResponse(resp);
+        const newRefreshToken = resp.refresh_token ?? refreshToken;
+        this.vault.write(
+          newRefreshToken,
+          Math.floor(Date.now() / 1000) + this.RT_TTL_SEC
+        );
+      }),
+      // Re-run the library's checkAuth so its in-memory auth state catches
+      // up with the tokens we just wrote. Without this, `isAuthenticated$`
+      // would stay false even though storage has fresh tokens.
+      switchMap(() => from(this.oidc.checkAuth()))
+    );
+  }
+
+  private readRefreshToken(): string | null {
+    const vaultEntry = this.vault.read();
+    if (vaultEntry?.refreshToken) return vaultEntry.refreshToken;
+    return this.storageBridge.readRefreshToken();
   }
 
   private onVisibility = (): void => {

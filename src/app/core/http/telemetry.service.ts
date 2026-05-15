@@ -70,7 +70,20 @@ export type TelemetryEvent =
   //   `extra` carries: urlPath, status, errorCode (Cognito's `error` field,
   //   e.g. invalid_grant), errorDescription, grantType, method, elapsedMs.
   | 'auth_cognito_observed'
-  | 'auth_cognito_token_error';
+  | 'auth_cognito_token_error'
+  // Phase 1: direct /oauth2/token refresh that bypasses the OIDC library's
+  // wipe-on-failure cascade. `source` lets us distinguish session-watcher
+  // attempts ('direct') from bootstrap recovery attempts ('bootstrap').
+  //
+  // auth_shadow_refresh_* → the direct refresh client itself. Extras carry
+  //   elapsedMs, attempts, and on failure status + errorCode + errorDescription.
+  // auth_shadow_restored → the bootstrap recovery path detected the library's
+  //   storage was wiped but the shadow vault held a refresh token; we used
+  //   it to restore the session without a re-login. Extras: elapsedMs.
+  | 'auth_shadow_refresh_started'
+  | 'auth_shadow_refresh_succeeded'
+  | 'auth_shadow_refresh_failed'
+  | 'auth_shadow_restored';
 
 interface TelemetryPayload {
   eventDate?: string | null;

@@ -1416,6 +1416,13 @@ export async function handlePublicBookingsRoute(ctx) {
       // `observed` = success, `token_error` = any error. urlPath in extras.
       "auth_cognito_observed",
       "auth_cognito_token_error",
+      // Phase 1 (2026-05-15). Direct /oauth2/token refresh that bypasses
+      // the OIDC library's wipe-on-failure cascade + bootstrap recovery
+      // via shadow refresh-token vault.
+      "auth_shadow_refresh_started",
+      "auth_shadow_refresh_succeeded",
+      "auth_shadow_refresh_failed",
+      "auth_shadow_restored",
     ]);
     if (!allowed.has(eventName)) {
       // Silent 204 — frontend telemetry must never break the user flow,

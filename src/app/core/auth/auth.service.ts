@@ -1,11 +1,13 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { APP_CONFIG, buildCognitoLogoutUrl, buildRedirectUrl } from '../config/app-config';
 import { decodeJwt, normalizeGroupsClaim, JwtClaims } from './jwt';
 import { Observable, combineLatest, distinctUntilChanged, map } from 'rxjs';
+import { RefreshTokenVault } from './refresh-token-vault';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private vault = inject(RefreshTokenVault);
   constructor(private oidc: OidcSecurityService) {}
 
   /** Auth status */
@@ -134,6 +136,10 @@ export class AuthService {
     // own keys live under "<authority>_…" prefixes; logoffLocal handles
     // those. We only clear our own ff_*/oidc.* scratch.
     this.oidc.logoffLocal();
+    // Phase 1: vault holds the shadow refresh token outside the library.
+    // Logout MUST clear it or a subsequent Direct refresh + library
+    // checkAuth could revive the session against the user's intent.
+    this.vault.clear();
     clearAppLocalStorage();
 
     // Cognito Hosted UI logout. logout_uri MUST exactly match an entry in

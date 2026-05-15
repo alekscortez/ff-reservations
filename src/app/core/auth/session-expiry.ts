@@ -19,9 +19,16 @@ export class SessionExpiry {
    * Call when refresh + retry has definitively failed AND the user
    * previously had a valid session (i.e. don't fire this for "never
    * logged in" 401s on an authed route). Reason is logged for telemetry
-   * triage.
+   * triage. Idempotent — repeat calls are no-ops.
+   *
+   * `skipNavigation: true` is for callers that return their own UrlTree
+   * (e.g. authGuard) — they need the telemetry + cleanup side effects
+   * without a second router.navigate causing a navigation race.
    */
-  notifyExpired(reason: 'interceptor' | 'silent-renew-failed'): void {
+  notifyExpired(
+    reason: 'interceptor' | 'silent-renew-failed' | 'guard',
+    opts?: { skipNavigation?: boolean }
+  ): void {
     if (this.notified) return;
     this.notified = true;
 
@@ -37,6 +44,17 @@ export class SessionExpiry {
     } catch {
       // never let cleanup throw past the redirect.
     }
+
+    // Clear the authed-flag now that we've established the session is
+    // gone. authGuard reads this on the next navigation; without the
+    // clear, a transient bug could re-trigger the banner indefinitely.
+    try {
+      window.localStorage.removeItem('ff_authed');
+    } catch {
+      // storage unavailable.
+    }
+
+    if (opts?.skipNavigation) return;
 
     if (this.currentPath() === '/login') {
       // Already there — no need to navigate; the message will surface
