@@ -14,11 +14,13 @@ export const routes: Routes = [
   // Public
   {
     path: 'login',
+    title: 'Iniciar sesión — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/login/login').then((m) => m.Login),
   },
   {
     path: 'auth/callback',
+    title: 'Famoso Fuego',
     loadComponent: () =>
       import('./features/public/auth-callback/auth-callback').then(
         (m) => m.AuthCallback
@@ -26,6 +28,7 @@ export const routes: Routes = [
   },
   {
     path: 'unauthorized',
+    title: 'Acceso restringido — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/unauthorized/unauthorized').then(
         (m) => m.Unauthorized
@@ -33,6 +36,7 @@ export const routes: Routes = [
   },
   {
     path: 'check-in/pass',
+    title: 'Tu pase — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/check-in-pass/check-in-pass').then(
         (m) => m.CheckInPassPage
@@ -40,6 +44,7 @@ export const routes: Routes = [
   },
   {
     path: 'reserva',
+    title: 'Famoso Fuego — Reserva tu mesa',
     loadComponent: () =>
       import('./features/public/availability/availability').then(
         (m) => m.PublicAvailability
@@ -50,6 +55,7 @@ export const routes: Routes = [
   { path: 'map', pathMatch: 'full', redirectTo: 'reserva' },
   {
     path: 'pay',
+    title: 'Pago — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/pay/pay').then((m) => m.PublicPayPage),
   },
@@ -59,6 +65,7 @@ export const routes: Routes = [
     // checkout; the page polls /public/reservations/{id} until PAID and
     // hands off Apple Wallet download.
     path: 'r/:id',
+    title: 'Tu reserva — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/reservation-status/reservation-status').then(
         (m) => m.ReservationStatus
@@ -73,6 +80,7 @@ export const routes: Routes = [
     children: [
       {
         path: 'dashboard',
+        title: 'Dashboard | Famoso Fuego',
         loadComponent: () =>
           import('./features/staff/dashboard/dashboard').then(
             (m) => m.Dashboard
@@ -80,6 +88,7 @@ export const routes: Routes = [
       },
       {
         path: 'reservations',
+        title: 'Reservations | Famoso Fuego',
         loadComponent: () =>
           import('./features/staff/reservations/reservations').then(
             (m) => m.Reservations
@@ -87,6 +96,7 @@ export const routes: Routes = [
       },
       {
         path: 'reservations/new',
+        title: 'Hold & Reserve | Famoso Fuego',
         loadComponent: () =>
           import('./features/staff/reservations-new/reservations-new').then(
             (m) => m.ReservationsNew
@@ -94,11 +104,13 @@ export const routes: Routes = [
       },
       {
         path: 'check-in',
+        title: 'Check-in | Famoso Fuego',
         loadComponent: () =>
           import('./features/staff/check-in/check-in').then((m) => m.CheckIn),
       },
       {
         path: 'events',
+        title: 'Events | Famoso Fuego',
         loadComponent: () =>
           import('./features/staff/events/events').then((m) => m.StaffEvents),
       },
@@ -123,6 +135,7 @@ export const routes: Routes = [
       },
       {
         path: 'financials',
+        title: 'Financials | Famoso Fuego',
         loadComponent: () =>
           import('./features/admin/financials/financials').then(
             (m) => m.Financials
@@ -130,16 +143,19 @@ export const routes: Routes = [
       },
       {
         path: 'users',
+        title: 'Users | Famoso Fuego',
         loadComponent: () =>
           import('./features/admin/users/users').then((m) => m.Users),
       },
       {
         path: 'events',
+        title: 'Events | Famoso Fuego',
         loadComponent: () =>
           import('./features/admin/events/events').then((m) => m.Events),
       },
       {
         path: 'settings',
+        title: 'Settings | Famoso Fuego',
         canDeactivate: [unsavedChangesGuard],
         loadComponent: () =>
           import('./features/admin/settings/settings').then(
@@ -148,6 +164,7 @@ export const routes: Routes = [
       },
       {
         path: 'frequent-clients',
+        title: 'Frequent clients | Famoso Fuego',
         loadComponent: () =>
           import('./features/admin/frequent-clients/frequent-clients').then(
             (m) => m.FrequentClients
@@ -155,6 +172,7 @@ export const routes: Routes = [
       },
       {
         path: 'clients',
+        title: 'Clients | Famoso Fuego',
         loadComponent: () =>
           import('./features/admin/clients/clients').then((m) => m.Clients),
       },
@@ -164,6 +182,7 @@ export const routes: Routes = [
   // 404
   {
     path: '**',
+    title: 'Página no encontrada — Famoso Fuego',
     loadComponent: () =>
       import('./features/public/not-found/not-found').then((m) => m.NotFound),
   },
