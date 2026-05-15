@@ -12,13 +12,15 @@ import { HlmSidebarWrapper } from './shared/ui/sidebar';
 
 // Routes that always render in the clean public shell — no staff topbar /
 // sidebar — even when a staff member is signed in. Without this, staff
-// previewing /map see their own dashboard chrome and can't tell what a
-// customer actually gets.
+// previewing /reserva see their own dashboard chrome and can't tell what a
+// customer actually gets. /map is kept so the legacy redirect arc still
+// renders public chrome during the brief client-side hop.
 const PUBLIC_PATHS = [
   '/login',
   '/auth/callback',
   '/unauthorized',
   '/check-in/pass',
+  '/reserva',
   '/map',
   '/pay',
   '/r',

@@ -56,7 +56,7 @@ describe('App', () => {
         providers: [
           provideRouter([
             { path: 'staff/dashboard', component: BlankPage },
-            { path: 'map', component: BlankPage },
+            { path: 'reserva', component: BlankPage },
             { path: 'check-in/pass', component: BlankPage },
           ]),
           provideAuthedOidc(),
@@ -74,10 +74,10 @@ describe('App', () => {
       expect(mode).toBe('staff');
     });
 
-    it('shellMode$ is "public" on /map even when authenticated', async () => {
+    it('shellMode$ is "public" on /reserva even when authenticated', async () => {
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
-      await router.navigateByUrl('/map');
+      await router.navigateByUrl('/reserva');
       const mode = await firstValueFrom(
         fixture.componentInstance.shellMode$.pipe(take(1))
       );
@@ -94,10 +94,10 @@ describe('App', () => {
       expect(mode).toBe('public');
     });
 
-    it('shellMode$ is "public" on /map?eventDate=... (query string ignored)', async () => {
+    it('shellMode$ is "public" on /reserva?eventDate=... (query string ignored)', async () => {
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
-      await router.navigateByUrl('/map?eventDate=2026-05-16');
+      await router.navigateByUrl('/reserva?eventDate=2026-05-16');
       const mode = await firstValueFrom(
         fixture.componentInstance.shellMode$.pipe(take(1))
       );

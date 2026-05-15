@@ -47,7 +47,7 @@ export class TableMap implements OnInit, OnChanges, OnDestroy {
 
   @Input() tables: TableForEvent[] = [];
   @Input() selectedTableId: string | null = null;
-  // Multi-table selection (anonymous public booking on /map). Renders a
+  // Multi-table selection (anonymous public booking on /reserva). Renders a
   // selection ring on every id in the array. Backward-compatible: if
   // empty/unset, falls back to single-selection via selectedTableId.
   @Input() selectedTableIds: string[] = [];

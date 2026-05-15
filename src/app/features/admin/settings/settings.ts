@@ -218,7 +218,7 @@ export class AdminSettings implements OnInit, HasUnsavedChanges {
     customerContactPhoneE164: new FormControl('', { nonNullable: true }),
     // Anonymous public booking — gates everything off until flipped on.
     // Default false so a fresh deploy can't accidentally start taking
-    // real customer bookings before /map UX + Turnstile are ready.
+    // real customer bookings before /reserva UX + Turnstile are ready.
     allowAnonymousPublicBooking: new FormControl(false, { nonNullable: true }),
     anonymousHoldTtlSeconds: new FormControl(600, {
       nonNullable: true,

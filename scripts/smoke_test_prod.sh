@@ -59,7 +59,7 @@ echo "[$(ts)] Testing $API_BASE + $WEB_BASE"
 echo ""
 
 # -----------------------------------------------------------------------------
-# 1. Public availability (anonymous customer hitting /map)
+# 1. Public availability (anonymous customer hitting /reserva)
 # -----------------------------------------------------------------------------
 TODAY_PLUS_3=$(date -v +3d +%Y-%m-%d 2>/dev/null || date -d "+3 days" +%Y-%m-%d)
 AVAIL_BODY=$(curl -s --max-time 10 "$API_BASE/public/availability?eventDate=$TODAY_PLUS_3")

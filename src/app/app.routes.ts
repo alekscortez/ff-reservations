@@ -39,12 +39,15 @@ export const routes: Routes = [
       ),
   },
   {
-    path: 'map',
+    path: 'reserva',
     loadComponent: () =>
       import('./features/public/availability/availability').then(
         (m) => m.PublicAvailability
       ),
   },
+  // Legacy slug — keep indefinitely so old SMS receipts, Apple Wallet
+  // back-fields, and shared links resolve. Query string is preserved.
+  { path: 'map', pathMatch: 'full', redirectTo: 'reserva' },
   {
     path: 'pay',
     loadComponent: () =>

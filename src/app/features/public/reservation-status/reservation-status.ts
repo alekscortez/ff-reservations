@@ -208,7 +208,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
   });
 
   // Contact CTAs for the paid-but-cancelled card (Day-shape recovery).
-  // Mirrors the pattern in availability.ts so behavior matches /map.
+  // Mirrors the pattern in availability.ts so behavior matches /reserva.
   readonly contactPhoneHref = computed<string | null>(() => {
     const phone = String(this.customerContact()?.phone ?? '').trim();
     return phone ? `tel:${phone}` : null;
@@ -248,7 +248,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
   }
 
   // Customer-initiated release of the PENDING hold. The backend route
-  // is shared with the dismiss path on /map's pending-hold banner —
+  // is shared with the dismiss path on /reserva's pending-hold banner —
   // it cancels the reservation, frees the table-holds, and clears
   // the anon phone slot. After success, fetchStatus() picks up the
   // CANCELLED row on the next poll and renders the auto-released
@@ -437,7 +437,7 @@ export class ReservationStatus implements OnInit, OnDestroy {
     }
 
     // Keep the pending hold in localStorage in sync — if the customer
-    // refreshes to /r/{id}, the banner on /map should still recognize
+    // refreshes to /r/{id}, the banner on /reserva should still recognize
     // the in-flight reservation.
     if (reservation.paymentLinkUrl) {
       const stored = readPendingHold();

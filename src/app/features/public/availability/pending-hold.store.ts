@@ -1,6 +1,6 @@
 // Tiny localStorage wrapper for the pending public-booking that the
 // customer is mid-flow on. Used by:
-//   - the public /map page to show a "You have a pending hold" banner
+//   - the public /reserva page to show a "You have a pending hold" banner
 //   - the /r/[id] confirmation page to recover the eventDate after a
 //     return-from-Square redirect.
 //

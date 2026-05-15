@@ -263,7 +263,7 @@ export class Topbar implements OnInit, OnDestroy {
 
   private publicAvailabilityUrl(): string | null {
     if (typeof window === 'undefined') return null;
-    const url = new URL('/map', window.location.origin);
+    const url = new URL('/reserva', window.location.origin);
     const eventDate = String(this.contextEvent?.eventDate ?? '').trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
       url.searchParams.set('eventDate', eventDate);

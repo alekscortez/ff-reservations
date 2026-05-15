@@ -203,10 +203,10 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-2 pt-1">
-      <!-- Bring a friend's group? Bounce back to /map for another table. -->
+      <!-- Bring a friend's group? Bounce back to /reserva for another table. -->
       <a
         hlmBtn variant="outline" size="sm"
-        routerLink="/map"
+        routerLink="/reserva"
         class="w-fit"
       >Book another table</a>
       <!-- Self-service contact in case of questions before the night.
@@ -231,7 +231,7 @@
     <p class="font-semibold text-brand-900">Your hold expired.</p>
     <p>Holds last 10 minutes. Pop back to the map and pick another table to keep going.</p>
     <div class="flex flex-wrap gap-2">
-      <a hlmBtn size="lg" routerLink="/map">Pick another table</a>
+      <a hlmBtn size="lg" routerLink="/reserva">Pick another table</a>
       <a
         *ngIf="contactWhatsappHref() as href"
         [href]="href"
@@ -282,7 +282,7 @@
     <p>{{ err }}</p>
     <div class="mt-3 flex flex-wrap gap-2">
       <button hlmBtn variant="outline" size="sm" type="button" (click)="refresh()">Retry</button>
-      <a hlmBtn variant="outline" size="sm" routerLink="/map">Back to map</a>
+      <a hlmBtn variant="outline" size="sm" routerLink="/reserva">Back to reservations</a>
     </div>
   </hlm-alert>
 </section>
