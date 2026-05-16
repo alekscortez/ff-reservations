@@ -104,6 +104,48 @@ function bookingDisabled(json, cors) {
   );
 }
 
+// Whitelist + cap incoming marketing-attribution payload from the
+// public reservation POST. Layer 2 (UTM tracking): FE persists
+// utm_*/fbclid/gclid first-touch in localStorage and sends the
+// snapshot on each booking. We accept only the documented keys and
+// truncate each value at 200 chars — guards against a hostile client
+// sending a 10 MB blob to bloat our row size + telemetry logs.
+const ATTRIBUTION_KEYS_ALLOWLIST = new Set([
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "fbclid",
+  "gclid",
+  "referrer",
+  "landingPath",
+  "firstTouchAt",
+]);
+const ATTRIBUTION_MAX_VALUE_LEN = 200;
+function sanitizeAttribution(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {};
+  let any = false;
+  for (const [key, val] of Object.entries(raw)) {
+    if (!ATTRIBUTION_KEYS_ALLOWLIST.has(key)) continue;
+    if (key === "firstTouchAt") {
+      const n = Number(val);
+      if (Number.isFinite(n) && n > 0) {
+        out[key] = n;
+        any = true;
+      }
+      continue;
+    }
+    if (typeof val !== "string") continue;
+    const trimmed = val.trim().slice(0, ATTRIBUTION_MAX_VALUE_LEN);
+    if (trimmed.length === 0) continue;
+    out[key] = trimmed;
+    any = true;
+  }
+  return any ? out : null;
+}
+
 function getRemoteIp(event) {
   return (
     event?.requestContext?.http?.sourceIp ??
@@ -251,6 +293,12 @@ export async function handlePublicBookingsRoute(ctx) {
     const turnstileToken = String(body?.turnstileToken ?? "").trim();
     const idempotencyKey =
       String(body?.idempotencyKey ?? "").trim() || randomUUID();
+    // First-touch marketing attribution (Layer 2 — UTM tracking).
+    // FE persists the URL params on first landing; we accept the
+    // snapshot here, whitelist + cap individual values (defense against
+    // a hostile FE sending a 10 MB payload), and pass to createReservation
+    // to persist on the reservation row.
+    const attribution = sanitizeAttribution(body?.attribution);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
       emitFunnel("blocked_bad_event_date", { eventDate });
@@ -582,6 +630,7 @@ export async function handlePublicBookingsRoute(ctx) {
           // hold upgrades, so we never end up with orphan codes.
           confirmationCode,
           publicSlug,
+          attribution,
         },
         ANON_ACTOR,
         false
@@ -1440,6 +1489,17 @@ export async function handlePublicBookingsRoute(ctx) {
       return json(204, {}, cors);
     }
     try {
+      // Sanitize attribution at log time too — defends against a FE
+      // bug or hostile client sending oversized values directly through
+      // the telemetry pipe (which bypasses the booking-route validator).
+      const extraIn = body?.extra ?? null;
+      const sanitizedAttribution = sanitizeAttribution(extraIn?.attribution);
+      const extraOut =
+        extraIn && typeof extraIn === "object"
+          ? sanitizedAttribution
+            ? { ...extraIn, attribution: sanitizedAttribution }
+            : extraIn
+          : null;
       console.info("frontend_funnel_event", {
         event: eventName,
         sessionId: String(body?.sessionId ?? "").trim() || null,
@@ -1448,7 +1508,16 @@ export async function handlePublicBookingsRoute(ctx) {
         confirmationCode: String(body?.confirmationCode ?? "").trim() || null,
         userAgent: String(event?.headers?.["user-agent"] ?? "").slice(0, 200),
         ip: getRemoteIp(event),
-        extra: body?.extra ?? null,
+        // Hoist utm_source + fbclid + gclid as top-level CW fields so
+        // Insights queries can use `stats count() by utmSource` without
+        // diving into nested `extra.attribution.utm_source`. Keeps the
+        // full object too for completeness.
+        utmSource: sanitizedAttribution?.utm_source ?? null,
+        utmMedium: sanitizedAttribution?.utm_medium ?? null,
+        utmCampaign: sanitizedAttribution?.utm_campaign ?? null,
+        fbclid: sanitizedAttribution?.fbclid ?? null,
+        gclid: sanitizedAttribution?.gclid ?? null,
+        extra: extraOut,
       });
     } catch {
       // Logging must never break the request.

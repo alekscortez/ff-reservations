@@ -16,6 +16,7 @@ import {
   PublicBookingsService,
 } from '../../../core/http/public-bookings.service';
 import { TelemetryService } from '../../../core/http/telemetry.service';
+import { captureAttribution } from '../../../core/analytics/attribution';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { HlmAlert } from '../../../shared/ui/alert';
@@ -137,6 +138,11 @@ export class PublicAvailability implements OnInit, OnDestroy {
       content:
         'Reserve a table at Famoso Fuego. Browse live availability or look up an existing booking.',
     });
+    // First-touch attribution capture. Snapshots utm_*/fbclid/gclid
+    // from the URL into localStorage so all subsequent telemetry +
+    // bookings carry the original source. No-op if already snapshotted
+    // on a prior visit (first-touch wins).
+    captureAttribution();
     this.telemetry.fire('map_loaded');
     // Hydrate any pending hold from a previous session; if its TTL has
     // already passed, drop it on the floor.

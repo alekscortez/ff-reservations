@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiClient } from './api-client';
+import { getAttribution } from '../analytics/attribution';
 
 // Whitelisted event names. The backend keeps the same list at
 // routes-public-bookings.mjs (POST /public/telemetry handler) — adding a
@@ -146,6 +147,17 @@ export class TelemetryService {
   // callers just call and move on.
   fire(event: TelemetryEvent, payload: TelemetryPayload = {}): void {
     try {
+      // Marketing attribution (Layer 2 — UTM capture). First-touch
+      // snapshot from localStorage, auto-merged into every event's
+      // `extra` so CloudWatch Insights can split funnel counts by
+      // source (utm_source, fbclid, gclid). Null when the visitor
+      // arrived with no tags — keeps payload size down for organic
+      // traffic.
+      const attribution = getAttribution();
+      const extra = attribution
+        ? { ...(payload.extra ?? {}), attribution }
+        : payload.extra ?? null;
+
       this.api
         .post('/public/telemetry', {
           event,
@@ -153,7 +165,7 @@ export class TelemetryService {
           eventDate: payload.eventDate ?? null,
           reservationId: payload.reservationId ?? null,
           confirmationCode: payload.confirmationCode ?? null,
-          extra: payload.extra ?? null,
+          extra,
         })
         .subscribe({
           next: () => undefined,

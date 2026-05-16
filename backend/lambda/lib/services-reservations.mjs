@@ -925,6 +925,15 @@ export function createReservationsService(
     // shareable URLs use the slug so SMS / WhatsApp links stay short.
     const publicSlug =
       String(payload?.publicSlug ?? "").trim() || null;
+    // First-touch marketing attribution captured by the FE
+    // (Layer 2 — UTM tracking). Already validated + truncated at the
+    // route handler (`routes-public-bookings.mjs`); we just persist
+    // the object as-is. Null when the visitor arrived with no
+    // utm_*/fbclid/gclid params.
+    const attribution =
+      payload?.attribution && typeof payload.attribution === "object"
+        ? payload.attribution
+        : null;
     const phoneRaw = String(payload?.phone ?? "").trim();
     const phoneCountry = normalizePhoneCountry(payload?.phoneCountry ?? "US");
     const phone = normalizePhoneE164(phoneRaw, phoneCountry);
@@ -1178,6 +1187,7 @@ export function createReservationsService(
                   ...(customerToken ? { customerToken } : {}),
                   ...(confirmationCode ? { confirmationCode } : {}),
                   ...(publicSlug ? { publicSlug } : {}),
+                  ...(attribution ? { attribution } : {}),
                 },
                 ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
               },

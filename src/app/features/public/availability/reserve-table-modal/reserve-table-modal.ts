@@ -47,6 +47,7 @@ import {
 } from '../../../../core/http/public-bookings.service';
 import { PublicAvailabilityTable } from '../../../../core/http/public-availability.service';
 import { TelemetryService } from '../../../../core/http/telemetry.service';
+import { getAttribution } from '../../../../core/analytics/attribution';
 import {
   clearPendingHold,
   readPendingHold,
@@ -514,6 +515,10 @@ export class ReserveTableModal implements OnDestroy {
     const rawPhone = this.form.controls.phone.value.trim();
     const phoneDigits = rawPhone.replace(/\D/g, '').slice(-10);
     const e164Phone = `${this.form.controls.countryCode.value}${phoneDigits}`;
+    // First-touch marketing attribution; persisted on the reservation
+    // row so the eventual Square webhook Purchase event can attribute
+    // back to the originating ad/campaign.
+    const attribution = getAttribution();
     this.bookings
       .createReservation({
         eventDate,
@@ -524,6 +529,9 @@ export class ReserveTableModal implements OnDestroy {
           email: this.form.controls.email.value.trim() || undefined,
         },
         turnstileToken: token || undefined,
+        attribution: attribution
+          ? (attribution as unknown as Record<string, string | number>)
+          : undefined,
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({

@@ -11,6 +11,11 @@ export interface CreatePublicReservationRequest {
   };
   turnstileToken?: string;
   idempotencyKey?: string;
+  // Marketing attribution (Layer 2). First-touch snapshot from
+  // localStorage — utm_*/fbclid/gclid + landingPath + referrer. BE
+  // persists this on the reservation row for ROI reporting and later
+  // Meta CAPI Purchase event matching.
+  attribution?: Record<string, string | number>;
 }
 
 export interface CreatePublicReservationResponse {
