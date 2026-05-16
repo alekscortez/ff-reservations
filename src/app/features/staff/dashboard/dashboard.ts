@@ -37,6 +37,7 @@ import {
   TableLabelPipe,
 } from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
+import { AdminService } from '../../../core/http/admin.service';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -99,6 +100,7 @@ export class Dashboard implements OnInit, OnDestroy {
   private checkInApi = inject(CheckInService);
   private clientsApi = inject(ClientsService);
   private squareWebPayments = inject(SquareWebPaymentsService);
+  private adminApi = inject(AdminService);
 
   readonly contextLabel = signal<'TODAY EVENT' | 'NEXT EVENT'>('TODAY EVENT');
   readonly contextEvent = signal<EventItem | null>(null);
@@ -115,6 +117,20 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly reservations = signal<ReservationItem[]>([]);
   readonly urgentPayments = signal<UrgentPaymentItem[]>([]);
   readonly recentActivity = signal<ActivityItem[]>([]);
+
+  // Live visitors on /reserva. Polls GET /admin/live-visitors every 5s
+  // (presence rows have a 90s TTL on the BE so this cadence is plenty).
+  // Tile auto-hides when count === 0 — no value in showing "0 people"
+  // during dead hours, just adds dashboard noise.
+  readonly liveVisitorsCount = signal(0);
+  readonly liveVisitorsByStage = signal<{
+    map: number;
+    modal: number;
+    checkout: number;
+    paid_landing: number;
+  }>({ map: 0, modal: 0, checkout: 0, paid_landing: 0 });
+  private livePollTimer: ReturnType<typeof setInterval> | null = null;
+  private liveVisitorsSub: Subscription | null = null;
 
   readonly kpis = signal<TableKpis>({
     total: 0,
@@ -171,13 +187,48 @@ export class Dashboard implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.refreshDashboard();
+    this.startLiveVisitorsPoll();
   }
 
   ngOnDestroy(): void {
     this.snapshotSub?.unsubscribe();
     this.snapshotSub = null;
     this.stopPolling();
+    this.stopLiveVisitorsPoll();
     void this.destroyCashAppPayButton();
+  }
+
+  private startLiveVisitorsPoll(): void {
+    const fetchOnce = () => {
+      this.liveVisitorsSub?.unsubscribe();
+      this.liveVisitorsSub = this.adminApi.liveVisitors().subscribe({
+        next: (snap) => {
+          this.liveVisitorsCount.set(Number(snap?.count ?? 0));
+          const stages = snap?.byStage ?? {};
+          this.liveVisitorsByStage.set({
+            map: Number(stages.map ?? 0),
+            modal: Number(stages.modal ?? 0),
+            checkout: Number(stages.checkout ?? 0),
+            paid_landing: Number(stages.paid_landing ?? 0),
+          });
+        },
+        // Silent on error — this is a glance-able tile, not a critical
+        // path. A broken poll just leaves the tile hidden until the next
+        // tick recovers.
+        error: () => {},
+      });
+    };
+    fetchOnce();
+    this.livePollTimer = setInterval(fetchOnce, 5_000);
+  }
+
+  private stopLiveVisitorsPoll(): void {
+    if (this.livePollTimer) {
+      clearInterval(this.livePollTimer);
+      this.livePollTimer = null;
+    }
+    this.liveVisitorsSub?.unsubscribe();
+    this.liveVisitorsSub = null;
   }
 
   refreshDashboard(): void {

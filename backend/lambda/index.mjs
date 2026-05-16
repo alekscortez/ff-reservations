@@ -67,6 +67,7 @@ import { createRateLimitService } from "./lib/services-rate-limit.mjs";
 import { handlePublicBookingsRoute } from "./lib/routes-public-bookings.mjs";
 import { createTurnstileService } from "./lib/services-turnstile.mjs";
 import { createAnonBookingsService } from "./lib/services-anon-bookings.mjs";
+import { createPresenceService } from "./lib/services-presence.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -437,6 +438,13 @@ const anonBookingsService = createAnonBookingsService({
   httpError,
 });
 
+const presenceService = createPresenceService({
+  ddb,
+  tableNames: { HOLDS_TABLE },
+  nowEpoch,
+  httpError,
+});
+
 const usersService = createUsersService({
   cognito,
   userPoolId: USER_POOL_ID,
@@ -674,6 +682,7 @@ export const handler = async (event) => {
       walletPassEnabled: walletPassService.isEnabled,
       publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
       publicBookingShortUrlBase: PUBLIC_BOOKING_SHORT_URL_BASE,
+      recordPresence: presenceService.recordPresence,
     });
     if (publicBookingsResponse) return publicBookingsResponse;
 
@@ -728,6 +737,8 @@ export const handler = async (event) => {
       cors,
       json,
       getGroupsFromEvent,
+      requireStaffOrAdmin,
+      listPresence: presenceService.listPresence,
     });
     if (adminRouteResponse) return adminRouteResponse;
 

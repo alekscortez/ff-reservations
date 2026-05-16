@@ -83,7 +83,12 @@ export type TelemetryEvent =
   | 'auth_shadow_refresh_started'
   | 'auth_shadow_refresh_succeeded'
   | 'auth_shadow_refresh_failed'
-  | 'auth_shadow_restored';
+  | 'auth_shadow_restored'
+  // Live-presence heartbeat (2026-05-15). Fired by /reserva every ~30s
+  // while the tab is visible so the staff dashboard's "Live now" tile
+  // can count active visitors. Pure presence signal — not part of the
+  // funnel dashboard, just relayed to services-presence on the BE.
+  | 'map_heartbeat';
 
 interface TelemetryPayload {
   eventDate?: string | null;

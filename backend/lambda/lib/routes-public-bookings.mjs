@@ -24,6 +24,7 @@ import {
   formatTablesLabel,
   MAX_TABLES_PER_RESERVATION,
 } from "./services-reservations-shared.mjs";
+import { eventToPresenceStage } from "./services-presence.mjs";
 import {
   buildCodeLookupKey,
   buildSlugLookupKey,
@@ -217,6 +218,9 @@ export async function handlePublicBookingsRoute(ctx) {
     tableNames,
     // Anon-bookings registry read for /lookup-by-phone (B.3 find-my-booking).
     getAnonBookingPhoneSlot,
+    // Live-presence writer (services-presence.recordPresence). Optional —
+    // omitted in tests; the telemetry handler skips the write when null.
+    recordPresence,
   } = ctx;
 
   // /p/{slug} short URL base — see destructure comment. Falls back twice:
@@ -1423,6 +1427,12 @@ export async function handlePublicBookingsRoute(ctx) {
       "auth_shadow_refresh_succeeded",
       "auth_shadow_refresh_failed",
       "auth_shadow_restored",
+      // Live-presence heartbeat (2026-05-15). Fired by /reserva every
+      // ~30s while the tab is visible; the telemetry handler relays it
+      // to services-presence so the staff dashboard's "Live now" tile
+      // sees a fresh row. No other side-effects, no entry in the funnel
+      // dashboard — pure presence signal.
+      "map_heartbeat",
     ]);
     if (!allowed.has(eventName)) {
       // Silent 204 — frontend telemetry must never break the user flow,
@@ -1442,6 +1452,30 @@ export async function handlePublicBookingsRoute(ctx) {
       });
     } catch {
       // Logging must never break the request.
+    }
+    // Live presence — write a 90s-TTL row keyed by sessionId so the
+    // staff dashboard's "Live now" tile can count active visitors. The
+    // event→stage map lives in services-presence; null means this
+    // event isn't a presence signal (skip the write). Failures are
+    // swallowed so telemetry never breaks the user flow.
+    try {
+      if (typeof recordPresence === "function") {
+        const stage = eventToPresenceStage(eventName);
+        const sid = String(body?.sessionId ?? "").trim();
+        if (stage && sid) {
+          await recordPresence({
+            sessionId: sid,
+            stage,
+            eventDate: String(body?.eventDate ?? "").trim() || null,
+            ip: getRemoteIp(event),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("presence_write_failed", {
+        event: eventName,
+        message: err?.message ?? String(err),
+      });
     }
     return json(204, {}, cors);
   }

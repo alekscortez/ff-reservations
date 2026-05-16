@@ -6,7 +6,27 @@ export async function handleAdminRoute(ctx) {
     cors,
     json,
     getGroupsFromEvent,
+    requireStaffOrAdmin,
+    listPresence,
   } = ctx;
+
+  // Live-visitor count for the staff dashboard "Live now" tile. Reads
+  // the PK="PRESENCE" rows that the telemetry handler writes; DDB TTL
+  // (90s) handles staleness.
+  if (method === "GET" && /^\/admin\/live-visitors\/?$/.test(path)) {
+    if (typeof requireStaffOrAdmin === "function") {
+      requireStaffOrAdmin(event);
+    }
+    if (typeof listPresence !== "function") {
+      return json(501, { message: "Live-visitors service unavailable" }, cors);
+    }
+    const snapshot = await listPresence();
+    return json(
+      200,
+      snapshot,
+      { ...cors, "cache-control": "no-store", pragma: "no-cache" }
+    );
+  }
 
   if (method === "GET" && /^\/admin\/whoami\/?$/.test(path)) {
     const claims = event?.requestContext?.authorizer?.jwt?.claims ?? {};

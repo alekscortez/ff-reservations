@@ -122,6 +122,14 @@ export class PublicAvailability implements OnInit, OnDestroy {
   private currentLoadSub: Subscription | null = null;
   private queryEventDate = '';
 
+  // Live-presence heartbeat. Every 30s while the tab is visible we fire
+  // `map_heartbeat` so the BE refreshes our 90s-TTL presence row and the
+  // staff dashboard's "Live now" tile keeps counting us. Paused on
+  // visibilitychange:hidden so backgrounded tabs don't inflate the
+  // visitor count.
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private visibilityHandler: (() => void) | null = null;
+
   ngOnInit(): void {
     this.titleService.setTitle('Famoso Fuego — Reservations');
     this.metaService.updateTag({
@@ -150,6 +158,8 @@ export class PublicAvailability implements OnInit, OnDestroy {
         this.queryEventDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
         this.loadAvailability(this.queryEventDate || undefined);
       });
+
+    this.startPresenceHeartbeat();
   }
 
   ngOnDestroy(): void {
@@ -157,6 +167,33 @@ export class PublicAvailability implements OnInit, OnDestroy {
     this.pollSub = null;
     this.currentLoadSub?.unsubscribe();
     this.currentLoadSub = null;
+    this.stopPresenceHeartbeat();
+  }
+
+  private startPresenceHeartbeat(): void {
+    if (typeof window === 'undefined') return;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      this.telemetry.fire('map_heartbeat');
+    };
+    this.heartbeatTimer = setInterval(tick, 30_000);
+    this.visibilityHandler = () => {
+      if (typeof document !== 'undefined' && !document.hidden) tick();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+    }
+  }
+
+  private stopPresenceHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+    }
+    this.visibilityHandler = null;
   }
 
   onEventDateChange(value: string): void {
