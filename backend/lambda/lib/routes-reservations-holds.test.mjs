@@ -154,6 +154,9 @@ function makeCtx(overrides = {}) {
         calls.getEventByDate.push(date);
         return overrides.event !== undefined ? overrides.event : null;
       },
+      listEvents: async () => overrides.events ?? [],
+      resolveBusinessDate: async () =>
+        overrides.businessCtx ?? { businessDate: "2026-05-16" },
     },
   };
 }
@@ -365,6 +368,125 @@ describe("GET /reservations", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.items.length, 1);
     assert.deepEqual(calls.releaseOverdueReservationsForEventDate, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /reservations/recent
+// ---------------------------------------------------------------------------
+
+describe("GET /reservations/recent", () => {
+  it("requireStaffOrAdmin first", async () => {
+    const denied = Object.assign(new Error("forbidden"), { statusCode: 403 });
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      requireStaffOrAdminThrows: denied,
+    });
+    await assert.rejects(() => handleReservationsAndHoldsRoute(ctx), { statusCode: 403 });
+  });
+
+  it("fans out across the next N ACTIVE events at/after the business date", async () => {
+    const reservationsByDate = {
+      "2026-05-16": [{ reservationId: "r1", eventDate: "2026-05-16" }],
+      "2026-05-23": [
+        { reservationId: "r2", eventDate: "2026-05-23" },
+        { reservationId: "r3", eventDate: "2026-05-23" },
+      ],
+      "2026-05-30": [{ reservationId: "r4", eventDate: "2026-05-30" }],
+    };
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      event: { queryStringParameters: { maxEvents: "3" } },
+      businessCtx: { businessDate: "2026-05-16" },
+      events: [
+        { eventDate: "2026-04-01", status: "ACTIVE" },
+        { eventDate: "2026-05-16", status: "ACTIVE" },
+        { eventDate: "2026-05-23", status: "INACTIVE" },
+        { eventDate: "2026-05-30", status: "ACTIVE" },
+        { eventDate: "2026-06-06", status: "ACTIVE" },
+        { eventDate: "2026-06-13", status: "ACTIVE" },
+      ],
+    });
+    // Wire per-date stub on top of the default reservations fixture so
+    // each fan-out call returns the right items.
+    ctx.listReservations = async (date) => {
+      calls.listReservations.push(date);
+      return reservationsByDate[date] ?? [];
+    };
+
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    // INACTIVE event skipped; past event skipped; capped at maxEvents=3.
+    assert.deepEqual(res.body.eventDates, ["2026-05-16", "2026-05-30", "2026-06-06"]);
+    // Each upcoming event got exactly one listReservations call.
+    assert.deepEqual(calls.listReservations, [
+      "2026-05-16",
+      "2026-05-30",
+      "2026-06-06",
+    ]);
+    assert.equal(res.body.items.length, 2); // r1 + r4 (r2/r3 skipped, no items for 06-06)
+    assert.ok(typeof res.body.asOfEpoch === "number");
+  });
+
+  it("never triggers the overdue release sweep", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      events: [{ eventDate: "2026-05-16", status: "ACTIVE" }],
+      reservations: [{ reservationId: "r1" }],
+    });
+    await handleReservationsAndHoldsRoute(ctx);
+    assert.deepEqual(calls.releaseOverdueReservationsForEventDate, []);
+  });
+
+  it("clamps maxEvents to [1,7] and limit to [1,200]", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      event: { queryStringParameters: { maxEvents: "999", limit: "0" } },
+      events: Array.from({ length: 10 }, (_, i) => ({
+        eventDate: `2026-06-${String(i + 1).padStart(2, "0")}`,
+        status: "ACTIVE",
+      })),
+      businessCtx: { businessDate: "2026-05-16" },
+      reservations: [{ reservationId: "r1" }],
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.eventDates.length, 7);
+    // limit=0 clamped to 1, so even though all 7 events returned r1 we keep one.
+    assert.equal(res.body.items.length, 1);
+  });
+
+  it("tolerates per-event listReservations failures", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      events: [
+        { eventDate: "2026-05-16", status: "ACTIVE" },
+        { eventDate: "2026-05-23", status: "ACTIVE" },
+      ],
+    });
+    ctx.listReservations = async (date) => {
+      if (date === "2026-05-16") throw new Error("ddb timeout");
+      return [{ reservationId: "r2", eventDate: date }];
+    };
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.items.length, 1);
+    assert.equal(res.body.items[0].reservationId, "r2");
+  });
+
+  it("500 when business date cannot be resolved", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/recent",
+      businessCtx: { businessDate: "" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 500);
   });
 });
 

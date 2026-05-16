@@ -12,7 +12,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideArrowRight, lucideChevronDown, lucideX } from '@ng-icons/lucide';
-import { forkJoin, Subscription } from 'rxjs';
+import { catchError, forkJoin, of, Subscription } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
 import {
@@ -124,6 +124,11 @@ export class Dashboard implements OnInit, OnDestroy {
 
   readonly tables = signal<TableForEvent[]>([]);
   readonly reservations = signal<ReservationItem[]>([]);
+  // Reservations from upcoming events behind Recent Activity. Distinct
+  // from `reservations` (single-event) so KPIs + Urgent Payments stay
+  // scoped to the active event while activity card clicks can still
+  // resolve a "next Saturday" reservation.
+  readonly recentReservationsById = signal<Record<string, ReservationItem>>({});
   readonly urgentPayments = signal<UrgentPaymentItem[]>([]);
   readonly recentActivity = signal<ActivityItem[]>([]);
 
@@ -296,15 +301,33 @@ export class Dashboard implements OnInit, OnDestroy {
     this.snapshotSub = forkJoin({
       tableData: this.tablesApi.getForEvent(eventDate),
       reservations: this.reservationsApi.list(eventDate),
+      // Recent Activity spans the next 3 upcoming events so that a booking
+      // for next Saturday surfaces even when today has an active event.
+      // KPIs + Urgent Payments stay scoped to the active event below.
+      // catchError → [] so a 404/5xx on /reservations/recent leaves the
+      // single-event snapshot intact instead of failing the whole page.
+      recentAcross: this.reservationsApi
+        .listRecentAcrossEvents({ maxEvents: 3, limit: 150 })
+        .pipe(catchError(() => of([] as ReservationItem[]))),
     }).subscribe({
-      next: ({ tableData, reservations }) => {
+      next: ({ tableData, reservations, recentAcross }) => {
         this.contextEvent.set(tableData.event ?? this.contextEvent());
         this.tables.set(tableData.tables ?? []);
         this.reservations.set(reservations ?? []);
         this.hydrateStoredPaymentLinks(this.reservations());
         this.kpis.set(this.computeKpis(this.tables()));
         this.urgentPayments.set(this.computeUrgentPayments(this.reservations()));
-        this.recentActivity.set(this.computeRecentActivity(this.reservations()));
+        // Prefer the multi-event roll-up. Fall back to single-event if the
+        // endpoint returned nothing (network blip, BE not yet deployed).
+        const activitySource = (recentAcross && recentAcross.length > 0)
+          ? recentAcross
+          : this.reservations();
+        const byId: Record<string, ReservationItem> = {};
+        for (const r of activitySource) {
+          if (r?.reservationId) byId[r.reservationId] = r;
+        }
+        this.recentReservationsById.set(byId);
+        this.recentActivity.set(this.computeRecentActivity(activitySource));
         this.loadingSnapshot.set(false);
       },
       error: (err) => {
@@ -332,6 +355,7 @@ export class Dashboard implements OnInit, OnDestroy {
   private clearSnapshot(): void {
     this.tables.set([]);
     this.reservations.set([]);
+    this.recentReservationsById.set({});
     this.urgentPayments.set([]);
     this.recentActivity.set([]);
     this.kpis.set({
@@ -454,7 +478,7 @@ export class Dashboard implements OnInit, OnDestroy {
       })
       .filter((x) => x.atEpoch > 0)
       .sort((a, b) => b.atEpoch - a.atEpoch)
-      .slice(0, 8);
+      .slice(0, 15);
   }
 
   private toDeadlineMs(deadlineAt?: string | null): number | null {
@@ -521,7 +545,12 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   openActivityDetails(activity: ActivityItem): void {
-    const item = this.reservations().find((reservation) => reservation.reservationId === activity.reservationId);
+    // Prefer the cross-event cache so a click on a "next Saturday"
+    // activity still opens the detail modal. Fall back to the single-event
+    // list for safety.
+    const item =
+      this.recentReservationsById()[activity.reservationId] ??
+      this.reservations().find((r) => r.reservationId === activity.reservationId);
     if (!item) return;
     this.openReservationDetails(item);
   }
@@ -543,6 +572,16 @@ export class Dashboard implements OnInit, OnDestroy {
     this.checkInPassError.set(null);
     this.checkInPassNotice.set(null);
     this.historyError.set(null);
+  }
+
+  takePaymentFromDetail(item: ReservationItem): void {
+    if (!this.canTakePayment(item)) return;
+    this.closeDetails();
+    this.openUrgentPayment({
+      reservation: item,
+      deadlineMs: this.toDeadlineMs(item.paymentDeadlineAt) ?? 0,
+      urgency: 'DUE_SOON',
+    });
   }
 
   openUrgentPayment(item: UrgentPaymentItem): void {

@@ -111,11 +111,11 @@
       </div>
 
       <div *ngIf="loadingSnapshot()" class="mt-3 text-sm text-brand-500">Updating…</div>
-      <div *ngIf="!loadingSnapshot() && urgentPayments.length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
+      <div *ngIf="!loadingSnapshot() && urgentPayments().length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
         No pending or partial reservations due soon.
       </div>
 
-      <div class="mt-3 grid gap-2" *ngIf="urgentPayments.length > 0">
+      <div class="mt-3 grid gap-2" *ngIf="urgentPayments().length > 0">
         <article
           *ngFor="let item of urgentPayments()"
           class="rounded-xl border px-3 py-2"
@@ -244,7 +244,7 @@
 
     <div *ngIf="loadingSnapshot()" class="mt-3 text-sm text-brand-500">Updating…</div>
     <div *ngIf="!loadingSnapshot() && recentActivity().length === 0" class="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-brand-600" aria-live="polite">
-      No recent reservation activity for this event.
+      No recent reservation activity across upcoming events.
     </div>
 
     <div class="mt-3 grid gap-2" *ngIf="recentActivity().length > 0">
@@ -290,6 +290,7 @@
     [historyError]="historyError()"
     [canCancel]="false"
     (close)="closeDetails()"
+    (takePayment)="takePaymentFromDetail(detail)"
     (generateSquareLink)="generatePaymentLink(detail)"
     (sendSms)="sendGeneratedLinkSms(detail)"
     (copyLink)="copyPaymentLink(detail)"
@@ -358,7 +359,7 @@
             formControlName="creditId"
             (change)="onPaymentCreditChanged()"
             hlmInput size="lg"
-            [disabled]="paymentCreditsLoading() || !paymentCredits.length"
+            [disabled]="paymentCreditsLoading() || !paymentCredits().length"
           >
             <option value="" disabled selected hidden>Select reservation credit</option>
             <option *ngFor="let credit of paymentCredits()" [value]="credit.creditId">
@@ -368,7 +369,7 @@
         </label>
         <p class="text-xs text-brand-600" *ngIf="paymentCreditsLoading()">Loading reservation credits…</p>
         <p class="text-xs text-danger-700" *ngIf="paymentCreditsError()">{{ paymentCreditsError() }}</p>
-        <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading() && paymentCredits.length">
+        <div class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700" *ngIf="!paymentCreditsLoading() && paymentCredits().length">
           <p>Credit applied now: ${{ creditAppliedAmount().toFixed(2) }}</p>
           <p *ngIf="creditRemainingAmount() > 0">Remaining after credit: ${{ creditRemainingAmount().toFixed(2) }}</p>
         </div>

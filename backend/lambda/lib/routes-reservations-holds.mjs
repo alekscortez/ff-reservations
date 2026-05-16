@@ -37,6 +37,8 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     cancelReservation,
     getRuntimeSettingsSubset,
     getEventByDate,
+    listEvents,
+    resolveBusinessDate,
     checkInPassBaseUrl,
   } = ctx;
 
@@ -417,6 +419,62 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       );
     }
     return json(200, { reservation }, cors);
+  }
+
+  if (method === "GET" && path === "/reservations/recent") {
+    requireStaffOrAdmin(event);
+    if (typeof listEvents !== "function" || typeof resolveBusinessDate !== "function") {
+      return json(500, { message: "Recent reservations endpoint is not configured" }, cors);
+    }
+    const maxEventsRaw = Number(event.queryStringParameters?.maxEvents ?? 3);
+    const maxEvents = Number.isFinite(maxEventsRaw)
+      ? Math.min(7, Math.max(1, Math.floor(maxEventsRaw)))
+      : 3;
+    const limitRaw = Number(event.queryStringParameters?.limit ?? 50);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(200, Math.max(1, Math.floor(limitRaw)))
+      : 50;
+
+    const businessCtx = await resolveBusinessDate();
+    const businessDate = String(businessCtx?.businessDate ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+      return json(500, { message: "Failed to resolve business date" }, cors);
+    }
+
+    const allEvents = (await listEvents()) ?? [];
+    const upcoming = allEvents
+      .filter(
+        (e) =>
+          String(e?.status ?? "").toUpperCase() === "ACTIVE" &&
+          /^\d{4}-\d{2}-\d{2}$/.test(String(e?.eventDate ?? "")) &&
+          String(e.eventDate) >= businessDate
+      )
+      .sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)))
+      .slice(0, maxEvents);
+
+    // Fan out per event. Failures on a single event don't poison the whole
+    // call — caller still gets partial results from the other events.
+    const eventDates = upcoming.map((e) => String(e.eventDate));
+    const perEvent = await Promise.all(
+      eventDates.map(async (date) => {
+        try {
+          const items = await listReservations(date);
+          return Array.isArray(items) ? items : [];
+        } catch {
+          return [];
+        }
+      })
+    );
+    const merged = perEvent.flat();
+    return json(
+      200,
+      {
+        items: merged.slice(0, limit),
+        eventDates,
+        asOfEpoch: Math.floor(Date.now() / 1000),
+      },
+      cors
+    );
   }
 
   if (method === "GET" && path === "/reservations") {

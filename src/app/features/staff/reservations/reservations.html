@@ -341,6 +341,7 @@
     [historyError]="historyError()"
     [canCancel]="true"
     (close)="closeDetails()"
+    (takePayment)="takePaymentFromDetail(detail)"
     (generateSquareLink)="generatePaymentLink(detail)"
     (sendSms)="sendGeneratedLinkSms(detail)"
     (copyLink)="copyPaymentLink(detail)"

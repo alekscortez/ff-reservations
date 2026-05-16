@@ -130,7 +130,7 @@ export class Reservations implements OnInit, OnDestroy {
   readonly error = signal<string | null>(null);
 
   private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
-  readonly sorting = signal<SortingState>([{ id: 'tableId', desc: false }]);
+  readonly sorting = signal<SortingState>([{ id: 'updated', desc: true }]);
   readonly pagination = signal<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE });
   readonly columnVisibility = signal<VisibilityState>({});
 
@@ -439,15 +439,12 @@ export class Reservations implements OnInit, OnDestroy {
     this.error.set(null);
     this.reservationsApi.list(date).subscribe({
       next: (items) => {
-        const sorted = [...items].sort((a, b) =>
-          (a.tableId || '').localeCompare(b.tableId || '', undefined, {
-            numeric: true,
-            sensitivity: 'base',
-          })
-        );
-        this.items.set(sorted);
+        // TanStack applies `sorting` (now defaulting to updated DESC).
+        // No need to pre-sort here.
+        const next = items ?? [];
+        this.items.set(next);
         this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
-        this.hydrateStoredPaymentLinks(sorted);
+        this.hydrateStoredPaymentLinks(next);
         this.loading.set(false);
       },
       error: (err) => {
@@ -892,6 +889,12 @@ export class Reservations implements OnInit, OnDestroy {
       return;
     }
     this.copyCheckInPassLink(item);
+  }
+
+  takePaymentFromDetail(item: ReservationItem): void {
+    if (!this.canTakePayment(item)) return;
+    this.closeDetails();
+    this.openPayment(item);
   }
 
   openPayment(item: ReservationItem): void {

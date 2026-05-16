@@ -968,6 +968,8 @@ export const handler = async (event) => {
       getRuntimeSettingsSubset: async () =>
         settingsService.runtimeSettingsSubset(await settingsService.getAppSettings()),
       getEventByDate: eventsService.getEventByDate,
+      listEvents: eventsService.listEvents,
+      resolveBusinessDate: settingsService.resolveBusinessDate,
       checkInPassBaseUrl: CHECKIN_PASS_BASE_URL,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;

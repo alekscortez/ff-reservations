@@ -45,6 +45,7 @@ function makeReservation(overrides: Partial<ReservationItem> = {}): ReservationI
       [historyLoading]="historyLoading"
       [canCancel]="canCancel"
       (close)="onClose()"
+      (takePayment)="onTakePayment()"
       (generateSquareLink)="onGenerateSquare()"
       (sendSms)="onSendSms()"
       (copyLink)="onCopyLink()"
@@ -66,6 +67,7 @@ class Host {
   canCancel = true;
 
   closeCount = 0;
+  takePaymentCount = 0;
   generateSquareCount = 0;
   sendSmsCount = 0;
   copyLinkCount = 0;
@@ -73,6 +75,7 @@ class Host {
   cancelCount = 0;
 
   onClose() { this.closeCount += 1; }
+  onTakePayment() { this.takePaymentCount += 1; }
   onGenerateSquare() { this.generateSquareCount += 1; }
   onSendSms() { this.sendSmsCount += 1; }
   onCopyLink() { this.copyLinkCount += 1; }
@@ -108,7 +111,7 @@ describe('ReservationDetailModal', () => {
     expect(text).toContain('CONFIRMED');
     expect(text).toContain('PARTIAL');
     expect(text).toContain('Overview');
-    expect(text).toContain('Links');
+    expect(text).toContain('Payment');
     expect(text).toContain('Pass');
     expect(text).toContain('Activity');
   });
@@ -132,9 +135,9 @@ describe('ReservationDetailModal', () => {
     expect(text).not.toContain('Cancel Reservation');
   });
 
-  it('switching to Links tab reveals the generate button', () => {
+  it('switching to Payment tab reveals the generate button', () => {
     const f = createHost();
-    tabButton(f, 'Links')!.click();
+    tabButton(f, 'Payment')!.click();
     f.detectChanges();
     const text = f.nativeElement.textContent ?? '';
     expect(text).toContain('Generate Square Link');
@@ -144,7 +147,7 @@ describe('ReservationDetailModal', () => {
 
   it('emits generateSquareLink when Square button is clicked', () => {
     const f = createHost();
-    tabButton(f, 'Links')!.click();
+    tabButton(f, 'Payment')!.click();
     f.detectChanges();
     const buttons = Array.from(
       f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
@@ -163,7 +166,7 @@ describe('ReservationDetailModal', () => {
         createdAtMs: Date.now(),
       },
     });
-    tabButton(f, 'Links')!.click();
+    tabButton(f, 'Payment')!.click();
     f.detectChanges();
     const buttons = Array.from(
       f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
@@ -196,6 +199,52 @@ describe('ReservationDetailModal', () => {
     ) as HTMLButtonElement;
     closeBtn.click();
     expect(f.componentInstance.closeCount).toBe(1);
+  });
+
+  it('shows a prominent Take Payment button above the tabs when payment is takeable', () => {
+    // Fixture: amountDue=250 with depositAmount=100 → remaining=150 > 0.
+    const f = createHost({
+      reservation: makeReservation({ amountDue: 250, depositAmount: 100 }),
+    });
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const takeBtn = buttons.find((b) => (b.textContent ?? '').includes('Take Payment'));
+    expect(takeBtn).toBeTruthy();
+    // Sits above the tab nav (panel === null → not inside a tabpanel).
+    expect(takeBtn!.closest('[role="tabpanel"]')).toBeNull();
+    // Label shows the remaining balance to staff at a glance.
+    expect((takeBtn!.textContent ?? '')).toContain('150.00');
+  });
+
+  it('Take Payment button is hidden when reservation is fully paid', () => {
+    const f = createHost({
+      reservation: makeReservation({ paymentStatus: 'PAID', depositAmount: 250 }),
+    });
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const takeBtn = buttons.find(
+      (b) => (b.textContent ?? '').trim().startsWith('Take Payment'),
+    );
+    expect(takeBtn).toBeUndefined();
+  });
+
+  it('emits takePayment when the prominent Take Payment button is clicked', () => {
+    // Fixture: amountDue=250 with depositAmount=100 → remaining=150 > 0.
+    const f = createHost({
+      reservation: makeReservation({ amountDue: 250, depositAmount: 100 }),
+    });
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const takeBtn = buttons.find(
+      (b) => (b.textContent ?? '').includes('Take Payment') &&
+             b.closest('[role="tabpanel"]') === null,
+    );
+    expect(takeBtn).toBeTruthy();
+    takeBtn!.click();
+    expect(f.componentInstance.takePaymentCount).toBe(1);
   });
 
   it('history tab renders "No history yet" when history is empty + not loading', () => {

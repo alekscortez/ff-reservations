@@ -76,6 +76,7 @@ export class ReservationDetailModal {
   @Input() canCancel = true;
 
   @Output() close = new EventEmitter<void>();
+  @Output() takePayment = new EventEmitter<void>();
   @Output() generateSquareLink = new EventEmitter<void>();
   @Output() sendSms = new EventEmitter<void>();
   @Output() copyLink = new EventEmitter<void>();
@@ -98,6 +99,12 @@ export class ReservationDetailModal {
       item.paymentStatus !== 'COURTESY' &&
       !this.isPastEvent(item)
     );
+  }
+
+  remainingAmount(item: ReservationItem): number {
+    const due = Number(item.amountDue ?? 0);
+    const paid = Number(item.depositAmount ?? 0);
+    return Math.max(0, Number((due - paid).toFixed(2)));
   }
 
   canManageCheckInPass(item: ReservationItem): boolean {

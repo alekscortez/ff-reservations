@@ -58,6 +58,7 @@ describe('Dashboard', () => {
           provide: ReservationsService,
           useValue: {
             list: () => of([]),
+            listRecentAcrossEvents: () => of([]),
             addPayment: () =>
               of({
                 item: {

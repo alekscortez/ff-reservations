@@ -138,6 +138,22 @@ export class ReservationsService {
       .pipe(map((res) => res.items ?? []));
   }
 
+  // Multi-event fan-out for the staff dashboard's Recent Activity card.
+  // Backend fans out across the next `maxEvents` upcoming ACTIVE events
+  // (from the business date), so bookings for next Saturday show up
+  // even when today has an active event.
+  listRecentAcrossEvents(opts?: { maxEvents?: number; limit?: number }) {
+    const params: Record<string, string> = {};
+    if (opts?.maxEvents) params['maxEvents'] = String(opts.maxEvents);
+    if (opts?.limit) params['limit'] = String(opts.limit);
+    return this.api
+      .get<{ items: ReservationItem[]; eventDates: string[]; asOfEpoch: number }>(
+        '/reservations/recent',
+        params,
+      )
+      .pipe(map((res) => res.items ?? []));
+  }
+
   // Staff lookup by 6-char confirmation code (FF-XXXXXX). Caller can
   // pass the code with or without the "FF-" prefix; backend strips it.
   // Returns the full reservation row so the caller can switch the

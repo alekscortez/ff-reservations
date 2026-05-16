@@ -47,6 +47,16 @@
     </article>
   </div>
 
+  <div class="mt-3" *ngIf="canGeneratePaymentLink(reservation) && remainingAmount(reservation) > 0">
+    <button
+      type="button"
+      hlmBtn size="lg" class="w-full justify-center"
+      (click)="takePayment.emit()"
+    >
+      Take Payment · ${{ remainingAmount(reservation) | number:'1.2-2' }} remaining
+    </button>
+  </div>
+
   <nav class="mt-4 flex flex-wrap gap-1 rounded-lg border border-brand-200 bg-brand-50 p-1" role="tablist">
     <button
       type="button"
@@ -72,7 +82,7 @@
       [attr.aria-selected]="tab() === 'links'"
       (click)="tab.set('links')"
     >
-      Links
+      Payment
     </button>
     <button
       type="button"
@@ -160,7 +170,7 @@
     <article class="rounded-xl border border-brand-100 p-3" *ngIf="canGeneratePaymentLink(reservation)">
       <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Square Payment Link</p>
       <p class="mt-1 text-xs text-brand-600">
-        For in-venue Cash App payments, open the payment modal on the reservation row and pick "Cash App Pay" to show the QR.
+        Send the customer a link they can pay on their own phone. For in-person payment, use the "Take Payment" button above.
       </p>
       <div class="mt-2 flex flex-wrap gap-2">
         <button
