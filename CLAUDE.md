@@ -44,6 +44,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 ```
 src/app/                            # core/ (auth/config/layout/http/guards/payments), features/ (public,staff,admin lazy), shared/ (components, ui/ primitives, models)
                                     # shared/components/reservation-detail-modal/ — 4-tab modal shared by Dashboard + staff Reservations
+                                    # shared/components/cash-app-qr-pad/      — Square Web Payments SDK wrapper for in-venue Cash App; auto-opens overlay on mount
 
 backend/lambda/
   index.mjs                         # entry, auth helpers, CORS, router, EventBridge dispatch
@@ -186,7 +187,7 @@ Frontend config: `src/app/core/config/app-config.ts` hardcodes `apiBaseUrl: http
 - **Reservation backend** → see Repo layout 5-module split. Read TransactWrite + ConditionExpression patterns before new writes.
 - **`financials.ts`** → 6 pure reducers, 23 specs lock invariants. Calls `list(date, { suppressRelease: true })` — keep that flag. [[financials_reducer_invariants]]
 - **`/admin/settings`** → collapsible sections in 3 tiers (often/occasional/rare); Branding section below the form. OnPush + `FIELD_HINTS`; `joinHm`/`splitHm` bridge HH:MM ↔ hour+minute; HIGH_IMPACT_LABELS bulleted confirm; copy plain-language ([[feedback_admin_copy_plain_language]]).
-- **Payments** → `services-square-payments.mjs` + `routes-square-webhooks.mjs`. Staff/customer routes share `autoRefundAfterRecordFailure` (idempotency-keyed). Push notifs fire from `addReservationPayment`. Cash App is **in-venue only** via `<cash-app-qr-pad>` (staff modal → Web Payments SDK → customer scans → tokenize → `/reservations/{id}/payments`). No customer-facing Cash App link / SMS / `/cashapp/session*` route. [[cashapp_in_venue_only_2026_05_16]]
+- **Payments** → `services-square-payments.mjs` + `routes-square-webhooks.mjs`. Staff/customer routes share `autoRefundAfterRecordFailure` (idempotency-keyed). Push notifs fire from `addReservationPayment`. Cash App is **in-venue only** via `<cash-app-qr-pad>` (staff modal → Web Payments SDK → customer scans → tokenize → `/reservations/{id}/payments`). SDK only renders a "Cash App Pay" pill button; the pad auto-`click()`s it after mount so Square's QR overlay opens in one staff gesture. No customer-facing Cash App link / SMS / `/cashapp/session*` route. Wizard flow: closing the reservations-new modal mid-Cash-App stashes the reservation in a `pendingCashAppPayment` signal → yellow banner above the map with Resume / Cancel reservation (the latter fires `CANCEL_NO_REFUND`). [[cashapp_in_venue_only_2026_05_16]]
 - **SMS** → 3 pure builders in `services-sms-notifications-pure.mjs` (all `BRAND_PREFIX`); SNS today, EUM post-TFN [[sms_migrate_to_eum_after_approval]]. Customer OTP separate in `cognito-customer-auth/index.mjs` — touch BOTH. Kill-switch `smsEnabled` (transactional only).
 - **Apple Wallet `.pkpass`** → `services-wallet-pass.mjs`; certs in `WALLET_PASS_SECRET_ARN`. `pass.type="generic"`; QR is `ffr-checkin:{64-hex token}` (never the 6-char code); `barcode.altText = FF-{code}`. Installed passes don't auto-refresh.
 - **Customer self-service (`/me/*`)** → `routes-me.mjs`. Self-cancel ≥24h forces `RESCHEDULE_CREDIT`. Customer payment routes must NOT pass `source: "customer"` — omit, default `square-direct`.

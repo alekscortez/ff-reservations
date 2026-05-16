@@ -32,7 +32,7 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 - `POST /reservations` is idempotent on `holdId` (safe to retry on network failure).
 - Staff payment collection with `cash`, `square`, `cashapp`, and reschedule credit usage.
 - Square payment links + webhook reconciliation.
-- Cash App self-service payment via short-lived public link (256-bit token).
+- In-venue Cash App via Square Web Payments SDK: staff opens the host-stand iPad, the customer scans the QR with their Cash App, payment posts to Square + the reservation in one shot. No Cash App link is ever sent to the customer.
 - Cancellation resolutions: `CANCEL_NO_REFUND`, `RESCHEDULE_CREDIT`, `REFUND` (REFUND issues actual Square refunds for paid Square/Cash App entries).
 - SMS for payment links, check-in pass, and expired-link notices (with `Reply STOP to opt out.` per 10DLC compliance).
 - Check-in pass issue/reissue + one-time QR validation.
