@@ -12,7 +12,7 @@ import {
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideArrowRight, lucideX } from '@ng-icons/lucide';
+import { lucideArrowRight, lucideChevronDown, lucideX } from '@ng-icons/lucide';
 import { forkJoin, Subscription } from 'rxjs';
 import { EventsService } from '../../../core/http/events.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
@@ -43,6 +43,12 @@ import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmBadge, type BadgeVariants } from '../../../shared/ui/badge';
 import { HlmInput } from '../../../shared/ui/input';
+import {
+  HlmPopover,
+  HlmPopoverContent,
+  HlmPopoverContentHost,
+  HlmPopoverTrigger,
+} from '../../../shared/ui/popover';
 import { ReservationDetailModal } from '../../../shared/components/reservation-detail-modal/reservation-detail-modal';
 import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
 
@@ -86,9 +92,13 @@ interface ActivityItem {
     HlmButton,
     HlmBadge,
     HlmInput,
+    HlmPopover,
+    HlmPopoverContent,
+    HlmPopoverContentHost,
+    HlmPopoverTrigger,
     ReservationDetailModal,
   ],
-  providers: [provideIcons({ lucideArrowRight, lucideX })],
+  providers: [provideIcons({ lucideArrowRight, lucideChevronDown, lucideX })],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
