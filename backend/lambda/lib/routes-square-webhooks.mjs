@@ -49,6 +49,13 @@ export async function handleSquareWebhookRoute(ctx) {
     // {reservationId, eventDate}. When missing, the new note format
     // gracefully degrades to `ignored: code_lookup_unavailable`.
     lookupReservationByConfirmationCode,
+    // Optional: after a webhook successfully records a payment we look
+    // up the reservation to decide whether to fire the Meta CAPI
+    // Purchase event. Both deps are optional — when missing, the
+    // Purchase event isn't fired.
+    getReservationById,
+    metaCapi,
+    publicBookingReturnBaseUrl,
   } = ctx;
 
   if (method === "GET" && /^\/admin\/square\/webhook-health\/?$/.test(path)) {
@@ -93,6 +100,74 @@ export async function handleSquareWebhookRoute(ctx) {
       reason: String(result?.reason ?? "").trim() || null,
     };
     console.info("square_webhook_audit", audit);
+    // Meta CAPI Purchase. Fires when a payment successfully lands on a
+    // PAID reservation. Dedupe key = `purchase_${reservationId}` so
+    // duplicate webhook fires (or replays) produce the same event_id
+    // and Meta deduplicates on its side. user_data is populated from
+    // the reservation row: hashed phone + email (Layer 1 advanced
+    // matching) + the attribution.fbc/fbp captured at first-touch.
+    // Failures are swallowed — CAPI must never block a webhook 200.
+    try {
+      if (
+        result?.processed &&
+        result?.reservationId &&
+        result?.eventDate &&
+        metaCapi &&
+        typeof metaCapi.isEnabled === "function" &&
+        metaCapi.isEnabled() &&
+        typeof getReservationById === "function"
+      ) {
+        const reservation = await getReservationById(
+          result.eventDate,
+          result.reservationId
+        );
+        const paymentStatus = String(reservation?.paymentStatus ?? "").toUpperCase();
+        const status = String(reservation?.status ?? "").toUpperCase();
+        if (paymentStatus === "PAID" && status !== "CANCELLED") {
+          const attribution =
+            reservation?.attribution && typeof reservation.attribution === "object"
+              ? reservation.attribution
+              : null;
+          // Synthesize fbc from the first-touch fbclid we captured if
+          // the FE didn't manage to read the _fbc cookie at booking time.
+          // Format per Meta spec: fb.{subdomain_idx}.{first_touch_ms}.{fbclid}
+          // For famosofuego.com subdomain_idx = 1 (eTLD+1).
+          let fbc = null;
+          if (attribution?.fbc) {
+            fbc = String(attribution.fbc);
+          } else if (attribution?.fbclid && attribution?.firstTouchAt) {
+            fbc = `fb.1.${attribution.firstTouchAt}.${attribution.fbclid}`;
+          }
+          const eventSourceUrl = publicBookingReturnBaseUrl
+            ? `${String(publicBookingReturnBaseUrl).replace(/\/+$/, "")}/r/${encodeURIComponent(
+                reservation.reservationId
+              )}`
+            : null;
+          await metaCapi.trackPurchase({
+            eventId: `purchase_${reservation.reservationId}`,
+            eventSourceUrl,
+            userData: {
+              email: reservation?.customerEmail ?? null,
+              phone: reservation?.phone ?? null,
+              fbc,
+              fbp: attribution?.fbp ?? null,
+              externalId: reservation.reservationId,
+            },
+            value: Number(reservation?.depositAmount ?? 0),
+            currency: "USD",
+            orderId: reservation.reservationId,
+            contentIds: Array.isArray(reservation?.tableIds)
+              ? reservation.tableIds.map((id) => `table_${id}`)
+              : undefined,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("meta_capi_purchase_failed", {
+        reservationId: result?.reservationId ?? null,
+        message: err?.message ?? String(err),
+      });
+    }
     return json(200, { ok: true, audit, ...result });
   }
 

@@ -266,6 +266,10 @@ export async function handlePublicBookingsRoute(ctx) {
     // Analytics visit counter (services-analytics.recordVisit). Optional —
     // only invoked from the telemetry handler on `map_loaded`.
     recordAnalyticsVisit,
+    // Meta Conversions API service. Server-side mirror of the browser
+    // Pixel — fires ViewContent + InitiateCheckout when configured. The
+    // service itself no-ops when env vars aren't set.
+    metaCapi,
   } = ctx;
 
   // /p/{slug} short URL base — see destructure comment. Falls back twice:
@@ -1506,6 +1510,12 @@ export async function handlePublicBookingsRoute(ctx) {
       console.info("frontend_funnel_event", {
         event: eventName,
         sessionId: String(body?.sessionId ?? "").trim() || null,
+        // CAPI event_id propagated from the Pixel so Meta dedupes the
+        // browser + server events. Null when the FE didn't mint one
+        // (events that aren't ViewContent / InitiateCheckout). Lives in
+        // `extra` for transit because the public telemetry payload
+        // shape doesn't have a top-level eventId field.
+        eventId: String(body?.extra?.eventId ?? "").trim() || null,
         eventDate: String(body?.eventDate ?? "").trim() || null,
         reservationId: String(body?.reservationId ?? "").trim() || null,
         confirmationCode: String(body?.confirmationCode ?? "").trim() || null,
@@ -1562,6 +1572,48 @@ export async function handlePublicBookingsRoute(ctx) {
       }
     } catch (err) {
       console.warn("analytics_visit_write_failed", {
+        event: eventName,
+        message: err?.message ?? String(err),
+      });
+    }
+    // Meta CAPI — server-side mirror of the browser Pixel for
+    // map_loaded (ViewContent) and modal_redirect_to_square
+    // (InitiateCheckout). event_id MUST match what the FE Pixel sent
+    // for dedup; the FE generates it once per funnel event and passes
+    // via body.eventId. fbc/fbp come from cookies the Pixel sets — FE
+    // reads them, attaches to extras. No-op when Pixel isn't
+    // configured. Failures are swallowed.
+    try {
+      if (metaCapi && typeof metaCapi.isEnabled === "function" && metaCapi.isEnabled()) {
+        const extraIn = body?.extra ?? {};
+        const capiEventId = String(extraIn?.eventId ?? "").trim();
+        const fbc = String(extraIn?.fbc ?? "").trim() || null;
+        const fbp = String(extraIn?.fbp ?? "").trim() || null;
+        const userData = {
+          fbc,
+          fbp,
+          clientIp: getRemoteIp(event),
+          clientUserAgent: String(event?.headers?.["user-agent"] ?? "").slice(0, 1000),
+        };
+        const eventSourceUrl = String(extraIn?.pageUrl ?? "").trim() || null;
+        if (capiEventId && eventName === "map_loaded") {
+          await metaCapi.trackViewContent({
+            eventId: capiEventId,
+            eventSourceUrl,
+            userData,
+          });
+        } else if (capiEventId && eventName === "modal_redirect_to_square") {
+          const value = Number(extraIn?.value);
+          await metaCapi.trackInitiateCheckout({
+            eventId: capiEventId,
+            eventSourceUrl,
+            userData,
+            value: Number.isFinite(value) && value > 0 ? value : undefined,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("meta_capi_failed", {
         event: eventName,
         message: err?.message ?? String(err),
       });

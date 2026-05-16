@@ -17,6 +17,7 @@ import {
 } from '../../../core/http/public-bookings.service';
 import { TelemetryService } from '../../../core/http/telemetry.service';
 import { captureAttribution } from '../../../core/analytics/attribution';
+import { MetaPixelService } from '../../../core/analytics/meta-pixel.service';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { TableForEvent } from '../../../shared/models/table.model';
 import { HlmAlert } from '../../../shared/ui/alert';
@@ -61,6 +62,7 @@ export class PublicAvailability implements OnInit, OnDestroy {
   private api = inject(PublicAvailabilityService);
   private bookings = inject(PublicBookingsService);
   private telemetry = inject(TelemetryService);
+  private pixel = inject(MetaPixelService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
@@ -143,7 +145,26 @@ export class PublicAvailability implements OnInit, OnDestroy {
     // bookings carry the original source. No-op if already snapshotted
     // on a prior visit (first-touch wins).
     captureAttribution();
-    this.telemetry.fire('map_loaded');
+    // Meta Pixel init + ViewContent. Generate a UUID we'll forward to
+    // the BE for CAPI dedup — Pixel + CAPI server event keyed on the
+    // same eventID become a single attributed event in Meta's funnel.
+    // Pixel/CAPI both no-op when Pixel ID is unconfigured.
+    this.pixel.init();
+    const viewContentEventId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `vc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.pixel.trackViewContent(viewContentEventId);
+    const { fbp, fbc } = this.pixel.readMatchingCookies();
+    this.telemetry.fire('map_loaded', {
+      extra: {
+        eventId: viewContentEventId,
+        fbp,
+        fbc,
+        pageUrl:
+          typeof window !== 'undefined' ? window.location.href : undefined,
+      } as Record<string, unknown>,
+    });
     // Hydrate any pending hold from a previous session; if its TTL has
     // already passed, drop it on the floor.
     const stored = readPendingHold();
@@ -318,10 +339,31 @@ export class PublicAvailability implements OnInit, OnDestroy {
     this.pendingHold.set(hold);
     this.modalOpen.set(false);
     this.selectedIds.set([]);
+    // Meta Pixel InitiateCheckout — generate a UUID and fire to both
+    // Pixel + BE CAPI (the BE telemetry handler relays via eventID
+    // from extra). Same dedup contract as ViewContent.
+    const checkoutEventId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `ic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const checkoutValue = Number(event.response.amountDue ?? 0);
+    this.pixel.trackInitiateCheckout(
+      checkoutEventId,
+      Number.isFinite(checkoutValue) && checkoutValue > 0 ? checkoutValue : null
+    );
+    const { fbp, fbc } = this.pixel.readMatchingCookies();
     this.telemetry.fire('modal_redirect_to_square', {
       eventDate: event.eventDate,
       reservationId: event.response.reservationId,
       confirmationCode: event.response.confirmationCode,
+      extra: {
+        eventId: checkoutEventId,
+        fbp,
+        fbc,
+        value: Number.isFinite(checkoutValue) ? checkoutValue : undefined,
+        pageUrl:
+          typeof window !== 'undefined' ? window.location.href : undefined,
+      } as Record<string, unknown>,
     });
     // Redirect to Square hosted checkout. Customer returns via Square's
     // configured redirect URL → /r/{id}?t=... per backend setting.

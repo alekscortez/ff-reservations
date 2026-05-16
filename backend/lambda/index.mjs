@@ -69,6 +69,7 @@ import { createTurnstileService } from "./lib/services-turnstile.mjs";
 import { createAnonBookingsService } from "./lib/services-anon-bookings.mjs";
 import { createPresenceService } from "./lib/services-presence.mjs";
 import { createAnalyticsService } from "./lib/services-analytics.mjs";
+import { createMetaCapiService } from "./lib/services-meta-capi.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -453,6 +454,16 @@ const analyticsService = createAnalyticsService({
   httpError,
 });
 
+// Meta Conversions API. No-ops gracefully when META_PIXEL_ID +
+// META_CAPI_TOKEN_SECRET_ARN aren't set, so the lambda can ship before
+// the user configures the Pixel in Events Manager. Token is fetched
+// from Secrets Manager via secretClient.
+const metaCapiService = createMetaCapiService({
+  env: process.env,
+  secretClient: secretsManager,
+  nowEpoch,
+});
+
 const usersService = createUsersService({
   cognito,
   userPoolId: USER_POOL_ID,
@@ -692,6 +703,9 @@ export const handler = async (event) => {
       publicBookingShortUrlBase: PUBLIC_BOOKING_SHORT_URL_BASE,
       recordPresence: presenceService.recordPresence,
       recordAnalyticsVisit: analyticsService.recordVisit,
+      // Meta CAPI hooks — no-ops when META_PIXEL_ID isn't set, so we
+      // can ship without configuration and turn on later.
+      metaCapi: metaCapiService,
     });
     if (publicBookingsResponse) return publicBookingsResponse;
 
@@ -874,6 +888,9 @@ export const handler = async (event) => {
       addReservationPayment: reservationsHoldsService.addReservationPayment,
       lookupReservationByConfirmationCode:
         reservationsHoldsService.lookupReservationByConfirmationCode,
+      getReservationById: reservationsHoldsService.getReservationById,
+      metaCapi: metaCapiService,
+      publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
     });
     if (squareWebhookRouteResponse) return squareWebhookRouteResponse;
 

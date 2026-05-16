@@ -8,6 +8,11 @@ export const APP_CONFIG = {
     redirectPath: '/auth/callback',
     postLogoutPath: '/login',
   },
+  // Meta Pixel ID from Events Manager. Empty = Pixel disabled entirely
+  // (FE service no-ops, no fbevents.js loaded). The matching BE env
+  // vars `META_PIXEL_ID` + `META_CAPI_TOKEN_SECRET_ARN` gate the CAPI
+  // mirror — both halves can be configured independently.
+  metaPixelId: '',
 } as const;
 
 export function buildRedirectUrl(path: string): string {
