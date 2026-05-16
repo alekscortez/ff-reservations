@@ -68,6 +68,7 @@ import { handlePublicBookingsRoute } from "./lib/routes-public-bookings.mjs";
 import { createTurnstileService } from "./lib/services-turnstile.mjs";
 import { createAnonBookingsService } from "./lib/services-anon-bookings.mjs";
 import { createPresenceService } from "./lib/services-presence.mjs";
+import { createAnalyticsService } from "./lib/services-analytics.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -445,6 +446,13 @@ const presenceService = createPresenceService({
   httpError,
 });
 
+const analyticsService = createAnalyticsService({
+  ddb,
+  tableNames: { HOLDS_TABLE, RES_TABLE },
+  nowEpoch,
+  httpError,
+});
+
 const usersService = createUsersService({
   cognito,
   userPoolId: USER_POOL_ID,
@@ -683,6 +691,7 @@ export const handler = async (event) => {
       publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
       publicBookingShortUrlBase: PUBLIC_BOOKING_SHORT_URL_BASE,
       recordPresence: presenceService.recordPresence,
+      recordAnalyticsVisit: analyticsService.recordVisit,
     });
     if (publicBookingsResponse) return publicBookingsResponse;
 
@@ -738,7 +747,9 @@ export const handler = async (event) => {
       json,
       getGroupsFromEvent,
       requireStaffOrAdmin,
+      requireAdmin,
       listPresence: presenceService.listPresence,
+      getAnalyticsSummary: analyticsService.getAnalyticsSummary,
     });
     if (adminRouteResponse) return adminRouteResponse;
 

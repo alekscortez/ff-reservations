@@ -263,6 +263,9 @@ export async function handlePublicBookingsRoute(ctx) {
     // Live-presence writer (services-presence.recordPresence). Optional —
     // omitted in tests; the telemetry handler skips the write when null.
     recordPresence,
+    // Analytics visit counter (services-analytics.recordVisit). Optional —
+    // only invoked from the telemetry handler on `map_loaded`.
+    recordAnalyticsVisit,
   } = ctx;
 
   // /p/{slug} short URL base — see destructure comment. Falls back twice:
@@ -1542,6 +1545,23 @@ export async function handlePublicBookingsRoute(ctx) {
       }
     } catch (err) {
       console.warn("presence_write_failed", {
+        event: eventName,
+        message: err?.message ?? String(err),
+      });
+    }
+    // Analytics visit counter — ADD-increment a daily counter row in
+    // DDB so the /admin/analytics dashboard can read O(1) visit counts
+    // per UTM source without a CloudWatch Insights query. Only fires
+    // on the funnel-entry event (map_loaded); heartbeats and downstream
+    // funnel steps aren't "visits".
+    try {
+      if (typeof recordAnalyticsVisit === "function" && eventName === "map_loaded") {
+        const utmSource =
+          sanitizeAttribution(body?.extra?.attribution)?.utm_source ?? null;
+        await recordAnalyticsVisit({ utmSource });
+      }
+    } catch (err) {
+      console.warn("analytics_visit_write_failed", {
         event: eventName,
         message: err?.message ?? String(err),
       });

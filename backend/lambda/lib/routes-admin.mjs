@@ -7,7 +7,9 @@ export async function handleAdminRoute(ctx) {
     json,
     getGroupsFromEvent,
     requireStaffOrAdmin,
+    requireAdmin,
     listPresence,
+    getAnalyticsSummary,
   } = ctx;
 
   // Live-visitor count for the staff dashboard "Live now" tile. Reads
@@ -24,6 +26,36 @@ export async function handleAdminRoute(ctx) {
     return json(
       200,
       snapshot,
+      { ...cors, "cache-control": "no-store", pragma: "no-cache" }
+    );
+  }
+
+  // Marketing analytics summary for /admin/analytics (Layer 2). Returns
+  // per-source visits + bookings + revenue + conversion for the
+  // requested date window. Admin-only — financials data is sensitive.
+  if (method === "GET" && /^\/admin\/analytics\/?$/.test(path)) {
+    if (typeof requireAdmin === "function") {
+      requireAdmin(event);
+    }
+    if (typeof getAnalyticsSummary !== "function") {
+      return json(501, { message: "Analytics service unavailable" }, cors);
+    }
+    const q = event?.queryStringParameters ?? {};
+    const today = new Date().toISOString().slice(0, 10);
+    // Default: last 7 days inclusive of today.
+    const defaultStart = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(q.startDate ?? ""))
+      ? String(q.startDate)
+      : defaultStart;
+    const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(q.endDate ?? ""))
+      ? String(q.endDate)
+      : today;
+    const summary = await getAnalyticsSummary({ startDate, endDate });
+    return json(
+      200,
+      summary,
       { ...cors, "cache-control": "no-store", pragma: "no-cache" }
     );
   }

@@ -5,6 +5,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideCalendarDays,
+  lucideChartBar,
   lucideChevronsUpDown,
   lucideLayoutDashboard,
   lucideLogOut,
@@ -100,6 +101,7 @@ const MOBILE_MENU_POSITION: ConnectedPosition[] = [
   providers: [
     provideIcons({
       lucideCalendarDays,
+      lucideChartBar,
       lucideChevronsUpDown,
       lucideLayoutDashboard,
       lucideLogOut,

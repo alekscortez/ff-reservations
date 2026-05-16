@@ -142,6 +142,14 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'analytics',
+        title: 'Marketing Analytics | Famoso Fuego',
+        loadComponent: () =>
+          import('./features/admin/analytics/analytics').then(
+            (m) => m.AdminAnalytics
+          ),
+      },
+      {
         path: 'users',
         title: 'Users | Famoso Fuego',
         loadComponent: () =>

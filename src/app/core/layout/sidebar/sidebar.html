@@ -124,6 +124,19 @@
               <span>Financials</span>
             </a>
           </li>
+          <li hlmSidebarMenuItem>
+            <a
+              hlmSidebarMenuButton
+              routerLink="/admin/analytics"
+              routerLinkActive
+              #anRla="routerLinkActive"
+              [active]="anRla.isActive"
+              (click)="onNavigate()"
+            >
+              <ng-icon name="lucideChartBar"></ng-icon>
+              <span>Analytics</span>
+            </a>
+          </li>
         </ul>
       </hlm-sidebar-group>
 

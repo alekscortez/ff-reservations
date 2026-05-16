@@ -1,0 +1,137 @@
+<section class="flex w-full flex-col gap-4">
+  <header class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-semibold text-brand-900">Marketing Analytics</h1>
+        <p class="mt-1 text-sm text-brand-600">
+          Visits, bookings, and revenue split by where the customer came from.
+        </p>
+      </div>
+      <button
+        hlmBtn
+        variant="outline"
+        size="sm"
+        type="button"
+        (click)="refresh()"
+        [disabled]="loading()"
+      >{{ loading() ? 'Refreshing…' : 'Refresh' }}</button>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+      <span class="text-xs uppercase tracking-[0.14em] text-brand-500">Range</span>
+      <button
+        *ngFor="let p of presets"
+        hlmBtn
+        size="sm"
+        type="button"
+        [variant]="activePreset() === p.days ? 'default' : 'outline'"
+        (click)="applyPreset(p)"
+      >{{ p.label }}</button>
+      <hlm-date-range-picker
+        class="ml-auto"
+        [(startDate)]="rangeFrom"
+        [(endDate)]="rangeTo"
+        (endDateChange)="onRangeCommit()"
+      />
+    </div>
+
+    <hlm-alert *ngIf="error()" variant="destructive" class="mt-3">{{ error() }}</hlm-alert>
+  </header>
+
+  <!-- KPI cards -->
+  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <article class="rounded-xl border border-brand-100 bg-white p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-brand-500">Visits</p>
+      <p class="mt-2 text-2xl font-semibold tabular-nums text-brand-900">{{ visits() }}</p>
+      <p class="mt-1 text-xs text-brand-500">People who opened /reserva</p>
+    </article>
+    <article class="rounded-xl border border-warm-200 bg-warm-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-warm-700">Bookings started</p>
+      <p class="mt-2 text-2xl font-semibold tabular-nums text-warm-800">{{ bookingsStarted() }}</p>
+      <p class="mt-1 text-xs text-warm-700">Reached checkout</p>
+    </article>
+    <article class="rounded-xl border border-success-200 bg-success-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-success-700">Paid bookings</p>
+      <p class="mt-2 text-2xl font-semibold tabular-nums text-success-700">{{ bookingsPaid() }}</p>
+      <p class="mt-1 text-xs text-success-700">Conversion: {{ formatConversion(conversion()) }}</p>
+    </article>
+    <article class="rounded-xl border border-brand-200 bg-brand-50 p-4">
+      <p class="text-xs uppercase tracking-[0.14em] text-brand-700">Deposits collected</p>
+      <p class="mt-2 text-2xl font-semibold tabular-nums text-brand-900">
+        ${{ revenue() | number:'1.2-2' }}
+      </p>
+      <p class="mt-1 text-xs text-brand-700">From paid bookings in range</p>
+    </article>
+  </section>
+
+  <!-- Source breakdown table -->
+  <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-5">
+    <div class="flex items-baseline justify-between gap-2">
+      <h2 class="text-lg font-semibold text-brand-900">By source</h2>
+      <p class="text-xs text-brand-500">
+        {{ startDate() }} → {{ endDate() }}
+      </p>
+    </div>
+
+    <div *ngIf="summary() as s" class="mt-4 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="border-b border-brand-100 text-left text-[11px] uppercase tracking-[0.12em] text-brand-500">
+          <tr>
+            <th class="py-2 pr-3 font-medium">Source</th>
+            <th class="py-2 pr-3 text-right font-medium">Visits</th>
+            <th class="py-2 pr-3 text-right font-medium">Started</th>
+            <th class="py-2 pr-3 text-right font-medium">Paid</th>
+            <th class="py-2 pr-3 text-right font-medium">Conv.</th>
+            <th class="py-2 pr-3 text-right font-medium">Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let row of s.rows; trackBy: trackRow"
+            class="border-b border-brand-50 last:border-0"
+          >
+            <td class="py-3 pr-3 align-middle">
+              <span class="font-medium text-brand-900">{{ formatSource(row.source) }}</span>
+              <span
+                *ngIf="row.source !== '(none)'"
+                hlmBadge
+                variant="outline"
+                class="ml-2 align-middle text-[10px]"
+              >paid</span>
+            </td>
+            <td class="py-3 pr-3 text-right tabular-nums text-brand-700">{{ row.visits }}</td>
+            <td class="py-3 pr-3 text-right tabular-nums text-brand-700">{{ row.bookingsStarted }}</td>
+            <td class="py-3 pr-3 text-right tabular-nums font-semibold text-success-700">{{ row.bookingsPaid }}</td>
+            <td class="py-3 pr-3 text-right tabular-nums text-brand-700">
+              {{ formatConversion(row.conversionRate) }}
+            </td>
+            <td class="py-3 pr-3 text-right tabular-nums font-semibold text-brand-900">
+              ${{ row.depositRevenue | number:'1.2-2' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div
+        *ngIf="s.rows.length === 0"
+        class="rounded-xl border border-dashed border-brand-200 bg-brand-50 px-4 py-6 text-center text-sm text-brand-700"
+        aria-live="polite"
+      >
+        No activity in this range yet.
+      </div>
+    </div>
+
+    <div *ngIf="!summary() && !loading()" class="mt-4 text-sm text-brand-500">
+      Pick a date range to load analytics.
+    </div>
+    <div *ngIf="loading()" class="mt-4 text-sm text-brand-500">Loading…</div>
+
+    <p class="mt-4 text-xs text-brand-500">
+      <strong class="text-brand-700">Tip:</strong>
+      Tag your ad URLs with
+      <code class="rounded bg-brand-50 px-1.5 py-0.5 text-[11px]">?utm_source=meta&amp;utm_campaign=launch_week</code>
+      to attribute paid visits. Untagged traffic shows as
+      <em>Direct / Organic</em>.
+    </p>
+  </section>
+</section>
