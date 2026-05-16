@@ -96,7 +96,6 @@ const FREQUENT_PAYMENT_LINK_TTL_MINUTES = process.env.FREQUENT_PAYMENT_LINK_TTL_
 const CHECKIN_PASSES_TABLE = process.env.CHECKIN_PASSES_TABLE;
 const CHECKIN_PASS_BASE_URL = process.env.CHECKIN_PASS_BASE_URL;
 const CHECKIN_PASS_TTL_DAYS = process.env.CHECKIN_PASS_TTL_DAYS;
-const CASH_APP_LINK_BASE_URL = process.env.CASH_APP_LINK_BASE_URL;
 const SETTINGS_TABLE = process.env.SETTINGS_TABLE;
 const PACKAGES_TABLE = process.env.PACKAGES_TABLE;
 const TURNSTILE_SECRET_ARN = process.env.TURNSTILE_SECRET_ARN;
@@ -960,10 +959,6 @@ export const handler = async (event) => {
       addReservationPayment: reservationsHoldsService.addReservationPayment,
       setReservationPaymentLinkWindow:
         reservationsHoldsService.setReservationPaymentLinkWindow,
-      setReservationCashAppLinkSession:
-        reservationsHoldsService.setReservationCashAppLinkSession,
-      markReservationCashAppLinkSessionUsed:
-        reservationsHoldsService.markReservationCashAppLinkSessionUsed,
       appendReservationHistory: reservationsHoldsService.appendReservationHistory,
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,
@@ -973,7 +968,6 @@ export const handler = async (event) => {
       getRuntimeSettingsSubset: async () =>
         settingsService.runtimeSettingsSubset(await settingsService.getAppSettings()),
       getEventByDate: eventsService.getEventByDate,
-      cashAppLinkBaseUrl: CASH_APP_LINK_BASE_URL,
       checkInPassBaseUrl: CHECKIN_PASS_BASE_URL,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;

@@ -1,6 +1,6 @@
 # FF Reservations — Project Context
 
-Restaurant table reservation system for Famoso Fuego. Staff create reservations on behalf of customers; customers pay via Square / Cash App link and self-check-in via QR codes. Admin manages frequent clients, events, settings, and financials.
+Restaurant table reservation system for Famoso Fuego. Staff create reservations on behalf of customers; customers pay online via Square hosted checkout link OR in person at the venue (cash + Cash App QR shown on the staff iPad) and self-check-in via QR codes. Admin manages frequent clients, events, settings, and financials.
 
 > **Branch state (2026-05-16):** Angular 21 SPA in prod. Anonymous public booking live behind `allowAnonymousPublicBooking` flag — customers self-book on `/reserva` (renamed from `/map` 2026-05-15; `/map` kept as redirect for old SMS/Wallet/share links) → Square checkout → `/r/{id}`. Branded short URLs `famosofuego.com/p/{slug}` via Amplify rewrite. Per-route browser titles; static index.html title + OG card for Meta scraping. "Find my reservation" modal: phone (active hold) or FF-XXXXXX code (any non-CANCELLED). Live-visitor tile on staff dashboard (90s-TTL DDB presence rows). `/admin/analytics` splits visits/bookings/revenue by source. Layer 2 UTM/fbclid/gclid first-touch attribution captured + persisted on reservation row. Layer 3 Meta Pixel + CAPI wired but inert until `APP_CONFIG.metaPixelId` + Lambda `META_PIXEL_ID`/`META_CAPI_TOKEN_SECRET_ARN` set. Admin-editable OG images + favicon under "Branding" in `/admin/settings` (below the form; uploads → DDB binary attrs, `/branding/{filename}` Amplify-rewritten to Lambda that streams bytes or 302s to baked-in static). Settings sections reordered by tuning frequency. Funnel telemetry FE+BE; `bash scripts/smoke_test_prod.sh` for sanity. Memory files chain via `[[...]]` — start at any recent memo and follow links. React + Expo port paused on `react` branch (tag `react-port-snapshot-2026-05-09`); don't introduce React/pnpm/Vite/`apps/` on `main`.
 
@@ -57,7 +57,7 @@ backend/lambda/
 
 # Reservations/holds split (2026-05-09):
   services-reservations-shared.mjs  # utils, history, check-in pass, read-only DDB
-  services-payment-recording.mjs    # addReservationPayment + link/Cash App
+  services-payment-recording.mjs    # addReservationPayment + Square link state
   services-reservations.mjs         # CRUD, 3 cancellation paths, cron release
   services-holds.mjs                # createHold / releaseHold / listHolds
   services-reservations-holds.mjs   # barrel for index.mjs
@@ -89,7 +89,7 @@ bash backend/lambda/deploy.sh            # deploy lambda
 
 - Cognito Hosted UI + code flow + PKCE via `angular-auth-oidc-client`.
 - Frontend sends the **access token** via `Bearer` header (`src/app/core/http/auth.interceptor.ts`).
-- API Gateway HTTP API has a JWT authorizer per-route. Public routes (no authorizer): `/public/availability`, `/check-in/pass`, `/cashapp/session*`, `/webhooks/square`, `/pay`.
+- API Gateway HTTP API has a JWT authorizer per-route. Public routes (no authorizer): `/public/availability`, `/check-in/pass`, `/webhooks/square`.
 - Lambda re-checks `requireAdmin(event)` / `requireStaffOrAdmin(event)` per sensitive route (defense in depth — do not rely on API Gateway alone).
 - Cognito access tokens DO NOT include `cognito:groups` by default. A **Pre Token Generation v2 Lambda trigger** (`backend/cognito-pre-token-gen/`) injects groups into the access token. If disabled/broken, every authed request silently 403s; the `AuthHealthBanner` (driven by `GET /admin/whoami`) surfaces this.
 - Groups: `Admin`, `Staff`. Users without a group fall through to `/unauthorized`.
@@ -107,7 +107,7 @@ bash backend/lambda/deploy.sh            # deploy lambda
 - **`POST /reservations` is idempotent on `holdId`** (audit M3): duplicate request that loses the TransactWrite race triggers a GetItem on the hold; if RESERVED, returns the existing reservation with `idempotentReplay: true`. Route handler skips CRM upsert + auto-SMS on replay.
 - **5-second grace window** on hold-to-reservation upgrade: `expiresAt >= :now - 5` so "Confirm" within ~1-2s of expiry still succeeds (same-owner only).
 - Webhook idempotency: `addReservationPayment` deduplicates on `providerPaymentId` / `idempotencyKey`.
-- Cash App "session" routes are public, gated by a 256-bit hex token compared via `crypto.timingSafeEqual`.
+- **Cash App is in-venue only** (2026-05-16): both the staff payment modal AND the `reservations-new` wizard mount Square Web Payments SDK's `cashAppPay()` directly via `<cash-app-qr-pad>`. On a desktop/iPad-class browser the SDK renders a QR; customer scans with their phone's Cash App, approves, SDK fires `ontokenization`, staff app posts the `sourceId` to `/reservations/{id}/payments`. No customer-facing Cash App link, no SMS, no `/cashapp/session*` routes. [[cashapp_in_venue_only_2026_05_16]]
 - Reservation history lives in `RES_TABLE` under `SK = HIST#…`. Writes are fire-and-forget; failures emit `reservation_history_write_error` (CW metric filter + alarm at ≥1/5min).
 - Cron-based overdue release owned by EventBridge `ff-reservations-overdue-release` (rate 1 min) → dispatches to `runScheduledMaintenance`. Anonymous request paths never trigger release; staff `GET /reservations` and payment routes still do.
 - **`createReservation` auto-clamps past *default* `paymentDeadlineAt`**: omitted default that lands <= now is extended to `now + 4h` (typical at 2-5 AM on the active business day before the operating cutoff rolls). Explicit past deadlines still throw 400.
@@ -127,7 +127,7 @@ bash backend/lambda/deploy.sh            # deploy lambda
 - `ff-settings` (single `(APP, CONFIG)` record; overrides env at runtime; some keys env-managed only). Also carries `(APP, BRANDING#{type})` binary-data rows when an admin uploads a custom OG image / favicon (300 KB cap for og-image / og-image-square; 50 KB for favicon SVG).
 
 ## Lambda env vars
-Tables: `EVENTS_TABLE`,`HOLDS_TABLE`,`RES_TABLE`,`FREQUENT_CLIENTS_TABLE`,`CLIENTS_TABLE`,`CHECKIN_PASSES_TABLE`,`SETTINGS_TABLE`. Cognito: `USER_POOL_ID`. Square: `SQUARE_SECRET_ARN`,`SQUARE_ENV`,`SQUARE_LOCATION_ID`,`SQUARE_API_VERSION`,`SQUARE_WEBHOOK_NOTIFICATION_URL`,`SQUARE_CURRENCY`,`SQUARE_CHECKOUT_REDIRECT_URL`,`SQUARE_LINK_ENABLE_*`. SMS: `SMS_ENABLED`,`SMS_SENDER_ID`,`SMS_TYPE`,`SMS_MAX_PRICE_USD`. Links: `PAYMENT_LINK_TTL_MINUTES`,`FREQUENT_PAYMENT_LINK_TTL_MINUTES`,`AUTO_SEND_SQUARE_LINK_SMS`,`CASH_APP_LINK_BASE_URL`. Check-in: `CHECKIN_PASS_BASE_URL`,`CHECKIN_PASS_TTL_DAYS`. Wallet: `WALLET_PASS_TYPE_IDENTIFIER`,`WALLET_TEAM_IDENTIFIER`,`WALLET_PASS_SECRET_ARN`. Operating: `OPERATING_TZ`,`OPERATING_DAY_CUTOFF_HOUR`,`HOLD_TTL_SECONDS`. Anon: `TURNSTILE_SECRET_ARN`, `PUBLIC_BOOKING_RETURN_BASE_URL`, `PUBLIC_BOOKING_SHORT_URL_BASE` (`https://famosofuego.com` in prod via Amplify rewrite; defaults safely to API host). Meta CAPI (optional — both unset = full no-op): `META_PIXEL_ID`, `META_CAPI_TOKEN_SECRET_ARN`, `META_CAPI_TEST_EVENT_CODE` (routes events to Events Manager "Test Events" tab when set).
+Tables: `EVENTS_TABLE`,`HOLDS_TABLE`,`RES_TABLE`,`FREQUENT_CLIENTS_TABLE`,`CLIENTS_TABLE`,`CHECKIN_PASSES_TABLE`,`SETTINGS_TABLE`. Cognito: `USER_POOL_ID`. Square: `SQUARE_SECRET_ARN`,`SQUARE_ENV`,`SQUARE_LOCATION_ID`,`SQUARE_API_VERSION`,`SQUARE_WEBHOOK_NOTIFICATION_URL`,`SQUARE_CURRENCY`,`SQUARE_CHECKOUT_REDIRECT_URL`,`SQUARE_LINK_ENABLE_*`. SMS: `SMS_ENABLED`,`SMS_SENDER_ID`,`SMS_TYPE`,`SMS_MAX_PRICE_USD`. Links: `PAYMENT_LINK_TTL_MINUTES`,`FREQUENT_PAYMENT_LINK_TTL_MINUTES`,`AUTO_SEND_SQUARE_LINK_SMS`. Check-in: `CHECKIN_PASS_BASE_URL`,`CHECKIN_PASS_TTL_DAYS`. Wallet: `WALLET_PASS_TYPE_IDENTIFIER`,`WALLET_TEAM_IDENTIFIER`,`WALLET_PASS_SECRET_ARN`. Operating: `OPERATING_TZ`,`OPERATING_DAY_CUTOFF_HOUR`,`HOLD_TTL_SECONDS`. Anon: `TURNSTILE_SECRET_ARN`, `PUBLIC_BOOKING_RETURN_BASE_URL`, `PUBLIC_BOOKING_SHORT_URL_BASE` (`https://famosofuego.com` in prod via Amplify rewrite; defaults safely to API host). Meta CAPI (optional — both unset = full no-op): `META_PIXEL_ID`, `META_CAPI_TOKEN_SECRET_ARN`, `META_CAPI_TEST_EVENT_CODE` (routes events to Events Manager "Test Events" tab when set).
 
 ## Conventions
 Frontend config: `src/app/core/config/app-config.ts` hardcodes `apiBaseUrl: https://api.famosofuego.com` + Cognito authority/hostedUiDomain/clientId/scope (no per-env yet).
@@ -186,7 +186,7 @@ Frontend config: `src/app/core/config/app-config.ts` hardcodes `apiBaseUrl: http
 - **Reservation backend** → see Repo layout 5-module split. Read TransactWrite + ConditionExpression patterns before new writes.
 - **`financials.ts`** → 6 pure reducers, 23 specs lock invariants. Calls `list(date, { suppressRelease: true })` — keep that flag. [[financials_reducer_invariants]]
 - **`/admin/settings`** → collapsible sections in 3 tiers (often/occasional/rare); Branding section below the form. OnPush + `FIELD_HINTS`; `joinHm`/`splitHm` bridge HH:MM ↔ hour+minute; HIGH_IMPACT_LABELS bulleted confirm; copy plain-language ([[feedback_admin_copy_plain_language]]).
-- **Payments** → `services-square-payments.mjs` + `routes-square-webhooks.mjs`. 6 staff/customer routes share `autoRefundAfterRecordFailure` (idempotency-keyed). Mobile equivalent in `routes-me.mjs` — audit BOTH. Push notifs fire from `addReservationPayment`.
+- **Payments** → `services-square-payments.mjs` + `routes-square-webhooks.mjs`. Staff/customer routes share `autoRefundAfterRecordFailure` (idempotency-keyed). Push notifs fire from `addReservationPayment`. Cash App is **in-venue only** via `<cash-app-qr-pad>` (staff modal → Web Payments SDK → customer scans → tokenize → `/reservations/{id}/payments`). No customer-facing Cash App link / SMS / `/cashapp/session*` route. [[cashapp_in_venue_only_2026_05_16]]
 - **SMS** → 3 pure builders in `services-sms-notifications-pure.mjs` (all `BRAND_PREFIX`); SNS today, EUM post-TFN [[sms_migrate_to_eum_after_approval]]. Customer OTP separate in `cognito-customer-auth/index.mjs` — touch BOTH. Kill-switch `smsEnabled` (transactional only).
 - **Apple Wallet `.pkpass`** → `services-wallet-pass.mjs`; certs in `WALLET_PASS_SECRET_ARN`. `pass.type="generic"`; QR is `ffr-checkin:{64-hex token}` (never the 6-char code); `barcode.altText = FF-{code}`. Installed passes don't auto-refresh.
 - **Customer self-service (`/me/*`)** → `routes-me.mjs`. Self-cancel ≥24h forces `RESCHEDULE_CREDIT`. Customer payment routes must NOT pass `source: "customer"` — omit, default `square-direct`.

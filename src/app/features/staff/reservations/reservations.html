@@ -331,7 +331,6 @@
     [paymentLinkError]="paymentLinkError()"
     [paymentLinkNotice]="paymentLinkNotice()"
     [squareLinkLoading]="paymentLinkLoadingId() === detail.reservationId"
-    [cashAppLinkLoading]="publicPayLinkLoadingId() === detail.reservationId"
     [checkInPass]="getCheckInPass(detail)"
     [checkInPassState]="getCheckInPassState(detail)"
     [checkInPassError]="checkInPassError()"
@@ -343,8 +342,7 @@
     [canCancel]="true"
     (close)="closeDetails()"
     (generateSquareLink)="generatePaymentLink(detail)"
-    (generateCashAppLink)="generateClientPayLink(detail)"
-    (sendSms)="sendGeneratedLinkSms(detail, $event)"
+    (sendSms)="sendGeneratedLinkSms(detail)"
     (copyLink)="copyPaymentLink(detail)"
     (openSms)="openSmsShare(detail)"
     (openWhatsApp)="openWhatsAppShare(detail)"
@@ -463,14 +461,21 @@
         Square in this modal generates a Square link. Reader charge can be added later.
       </p>
       <p class="text-xs text-brand-600" *ngIf="isCashAppPaymentMethodSelected()">
-        Tap "Show Cash App QR", then have the client scan and approve on their own phone.
+        Confirm the amount, then tap "Show Cash App QR" — the customer scans the QR on their own phone and approves in Cash App.
       </p>
-      <div class="rounded-lg border border-brand-100 bg-brand-50 p-2" *ngIf="isCashAppPaymentMethodSelected()">
-        <div #cashAppPayHost class="min-h-[140px]"></div>
-        <p class="mt-2 text-xs text-brand-600" *ngIf="cashAppPayReady()">
-          QR ready. Waiting for client approval.
-        </p>
-      </div>
+      <cash-app-qr-pad
+        *ngIf="isCashAppPaymentMethodSelected()"
+        #cashAppQrPad
+        [applicationId]="squareApplicationId()"
+        [locationId]="squareLocationId()"
+        [squareEnvMode]="squareEnvMode()"
+        [amount]="paymentForm.controls.amount.value || 0"
+        [label]="cashAppLabel()"
+        [referenceId]="paymentItem()?.reservationId ?? ''"
+        [success]="cashAppPaymentSuccess()"
+        (tokenized)="onCashAppTokenized($event)"
+        (errored)="onCashAppErrored($event)"
+      />
       <p class="text-xs text-danger-700" *ngIf="isCashAppPaymentMethodSelected() && !canUseCashAppPay()">
         Cash App Pay is not configured. Set Square application id and location id in Lambda env vars.
       </p>
@@ -484,7 +489,7 @@
           isSquarePaymentMethodSelected()
             ? paymentLinkLoadingId() === payment.reservationId || !canGeneratePaymentLink(payment)
             : loading() ||
-              cashAppPayPreparing() ||
+              cashAppQrPad?.preparing() ||
               paymentForm.invalid ||
               (isCashAppPaymentMethodSelected() && !canUseCashAppPay()) ||
               (isCreditPaymentMethodSelected() &&

@@ -31,19 +31,19 @@ describe('toCreatePaymentMethod', () => {
   it('maps square → square', () => {
     expect(toCreatePaymentMethod('square')).toBe('square');
   });
-  it('maps client → cashapp (UI label vs API enum)', () => {
-    expect(toCreatePaymentMethod('client')).toBe('cashapp');
+  it('maps cashapp → cashapp (in-venue QR; never a link)', () => {
+    expect(toCreatePaymentMethod('cashapp')).toBe('cashapp');
   });
 });
 
 describe('toLinkMode', () => {
-  it('returns square for square', () => {
+  it('returns square for square (hosted-checkout link follow-up)', () => {
     expect(toLinkMode('square')).toBe('square');
   });
-  it('returns client for client', () => {
-    expect(toLinkMode('client')).toBe('client');
+  it('returns cashapp for cashapp (in-venue QR follow-up)', () => {
+    expect(toLinkMode('cashapp')).toBe('cashapp');
   });
-  it('returns null for cash (no link needed)', () => {
+  it('returns null for cash (recorded at create, no follow-up)', () => {
     expect(toLinkMode('cash')).toBe(null);
   });
 });

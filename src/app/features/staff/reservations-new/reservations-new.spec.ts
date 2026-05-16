@@ -178,12 +178,10 @@ describe('ReservationsNew', () => {
       expect(component.isCashReceiptRequired()).toBe(false);
     });
 
-    it('returns false when the remainder is paid by Square or Cash App', () => {
+    it('returns false when the remainder is paid by Square', () => {
       component.cashReceiptNumberRequired = true;
       seedCreditCashRemainder();
       component.form.controls.remainingMethod.setValue('square');
-      expect(component.isCashReceiptRequired()).toBe(false);
-      component.form.controls.remainingMethod.setValue('client');
       expect(component.isCashReceiptRequired()).toBe(false);
     });
 

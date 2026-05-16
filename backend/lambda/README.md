@@ -20,12 +20,12 @@ The old `services-reservations-holds.mjs` (~2.6k lines) was split on 2026-05-09 
 | Module | What it owns |
 |---|---|
 | `services-reservations-shared.mjs` | Constants (`AUTO_RELEASE_REASON`, `DEFAULT_DEADLINE_TZ`, etc.), pure utilities (`clampNumber`, `roundMoney`, time math), settings resolvers, `appendReservationHistory`, `tryEnsureCheckInPass`, `trySendCheckInPassSms`, read-only DDB queries (`queryReservationsForEventDate`, `getReservationById`), domain predicates (`isOverdueReservation`, `isFrequentAutoReservation`) |
-| `services-payment-recording.mjs` | `addReservationPayment` (full state machine including credit-redemption TransactWrite + `depositAmount` CAS for audit C3), `setReservationPaymentLinkWindow`, `setReservationCashAppLinkSession`, `revokeReservationCashAppLinkSession`, `markReservationCashAppLinkSessionUsed`, `markReservationPaymentLinkInactive` |
+| `services-payment-recording.mjs` | `addReservationPayment` (full state machine including credit-redemption TransactWrite + `depositAmount` CAS for audit C3), `setReservationPaymentLinkWindow`, `markReservationPaymentLinkInactive` |
 | `services-reservations.mjs` | `createReservation` (hold→reserved TransactWrite + idempotent replay), `cancelReservation` (3 resolution paths: `CANCEL_NO_REFUND`, `RESCHEDULE_CREDIT`, `REFUND`), `releaseOverdueReservationsForEventDate` / `*ForAllActiveEvents` (cron sweep with concurrency cap 5), reschedule credit helpers (`assertRescheduleCreditAllowed`, `buildRescheduleCreditItem`, `markFrequentTableReleasedForEvent`), reservation reads |
 | `services-holds.mjs` | Hold lifecycle: `createHold` / `releaseHold` / `listHolds` / `listTableLocks` |
 | `services-reservations-holds.mjs` | **Barrel.** Composes the four above and exposes the same 16-method public surface that `index.mjs` has always seen. Edit this file ONLY when you're changing the public API contract. |
 
-Composition order in the barrel: `shared` → `paymentRecording` → `reservations` (uses `paymentRecording.revokeReservationCashAppLinkSession`) → `holds` (uses `reservations.releaseOverdueReservationsForEventDate`).
+Composition order in the barrel: `shared` → `paymentRecording` → `reservations` (uses `paymentRecording.markReservationPaymentLinkInactive`) → `holds` (uses `reservations.releaseOverdueReservationsForEventDate`).
 
 ## Deploy
 

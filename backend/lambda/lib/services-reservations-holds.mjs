@@ -55,14 +55,10 @@ export function createReservationsHoldsService(deps) {
     cancelReservation: reservations.cancelReservation,
     createReservation: reservations.createReservation,
     rescheduleReservationForCustomer: reservations.rescheduleReservationForCustomer,
-    // payment recording + payment-link / Cash App session state
+    // payment recording + payment-link state
     addReservationPayment: paymentRecording.addReservationPayment,
     setReservationPaymentLinkWindow:
       paymentRecording.setReservationPaymentLinkWindow,
-    setReservationCashAppLinkSession:
-      paymentRecording.setReservationCashAppLinkSession,
-    markReservationCashAppLinkSessionUsed:
-      paymentRecording.markReservationCashAppLinkSessionUsed,
     // history writes (kept on the public surface for direct external use
     // from routes-reservations-holds.mjs)
     appendReservationHistory: shared.appendReservationHistory,

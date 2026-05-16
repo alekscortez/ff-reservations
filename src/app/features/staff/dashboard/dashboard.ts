@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -50,7 +49,7 @@ import {
   HlmPopoverTrigger,
 } from '../../../shared/ui/popover';
 import { ReservationDetailModal } from '../../../shared/components/reservation-detail-modal/reservation-detail-modal';
-import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
+import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
 
 interface TableKpis {
   total: number;
@@ -97,6 +96,7 @@ interface ActivityItem {
     HlmPopoverContentHost,
     HlmPopoverTrigger,
     ReservationDetailModal,
+    CashAppQrPad,
   ],
   providers: [provideIcons({ lucideArrowRight, lucideChevronDown, lucideX })],
   templateUrl: './dashboard.html',
@@ -109,7 +109,6 @@ export class Dashboard implements OnInit, OnDestroy {
   private reservationsApi = inject(ReservationsService);
   private checkInApi = inject(CheckInService);
   private clientsApi = inject(ClientsService);
-  private squareWebPayments = inject(SquareWebPaymentsService);
   private adminApi = inject(AdminService);
 
   readonly contextLabel = signal<'TODAY EVENT' | 'NEXT EVENT'>('TODAY EVENT');
@@ -158,7 +157,6 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly paymentLinkError = signal<string | null>(null);
   readonly paymentLinkNotice = signal<string | null>(null);
   readonly paymentLinkLoadingId = signal<string | null>(null);
-  readonly publicPayLinkLoadingId = signal<string | null>(null);
   readonly paymentLinksByReservationId = signal<Record<string, GeneratedPaymentLink>>({});
   readonly checkInPassError = signal<string | null>(null);
   readonly checkInPassNotice = signal<string | null>(null);
@@ -176,10 +174,8 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly paymentCredits = signal<RescheduleCredit[]>([]);
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
-  readonly cashAppPayPreparing = signal(false);
-  readonly cashAppPayReady = signal(false);
-  @ViewChild('cashAppPayHost') cashAppPayHost?: ElementRef<HTMLElement>;
-  private cashAppPayDestroy: (() => Promise<void>) | null = null;
+  readonly cashAppPaymentSuccess = signal(false);
+  @ViewChild('cashAppQrPad') cashAppQrPad?: CashAppQrPad;
 
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
@@ -205,7 +201,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.snapshotSub = null;
     this.stopPolling();
     this.stopLiveVisitorsPoll();
-    void this.destroyCashAppPayButton();
+    void this.cashAppQrPad?.destroy();
   }
 
   private startLiveVisitorsPoll(): void {
@@ -544,7 +540,6 @@ export class Dashboard implements OnInit, OnDestroy {
     this.detailItem.set(null);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
-    this.publicPayLinkLoadingId.set(null);
     this.checkInPassError.set(null);
     this.checkInPassNotice.set(null);
     this.historyError.set(null);
@@ -555,9 +550,8 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentError.set(null);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
-    this.cashAppPayPreparing.set(false);
-    this.cashAppPayReady.set(false);
-    void this.destroyCashAppPayButton();
+    this.cashAppPaymentSuccess.set(false);
+    void this.cashAppQrPad?.destroy();
     this.paymentItem.set(item.reservation);
     this.showPaymentModal.set(true);
     this.paymentSubmitAttempted.set(false);
@@ -610,7 +604,7 @@ export class Dashboard implements OnInit, OnDestroy {
     const item = this.paymentItem();
     if (!item) return;
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLoading() || this.cashAppPayPreparing()) return;
+    if (this.paymentLoading() || this.cashAppQrPad?.preparing()) return;
     if (!this.canUseCashAppPay()) {
       this.paymentError.set('Cash App Pay is not configured in Square settings.');
       return;
@@ -630,8 +624,8 @@ export class Dashboard implements OnInit, OnDestroy {
 
     this.paymentError.set(null);
     this.paymentLinkError.set(null);
-    const note = String(this.paymentForm.controls.note.value ?? '').trim();
-    await this.prepareCashAppPayButton(item, amount, note);
+    this.cashAppPaymentSuccess.set(false);
+    await this.cashAppQrPad?.prepare();
   }
 
   closeUrgentPayment(): void {
@@ -651,9 +645,8 @@ export class Dashboard implements OnInit, OnDestroy {
     this.paymentCreditsLoading.set(false);
     this.paymentCreditsError.set(null);
     this.paymentLinkError.set(null);
-    this.cashAppPayReady.set(false);
-    this.cashAppPayPreparing.set(false);
-    void this.destroyCashAppPayButton();
+    this.cashAppPaymentSuccess.set(false);
+    void this.cashAppQrPad?.destroy();
   }
 
   canGeneratePaymentLink(item: ReservationItem): boolean {
@@ -839,7 +832,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   generatePaymentLink(item: ReservationItem): void {
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
+    if (this.paymentLinkLoadingId()) return;
 
     const remaining = this.remainingAmount(item);
     if (remaining <= 0) return;
@@ -885,55 +878,9 @@ export class Dashboard implements OnInit, OnDestroy {
       });
   }
 
-  generateClientPayLink(item: ReservationItem): void {
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
-
-    const remaining = this.remainingAmount(item);
-    if (remaining <= 0) return;
-
-    this.publicPayLinkLoadingId.set(item.reservationId);
-    this.paymentLinkError.set(null);
-    this.paymentLinkNotice.set(null);
-
-    this.reservationsApi
-      .createCashAppLink({
-        reservationId: item.reservationId,
-        eventDate: item.eventDate,
-        amount: remaining,
-      })
-      .subscribe({
-        next: (res) => {
-          const url = String(res?.cashAppLink?.url ?? '').trim();
-          if (!url) {
-            this.paymentLinkError.set('Cash App link generation succeeded but no URL was returned.');
-            this.publicPayLinkLoadingId.set(null);
-            return;
-          }
-          this.paymentLinksByReservationId.update((current) => ({
-            ...current,
-            [item.reservationId]: {
-              method: 'cashapp',
-              url,
-              amount: Number(res?.reservation?.linkAmount ?? remaining),
-              createdAtMs: Date.now(),
-            },
-          }));
-          this.paymentLinkNotice.set('Cash App link ready to share.');
-          this.publicPayLinkLoadingId.set(null);
-        },
-        error: (err) => {
-          this.paymentLinkError.set(
-            err?.error?.message || err?.message || 'Failed to generate Cash App link',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-      });
-  }
-
   sendPaymentLinkSms(item: ReservationItem): void {
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
+    if (this.paymentLinkLoadingId()) return;
 
     const remaining = this.remainingAmount(item);
     if (remaining <= 0) return;
@@ -985,64 +932,8 @@ export class Dashboard implements OnInit, OnDestroy {
       });
   }
 
-  sendGeneratedLinkSms(item: ReservationItem, method: 'square' | 'cashapp'): void {
-    if (method === 'cashapp') {
-      this.sendPublicPayLinkSms(item);
-      return;
-    }
+  sendGeneratedLinkSms(item: ReservationItem): void {
     this.sendPaymentLinkSms(item);
-  }
-
-  sendPublicPayLinkSms(item: ReservationItem): void {
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
-
-    const remaining = this.remainingAmount(item);
-    if (remaining <= 0) return;
-
-    this.publicPayLinkLoadingId.set(item.reservationId);
-    this.paymentLinkError.set(null);
-    this.paymentLinkNotice.set(null);
-
-    this.reservationsApi
-      .createCashAppLinkSms({
-        reservationId: item.reservationId,
-        eventDate: item.eventDate,
-        amount: remaining,
-      })
-      .subscribe({
-        next: (res) => {
-          const url = String(res?.cashAppLink?.url ?? '').trim();
-          if (!url) {
-            this.paymentLinkError.set('SMS sent flow succeeded but no Cash App URL was returned.');
-            this.publicPayLinkLoadingId.set(null);
-            return;
-          }
-          this.paymentLinksByReservationId.update((current) => ({
-            ...current,
-            [item.reservationId]: {
-              method: 'cashapp',
-              url,
-              amount: Number(res?.reservation?.linkAmount ?? remaining),
-              createdAtMs: Date.now(),
-            },
-          }));
-          const to = String(res?.sms?.to ?? '').trim();
-          const messageId = String(res?.sms?.messageId ?? '').trim();
-          this.paymentLinkNotice.set(
-            to
-              ? `Cash App link sent by FF SMS to ${to}${messageId ? ` (${messageId})` : ''}.`
-              : 'Cash App link sent by FF SMS.',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-        error: (err) => {
-          this.paymentLinkError.set(
-            err?.error?.message || err?.message || 'Failed to send Cash App link SMS',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-      });
   }
 
   copyPaymentLink(item: ReservationItem): void {
@@ -1314,9 +1205,8 @@ export class Dashboard implements OnInit, OnDestroy {
 
   onPaymentMethodChanged(): void {
     if (!this.isCashAppPaymentMethodSelected()) {
-      this.cashAppPayReady.set(false);
-      this.cashAppPayPreparing.set(false);
-      void this.destroyCashAppPayButton();
+      this.cashAppPaymentSuccess.set(false);
+      void this.cashAppQrPad?.destroy();
     }
     if (!this.isCreditPaymentMethodSelected()) {
       this.paymentForm.controls.creditId.setValue('');
@@ -1428,9 +1318,9 @@ export class Dashboard implements OnInit, OnDestroy {
         : 'Generate Link';
     }
     if (this.isCashAppPaymentMethodSelected()) {
-      if (this.cashAppPayPreparing()) return 'Preparing…';
+      if (this.cashAppQrPad?.preparing()) return 'Preparing…';
       if (this.paymentLoading()) return 'Processing…';
-      return this.cashAppPayReady() ? 'Refresh Cash App QR' : 'Show Cash App QR';
+      return this.cashAppQrPad?.ready() ? 'Refresh Cash App QR' : 'Show Cash App QR';
     }
     if (this.paymentLoading()) return 'Saving…';
     if (!this.isCreditPaymentMethodSelected()) return 'Submit Payment';
@@ -1440,63 +1330,14 @@ export class Dashboard implements OnInit, OnDestroy {
       : 'Apply Credit + Submit Payment';
   }
 
-  private async prepareCashAppPayButton(
-    item: ReservationItem,
-    amount: number,
-    note: string
-  ): Promise<void> {
-    const host = this.cashAppPayHost?.nativeElement;
-    if (!host) {
-      this.paymentError.set('Cash App Pay UI is not ready. Close and reopen the modal, then try again.');
-      return;
-    }
-
-    this.cashAppPayPreparing.set(true);
-    this.cashAppPayReady.set(false);
-    this.paymentError.set(null);
-    this.paymentLinkError.set(null);
-
-    try {
-      await this.destroyCashAppPayButton();
-      const session = await this.squareWebPayments.mountCashAppPayButton({
-        applicationId: this.squareApplicationId(),
-        locationId: this.squareLocationId(),
-        amount,
-        container: host,
-        label: `${formatTableLabel(item)} payment`,
-        referenceId: item.reservationId,
-        squareEnvMode: this.squareEnvMode(),
-        onTokenized: (sourceId) => {
-          setTimeout(() => {
-            this.captureCashAppPayment(item, amount, sourceId, note);
-          }, 0);
-        },
-        onError: (message) => {
-          setTimeout(() => {
-            this.paymentError.set(message || 'Cash App payment was not completed.');
-          }, 0);
-        },
-      });
-      this.cashAppPayDestroy = session.destroy;
-      this.cashAppPayReady.set(true);
-    } catch (err: unknown) {
-      const message =
-        (err as { message?: string } | null | undefined)?.message ||
-        'Failed to initialize Cash App Pay.';
-      this.paymentError.set(message);
-      this.cashAppPayReady.set(false);
-    } finally {
-      this.cashAppPayPreparing.set(false);
-    }
-  }
-
-  private captureCashAppPayment(
-    item: ReservationItem,
-    amount: number,
-    sourceId: string,
-    note: string
-  ): void {
+  onCashAppTokenized(sourceId: string): void {
+    const item = this.paymentItem();
+    if (!item) return;
     if (this.paymentLoading()) return;
+
+    const amount = Number(this.paymentForm.controls.amount.value);
+    const note = String(this.paymentForm.controls.note.value ?? '').trim();
+
     this.paymentLoading.set(true);
     this.paymentError.set(null);
 
@@ -1518,8 +1359,12 @@ export class Dashboard implements OnInit, OnDestroy {
           );
           this.urgentPayments.set(this.computeUrgentPayments(this.reservations()));
           this.recentActivity.set(this.computeRecentActivity(this.reservations()));
-          this.paymentLoading.set(false);
-          this.closeUrgentPayment();
+          // Brief green "Paid" display before dismissing the modal.
+          this.cashAppPaymentSuccess.set(true);
+          setTimeout(() => {
+            this.paymentLoading.set(false);
+            this.closeUrgentPayment();
+          }, 1500);
         },
         error: (err) => {
           this.paymentError.set(
@@ -1530,18 +1375,13 @@ export class Dashboard implements OnInit, OnDestroy {
       });
   }
 
-  private async destroyCashAppPayButton(): Promise<void> {
-    const destroy = this.cashAppPayDestroy;
-    this.cashAppPayDestroy = null;
-    if (destroy) {
-      try {
-        await destroy();
-      } catch {
-        // Best-effort teardown.
-      }
-    }
-    const host = this.cashAppPayHost?.nativeElement;
-    if (host) host.innerHTML = '';
+  onCashAppErrored(message: string): void {
+    this.paymentError.set(message || 'Cash App payment was not completed.');
+  }
+
+  cashAppLabel(): string {
+    const item = this.paymentItem();
+    return item ? `${formatTableLabel(item)} payment` : 'Reservation payment';
   }
 
   creditOptionLabel(credit: RescheduleCredit): string {

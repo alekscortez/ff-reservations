@@ -86,8 +86,9 @@ import {
 } from '../../../shared/phone';
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
+import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
 import { HlmAlert } from '../../../shared/ui/alert';
-import { HlmDialog } from '../../../shared/ui/dialog';
+import { HlmDialog, HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNativeSelect } from '../../../shared/ui/native-select';
@@ -95,7 +96,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, HlmAlert, HlmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmToggle],
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
@@ -142,6 +143,8 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('compactMapShell') compactMapShell?: ElementRef<HTMLElement>;
   @ViewChild('compactListShell') compactListShell?: ElementRef<HTMLElement>;
   @ViewChild('mobileCtaBar') mobileCtaBar?: ElementRef<HTMLElement>;
+  @ViewChild('cashAppQrPad') cashAppQrPad?: CashAppQrPad;
+  @ViewChild('cashAppResumePad') cashAppResumePad?: CashAppQrPad;
 
   private readonly _eventDate = signal<string | null>(null);
   get eventDate(): string | null { return this._eventDate(); }
@@ -251,9 +254,9 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     D: '#f7941d',
     E: '#711411',
   };
-  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square' | 'client'; label: string }> = [
+  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square' | 'cashapp'; label: string }> = [
     { value: 'square', label: 'Square' },
-    { value: 'client', label: 'Cash App' },
+    { value: 'cashapp', label: 'Cash App' },
     { value: 'cash', label: 'Cash' },
   ];
 
@@ -265,12 +268,16 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     paymentStatus: new FormControl<'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY'>('PAID', {
       nonNullable: true,
     }),
-    paymentMethod: new FormControl<'cash' | 'square' | 'client'>('square', {
+    paymentMethod: new FormControl<'cash' | 'square' | 'cashapp'>('square', {
       nonNullable: true,
     }),
     useCredit: new FormControl(false, { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
-    remainingMethod: new FormControl<'cash' | 'square' | 'client'>('cash', {
+    // remainingMethod (after-credit balance) intentionally excludes
+    // 'cashapp' — that flow needs the QR pad mount, which is harder to
+    // chain after the credit-apply step. Staff can still charge the
+    // remainder via Cash App from /staff/reservations after creation.
+    remainingMethod: new FormControl<'cash' | 'square'>('cash', {
       nonNullable: true,
     }),
     receiptNumber: new FormControl('', { nonNullable: true }),
@@ -395,6 +402,28 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   private readonly _createdReservation = signal<CreatedReservationContext | null>(null);
   get createdReservation(): CreatedReservationContext | null { return this._createdReservation(); }
   set createdReservation(value: CreatedReservationContext | null) { this._createdReservation.set(value); }
+  // Square Web Payments SDK config + in-venue Cash App pad state.
+  // Loaded from `/events/current-context` (admin settings); the pad
+  // emits tokenized → `onCashAppTokenizedInWizard` posts the source.
+  readonly squareApplicationId = signal('');
+  readonly squareLocationId = signal('');
+  readonly squareEnvMode = signal<'sandbox' | 'production'>('sandbox');
+  readonly cashAppPaymentSuccess = signal(false);
+  readonly cashAppCharging = signal(false);
+  // When staff closes the wizard modal before the customer scans the
+  // Cash App QR, the reservation already exists with PENDING payment.
+  // We capture the context here so the wizard's main view can render a
+  // sticky "Resume Cash App payment" banner — clicking it reopens the
+  // QR pad in a small dialog without forcing staff to navigate to
+  // /staff/reservations. Cleared on success or explicit dismiss.
+  readonly pendingCashAppPayment = signal<CreatedReservationContext | null>(null);
+  readonly showCashAppResumeDialog = signal(false);
+  readonly cashAppResumeCharging = signal(false);
+  readonly cashAppResumeSuccess = signal(false);
+  readonly cashAppResumeError = signal<string | null>(null);
+  readonly cancelPendingConfirmOpen = signal(false);
+  readonly cancelPendingLoading = signal(false);
+  readonly cancelPendingError = signal<string | null>(null);
   private readonly _desktopSplitHeightPx = signal<number | null>(null);
   get desktopSplitHeightPx(): number | null { return this._desktopSplitHeightPx(); }
   set desktopSplitHeightPx(value: number | null) { this._desktopSplitHeightPx.set(value); }
@@ -568,6 +597,8 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.detachVisualViewportListeners();
     this.stopPolling();
     this.clearHoldTimer();
+    void this.cashAppQrPad?.destroy();
+    void this.cashAppResumePad?.destroy();
     if (this.desktopLayoutRafId !== null && typeof window !== 'undefined') {
       window.cancelAnimationFrame(this.desktopLayoutRafId);
       this.desktopLayoutRafId = null;
@@ -1244,7 +1275,7 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
               .subscribe({
                 next: () => {
                   if (creditRemainingAmount > 0) {
-                    if (remainingMethod === 'square' || remainingMethod === 'client') {
+                    if (remainingMethod === 'square') {
                       this.confirmingReservation = false;
                       this.loading = false;
                       this.generatePaymentLinkForCurrentFlow();
@@ -1319,13 +1350,7 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
             return;
           }
 
-          if (paymentMethod === 'client') {
-            if (autoSquareLinkSms?.sent) {
-              this.confirmingReservation = false;
-              this.loading = false;
-              this.finishReservationFlow();
-              return;
-            }
+          if (paymentMethod === 'cashapp') {
             this.createdReservation = {
               reservationId,
               eventDate: this.eventDate!,
@@ -1334,11 +1359,13 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
               customerName: this.form.controls.customerName.value,
               phone,
               amount: amountDue,
-              linkMode: 'client',
+              linkMode: 'cashapp',
             };
             this.confirmingReservation = false;
             this.loading = false;
-            this.generatePaymentLinkForCurrentFlow();
+            // No further API call here — the QR pad lives in the post-
+            // create section of the modal and mounts on staff click.
+            // `onCashAppTokenizedInWizard` records the payment.
             return;
           }
 
@@ -1364,6 +1391,10 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
 
   closeReservationModal(): void {
     if (this.createdReservation) {
+      // Both the modal X/backdrop AND the bottom "Done" button route
+      // through finishReservationFlow(), which is where the Cash-App-
+      // pending banner stash lives so the recovery path works from
+      // either gesture.
       this.finishReservationFlow();
       return;
     }
@@ -1377,6 +1408,128 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.showReservationModal = false;
     this.holdExpired = false;
     this.saveActiveHoldSessionIfNeeded();
+  }
+
+  // --- Resume "Cash App pending" banner + dialog ------------------------
+
+  openCashAppResumeDialog(): void {
+    if (!this.pendingCashAppPayment()) return;
+    this.cashAppResumeError.set(null);
+    this.cashAppResumeSuccess.set(false);
+    this.cashAppResumeCharging.set(false);
+    this.showCashAppResumeDialog.set(true);
+  }
+
+  openCancelPendingCashApp(): void {
+    if (!this.pendingCashAppPayment()) return;
+    this.cancelPendingError.set(null);
+    this.cancelPendingConfirmOpen.set(true);
+  }
+
+  closeCancelPendingCashApp(): void {
+    if (this.cancelPendingLoading()) return;
+    this.cancelPendingConfirmOpen.set(false);
+  }
+
+  confirmCancelPendingCashApp(): void {
+    const ctx = this.pendingCashAppPayment();
+    if (!ctx) return;
+    if (this.cancelPendingLoading()) return;
+    this.cancelPendingLoading.set(true);
+    this.cancelPendingError.set(null);
+    this.reservationsApi
+      .cancel(
+        ctx.reservationId,
+        ctx.eventDate,
+        ctx.tableId || null,
+        'Cash App payment not completed',
+        'CANCEL_NO_REFUND'
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.cancelPendingLoading.set(false);
+          this.cancelPendingConfirmOpen.set(false);
+          this.pendingCashAppPayment.set(null);
+          // Reload tables so the cancelled reservation's table goes
+          // back to AVAILABLE on the map immediately.
+          if (this.eventDate) {
+            this.loadTables(this.eventDate);
+          }
+        },
+        error: (err: any) => {
+          this.cancelPendingLoading.set(false);
+          this.cancelPendingError.set(
+            err?.error?.message || err?.message || 'Failed to cancel reservation.'
+          );
+        },
+      });
+  }
+
+  closeCashAppResumeDialog(): void {
+    this.showCashAppResumeDialog.set(false);
+    this.cashAppResumeError.set(null);
+    void this.cashAppResumePad?.destroy();
+  }
+
+  prepareCashAppResume(): void {
+    const ctx = this.pendingCashAppPayment();
+    if (!ctx) return;
+    if (!this.canUseCashAppPay()) {
+      this.cashAppResumeError.set(
+        'Cash App Pay is not configured. Set Square application id and location id in Admin → Settings.'
+      );
+      return;
+    }
+    this.cashAppResumeError.set(null);
+    this.cashAppResumeSuccess.set(false);
+    void this.cashAppResumePad?.prepare();
+  }
+
+  onCashAppResumeTokenized(sourceId: string): void {
+    const ctx = this.pendingCashAppPayment();
+    if (!ctx) return;
+    if (this.cashAppResumeCharging()) return;
+
+    this.cashAppResumeCharging.set(true);
+    this.cashAppResumeError.set(null);
+
+    this.reservationsApi
+      .addSquarePayment({
+        reservationId: ctx.reservationId,
+        eventDate: ctx.eventDate,
+        amount: ctx.amount,
+        sourceId,
+        note: `Cash App Pay for ${
+          formatBookingTablesLabel(ctx.tableIds) || `table ${ctx.tableId}`
+        }`,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.cashAppResumeSuccess.set(true);
+          setTimeout(() => {
+            this.cashAppResumeCharging.set(false);
+            this.pendingCashAppPayment.set(null);
+            this.closeCashAppResumeDialog();
+            // Refresh the table map so the reservation's new payment
+            // status shows up immediately.
+            if (this.eventDate) {
+              this.loadTables(this.eventDate);
+            }
+          }, 1500);
+        },
+        error: (err: any) => {
+          this.cashAppResumeCharging.set(false);
+          this.cashAppResumeError.set(
+            err?.error?.message || err?.message || 'Failed to record Cash App payment.'
+          );
+        },
+      });
+  }
+
+  onCashAppResumeErrored(message: string): void {
+    this.cashAppResumeError.set(message || 'Cash App payment was not completed.');
   }
 
   cancelReleasePrompt(): void {
@@ -1647,16 +1800,16 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
 
   trackByPaymentMethodOption(
     _index: number,
-    item: { value: 'cash' | 'square' | 'client' }
+    item: { value: 'cash' | 'square' | 'cashapp' }
   ): string {
     return item.value;
   }
 
-  isPaymentMethod(value: 'cash' | 'square' | 'client'): boolean {
+  isPaymentMethod(value: 'cash' | 'square' | 'cashapp'): boolean {
     return this.form.controls.paymentMethod.value === value;
   }
 
-  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square' | 'client'): void {
+  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square' | 'cashapp'): void {
     event.preventDefault();
     event.stopPropagation();
     if (this.form.controls.paymentMethod.value === value) return;
@@ -1672,30 +1825,28 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     return this.form.controls.paymentMethod.value === 'square';
   }
 
-  isClientPayMethod(): boolean {
-    return this.form.controls.paymentMethod.value === 'client';
+  isCashAppMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'cashapp';
   }
 
   isLinkCollectionFlow(): boolean {
     if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
-      const remainingMethod = this.form.controls.remainingMethod.value;
-      return remainingMethod === 'square' || remainingMethod === 'client';
+      return this.form.controls.remainingMethod.value === 'square';
     }
-    return this.isSquareMethod() || this.isClientPayMethod();
+    return this.isSquareMethod() || this.isCashAppMethod();
   }
 
-  private currentLinkModeFromForm(): 'square' | 'client' | null {
+  private currentLinkModeFromForm(): 'square' | 'cashapp' | null {
     if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
-      const remainingMethod = this.form.controls.remainingMethod.value;
-      return remainingMethod === 'square' || remainingMethod === 'client'
-        ? remainingMethod
-        : null;
+      return this.form.controls.remainingMethod.value === 'square' ? 'square' : null;
     }
     const method = this.form.controls.paymentMethod.value;
-    return method === 'square' || method === 'client' ? method : null;
+    if (method === 'square') return 'square';
+    if (method === 'cashapp') return 'cashapp';
+    return null;
   }
 
-  private currentLinkMode(): 'square' | 'client' | null {
+  private currentLinkMode(): 'square' | 'cashapp' | null {
     return this.createdReservation?.linkMode ?? this.currentLinkModeFromForm();
   }
 
@@ -1720,40 +1871,8 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.paymentLinkNotice = null;
     // Square's create-link route accepts an idempotencyKey; a per-attempt
     // UUID makes rapid double-clicks and component re-mount races collapse
-    // onto a single Square link instead of minting orphans. The Cash App
-    // link route mints a fresh token per call regardless, so no key needed
-    // there.
+    // onto a single Square link instead of minting orphans.
     const idempotencyKey = this.newIdempotencyKey();
-
-    if (linkMode === 'client') {
-      this.reservationsApi
-        .createCashAppLink({
-          reservationId: this.createdReservation.reservationId,
-          eventDate: this.createdReservation.eventDate,
-          amount: this.createdReservation.amount,
-        })
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (res) => {
-            const url = String(res?.cashAppLink?.url ?? '').trim();
-            if (!url) {
-              this.paymentLinkError =
-                'Cash App link generation succeeded but no URL was returned.';
-              this.creatingPaymentLink = false;
-              return;
-            }
-            this.paymentLinkUrl = url;
-            this.paymentLinkNotice = 'Cash App link generated. Share it with the customer.';
-            this.creatingPaymentLink = false;
-          },
-          error: (err: any) => {
-            this.paymentLinkError =
-              err?.error?.message || err?.message || 'Failed to generate Cash App link';
-            this.creatingPaymentLink = false;
-          },
-        });
-      return;
-    }
 
     this.reservationsApi
       .createSquarePaymentLink({
@@ -1785,6 +1904,79 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
           this.creatingPaymentLink = false;
         },
       });
+  }
+
+  // --- In-venue Cash App QR (linkMode === 'cashapp') --------------------
+  // Parent-side glue around <cash-app-qr-pad>. Triggered from the post-
+  // create "Show Cash App QR" button; the pad mounts the Web Payments
+  // SDK, customer scans, SDK fires (tokenized), we POST the source to
+  // addSquarePayment and flip the reservation to PAID/PARTIAL.
+
+  canUseCashAppPay(): boolean {
+    return Boolean(this.squareApplicationId() && this.squareLocationId());
+  }
+
+  cashAppPadLabel(): string {
+    if (!this.createdReservation) return 'Reservation payment';
+    const label =
+      formatBookingTablesLabel(this.createdReservation.tableIds) ||
+      (this.createdReservation.tableId ? `table ${this.createdReservation.tableId}` : '');
+    return label ? `${label} payment` : 'Reservation payment';
+  }
+
+  prepareCashAppQrInWizard(): void {
+    if (!this.createdReservation) return;
+    if (this.createdReservation.linkMode !== 'cashapp') return;
+    if (!this.canUseCashAppPay()) {
+      this.paymentLinkError =
+        'Cash App Pay is not configured. Set Square application id and location id in Admin → Settings.';
+      return;
+    }
+    this.paymentLinkError = null;
+    this.paymentLinkNotice = null;
+    this.cashAppPaymentSuccess.set(false);
+    void this.cashAppQrPad?.prepare();
+  }
+
+  onCashAppTokenizedInWizard(sourceId: string): void {
+    const ctx = this.createdReservation;
+    if (!ctx) return;
+    if (this.cashAppCharging()) return;
+
+    this.cashAppCharging.set(true);
+    this.paymentLinkError = null;
+
+    this.reservationsApi
+      .addSquarePayment({
+        reservationId: ctx.reservationId,
+        eventDate: ctx.eventDate,
+        amount: ctx.amount,
+        sourceId,
+        note: `Cash App Pay for ${
+          formatBookingTablesLabel(ctx.tableIds) || `table ${ctx.tableId}`
+        }`,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          // Brief green "Paid" display before the wizard wraps up so
+          // staff sees explicit confirmation without an extra dialog.
+          this.cashAppPaymentSuccess.set(true);
+          setTimeout(() => {
+            this.cashAppCharging.set(false);
+            this.finishReservationFlow();
+          }, 1500);
+        },
+        error: (err: any) => {
+          this.cashAppCharging.set(false);
+          this.paymentLinkError =
+            err?.error?.message || err?.message || 'Failed to record Cash App payment.';
+        },
+      });
+  }
+
+  onCashAppErroredInWizard(message: string): void {
+    this.paymentLinkError = message || 'Cash App payment was not completed.';
   }
 
   copyGeneratedPaymentLink(): void {
@@ -1838,16 +2030,15 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   }
 
   linkCollectionTitle(): string {
-    const mode = this.currentLinkMode();
-    return mode === 'client' ? 'Cash App Link' : 'Square Link';
+    return this.currentLinkMode() === 'cashapp' ? 'Cash App QR' : 'Square Link';
   }
 
   reservationActionLabel(): string {
     if (this.createdReservation) return 'Done';
     if (this.isLinkCollectionFlow()) {
-      return this.currentLinkModeFromForm() === 'client'
-        ? 'Confirm & Generate Cash App Link'
-        : 'Confirm & Generate Square Link';
+      const mode = this.currentLinkModeFromForm();
+      if (mode === 'cashapp') return 'Confirm & Show Cash App QR';
+      return 'Confirm & Generate Square Link';
     }
     return 'Confirm Reservation';
   }
@@ -1969,9 +2160,27 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.paymentLinkError = null;
     this.paymentLinkNotice = null;
     this.creatingPaymentLink = false;
+    this.cashAppPaymentSuccess.set(false);
+    this.cashAppCharging.set(false);
+    void this.cashAppQrPad?.destroy();
   }
 
   finishReservationFlow(): void {
+    // If the wizard is wrapping up while a Cash App QR is still
+    // mid-flow (reservation already created, customer hasn't scanned
+    // yet), stash the context so the map view can surface a "Resume /
+    // Cancel" banner. Either close gesture — modal X/backdrop or the
+    // bottom "Done" button — routes through here, so this single
+    // check covers both.
+    const created = this.createdReservation;
+    if (
+      created &&
+      created.linkMode === 'cashapp' &&
+      !this.cashAppPaymentSuccess() &&
+      !this.cashAppCharging()
+    ) {
+      this.pendingCashAppPayment.set(created);
+    }
     this.clearActiveHoldSession();
     this.resetCreatedReservationState();
     this.selectedTable = null;
@@ -2158,6 +2367,13 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
         const cashReceiptSetting = ctx?.settings?.cashReceiptNumberRequired;
         this.cashReceiptNumberRequired =
           typeof cashReceiptSetting === 'boolean' ? cashReceiptSetting : true;
+        this.squareApplicationId.set(String(ctx?.settings?.squareApplicationId ?? '').trim());
+        this.squareLocationId.set(String(ctx?.settings?.squareLocationId ?? '').trim());
+        this.squareEnvMode.set(
+          String(ctx?.settings?.squareEnvMode ?? '').trim().toLowerCase() === 'production'
+            ? 'production'
+            : 'sandbox'
+        );
         if (this.eventDate) {
           this.startPolling();
           return;

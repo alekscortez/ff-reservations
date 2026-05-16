@@ -24,7 +24,11 @@ export interface CreatedReservationContext {
   customerName: string;
   phone: string;
   amount: number;
-  linkMode: 'square' | 'client' | null;
+  // What the wizard renders after the reservation is created:
+  // - 'square'  → Square hosted-checkout link to share with the customer.
+  // - 'cashapp' → in-venue Cash App QR (Web Payments SDK) mounted inline.
+  // - null      → no follow-up (cash already recorded at create time).
+  linkMode: 'square' | 'cashapp' | null;
 }
 
 // "Table 5" / "Tables 5, 7, 9". Empty list returns "" so callers can branch.
@@ -38,21 +42,29 @@ export function formatTablesLabel(tableIds: string[] | undefined | null): string
 }
 
 // Maps the form's payment-method enum to the API's payment-method enum.
-// The form uses 'client' (a UI label) where the API expects 'cashapp'.
+// 'cashapp' here means "staff will scan the in-venue QR for this customer
+// right after create" — NOT "send them a Cash App link" (that flow was
+// removed 2026-05-16). The backend treats cashapp + 'PENDING' the same
+// way as square + 'PENDING' at create time; the actual Cash App charge
+// is recorded later via POST /reservations/{id}/payments when the SDK
+// tokenizes.
 export function toCreatePaymentMethod(
-  method: 'cash' | 'square' | 'client'
+  method: 'cash' | 'square' | 'cashapp'
 ): 'cash' | 'square' | 'cashapp' | null {
   if (method === 'cash') return 'cash';
   if (method === 'square') return 'square';
-  return 'cashapp';
+  if (method === 'cashapp') return 'cashapp';
+  return null;
 }
 
-// Returns the link mode if the chosen method requires generating a
-// payment link (square or client/cashapp), null otherwise (cash).
+// Returns the link mode if the chosen method requires a follow-up step
+// after reservation creation: 'square' = generate hosted-checkout link,
+// 'cashapp' = mount in-venue QR pad. Null for cash (recorded at create).
 export function toLinkMode(
-  method: 'cash' | 'square' | 'client'
-): 'square' | 'client' | null {
-  if (method === 'square' || method === 'client') return method;
+  method: 'cash' | 'square' | 'cashapp'
+): 'square' | 'cashapp' | null {
+  if (method === 'square') return 'square';
+  if (method === 'cashapp') return 'cashapp';
   return null;
 }
 

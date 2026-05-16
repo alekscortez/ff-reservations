@@ -1,7 +1,9 @@
 import type { CreateSquarePaymentLinkResponse } from '../../core/http/reservations.service';
 
 export interface GeneratedPaymentLink {
-  method: 'square' | 'cashapp';
+  // Cash App is in-venue only (staff shows QR via the Web Payments SDK);
+  // no Cash App link is ever generated as a customer-facing URL.
+  method: 'square';
   url: string;
   amount: number;
   createdAtMs: number;

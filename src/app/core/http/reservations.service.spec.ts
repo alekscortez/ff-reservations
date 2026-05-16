@@ -178,26 +178,6 @@ describe('ReservationsService', () => {
     });
   });
 
-  it('createCashAppLink: POST /reservations/:id/cashapp-link/square', async () => {
-    const { svc, calls } = setup();
-    await firstValueFrom(
-      svc.createCashAppLink({ reservationId: 'r1', eventDate: '2026-05-09', amount: 25, ttlMinutes: 60 })
-    );
-    expect(calls[0]).toEqual({
-      method: 'POST',
-      path: '/reservations/r1/cashapp-link/square',
-      body: { eventDate: '2026-05-09', amount: 25, ttlMinutes: 60 },
-    });
-  });
-
-  it('createCashAppLinkSms: POST /reservations/:id/cashapp-link/square/sms', async () => {
-    const { svc, calls } = setup();
-    await firstValueFrom(
-      svc.createCashAppLinkSms({ reservationId: 'r1', eventDate: '2026-05-09', amount: 25, ttlMinutes: 60 })
-    );
-    expect(calls[0].path).toBe('/reservations/r1/cashapp-link/square/sms');
-  });
-
   it('listHistory: GET /reservations/:id/history with eventDate; unwraps items', async () => {
     const { svc, calls } = setup({ 'GET /reservations/r1/history': { items: [{ at: 1 }] } });
     const res = await firstValueFrom(svc.listHistory('r1', '2026-05-09'));

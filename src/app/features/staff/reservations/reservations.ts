@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -47,7 +46,7 @@ import {
   TableLabelPipe,
 } from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
-import { SquareWebPaymentsService } from '../../../core/payments/square-web-payments.service';
+import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -72,6 +71,7 @@ import {
   HlmTr,
 } from '../../../shared/ui/table';
 import { ReservationDetailModal } from '../../../shared/components/reservation-detail-modal/reservation-detail-modal';
+
 
 const PAGE_SIZE = 25;
 
@@ -102,6 +102,7 @@ const PAGE_SIZE = 25;
     HlmTh,
     HlmTr,
     ReservationDetailModal,
+    CashAppQrPad,
   ],
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX })],
   templateUrl: './reservations.html',
@@ -113,7 +114,6 @@ export class Reservations implements OnInit, OnDestroy {
   private eventsApi = inject(EventsService);
   private checkInApi = inject(CheckInService);
   private clientsApi = inject(ClientsService);
-  private squareWebPayments = inject(SquareWebPaymentsService);
 
   filterDate = new FormControl('', { nonNullable: true });
   // Staff lookup by 6-char confirmation code (FF-XXXXXX). Drives the
@@ -272,7 +272,6 @@ export class Reservations implements OnInit, OnDestroy {
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
   readonly paymentLinkLoadingId = signal<string | null>(null);
-  readonly publicPayLinkLoadingId = signal<string | null>(null);
   readonly paymentLinkError = signal<string | null>(null);
   readonly paymentLinkNotice = signal<string | null>(null);
   readonly paymentLinksByReservationId = signal<Record<string, GeneratedPaymentLink>>({});
@@ -284,10 +283,8 @@ export class Reservations implements OnInit, OnDestroy {
   readonly historyLoadingId = signal<string | null>(null);
   readonly historyError = signal<string | null>(null);
   readonly historyByReservationId = signal<Record<string, ReservationHistoryViewItem[]>>({});
-  readonly cashAppPayPreparing = signal(false);
-  readonly cashAppPayReady = signal(false);
-  @ViewChild('cashAppPayHost') cashAppPayHost?: ElementRef<HTMLElement>;
-  private cashAppPayDestroy: (() => Promise<void>) | null = null;
+  readonly cashAppPaymentSuccess = signal(false);
+  @ViewChild('cashAppQrPad') cashAppQrPad?: CashAppQrPad;
 
   paymentForm = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
@@ -315,7 +312,7 @@ export class Reservations implements OnInit, OnDestroy {
     this.showDetailsModal.set(false);
     this.showPaymentModal.set(false);
     this.syncSidebarModalLock();
-    void this.destroyCashAppPayButton();
+    void this.cashAppQrPad?.destroy();
   }
 
   private loadContextAndEvents(): void {
@@ -659,7 +656,6 @@ export class Reservations implements OnInit, OnDestroy {
     this.syncSidebarModalLock();
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
-    this.publicPayLinkLoadingId.set(null);
     this.checkInPassError.set(null);
     this.checkInPassNotice.set(null);
     this.historyError.set(null);
@@ -904,9 +900,8 @@ export class Reservations implements OnInit, OnDestroy {
     this.paymentSubmitAttempted.set(false);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
-    this.cashAppPayReady.set(false);
-    this.cashAppPayPreparing.set(false);
-    void this.destroyCashAppPayButton();
+    this.cashAppPaymentSuccess.set(false);
+    void this.cashAppQrPad?.destroy();
     this.syncSidebarModalLock();
     const due = Number(item.amountDue ?? 0);
     const paid = Number(item.depositAmount ?? 0);
@@ -957,7 +952,7 @@ export class Reservations implements OnInit, OnDestroy {
     const item = this.paymentItem();
     if (!item) return;
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.loading() || this.cashAppPayPreparing()) return;
+    if (this.loading() || this.cashAppQrPad?.preparing()) return;
     if (!this.canUseCashAppPay()) {
       this.paymentLinkError.set('Cash App Pay is not configured in Square settings.');
       return;
@@ -977,8 +972,8 @@ export class Reservations implements OnInit, OnDestroy {
 
     this.error.set(null);
     this.paymentLinkError.set(null);
-    const note = String(this.paymentForm.controls.note.value ?? '').trim();
-    await this.prepareCashAppPayButton(item, amount, note);
+    this.cashAppPaymentSuccess.set(false);
+    await this.cashAppQrPad?.prepare();
   }
 
   closePayment(): void {
@@ -998,9 +993,8 @@ export class Reservations implements OnInit, OnDestroy {
     this.paymentCreditsLoading.set(false);
     this.paymentCreditsError.set(null);
     this.paymentLinkError.set(null);
-    this.cashAppPayReady.set(false);
-    this.cashAppPayPreparing.set(false);
-    void this.destroyCashAppPayButton();
+    this.cashAppPaymentSuccess.set(false);
+    void this.cashAppQrPad?.destroy();
   }
 
   canGeneratePaymentLink(item: ReservationItem): boolean {
@@ -1019,7 +1013,7 @@ export class Reservations implements OnInit, OnDestroy {
 
   generatePaymentLink(item: ReservationItem): void {
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
+    if (this.paymentLinkLoadingId()) return;
 
     const remaining = this.remainingAmount(item);
     if (remaining <= 0) return;
@@ -1065,55 +1059,9 @@ export class Reservations implements OnInit, OnDestroy {
       });
   }
 
-  generateClientPayLink(item: ReservationItem): void {
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
-
-    const remaining = this.remainingAmount(item);
-    if (remaining <= 0) return;
-
-    this.publicPayLinkLoadingId.set(item.reservationId);
-    this.paymentLinkError.set(null);
-    this.paymentLinkNotice.set(null);
-
-    this.reservationsApi
-      .createCashAppLink({
-        reservationId: item.reservationId,
-        eventDate: item.eventDate,
-        amount: remaining,
-      })
-      .subscribe({
-        next: (res) => {
-          const url = String(res?.cashAppLink?.url ?? '').trim();
-          if (!url) {
-            this.paymentLinkError.set('Cash App link generation succeeded but no URL was returned.');
-            this.publicPayLinkLoadingId.set(null);
-            return;
-          }
-          this.paymentLinksByReservationId.update((current) => ({
-            ...current,
-            [item.reservationId]: {
-              method: 'cashapp',
-              url,
-              amount: Number(res?.reservation?.linkAmount ?? remaining),
-              createdAtMs: Date.now(),
-            },
-          }));
-          this.paymentLinkNotice.set('Cash App link ready to share.');
-          this.publicPayLinkLoadingId.set(null);
-        },
-        error: (err) => {
-          this.paymentLinkError.set(
-            err?.error?.message || err?.message || 'Failed to generate Cash App link',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-      });
-  }
-
   sendPaymentLinkSms(item: ReservationItem): void {
     if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
+    if (this.paymentLinkLoadingId()) return;
 
     const remaining = this.remainingAmount(item);
     if (remaining <= 0) return;
@@ -1165,64 +1113,8 @@ export class Reservations implements OnInit, OnDestroy {
       });
   }
 
-  sendGeneratedLinkSms(item: ReservationItem, method: 'square' | 'cashapp'): void {
-    if (method === 'cashapp') {
-      this.sendPublicPayLinkSms(item);
-      return;
-    }
+  sendGeneratedLinkSms(item: ReservationItem): void {
     this.sendPaymentLinkSms(item);
-  }
-
-  sendPublicPayLinkSms(item: ReservationItem): void {
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId() || this.publicPayLinkLoadingId()) return;
-
-    const remaining = this.remainingAmount(item);
-    if (remaining <= 0) return;
-
-    this.publicPayLinkLoadingId.set(item.reservationId);
-    this.paymentLinkError.set(null);
-    this.paymentLinkNotice.set(null);
-
-    this.reservationsApi
-      .createCashAppLinkSms({
-        reservationId: item.reservationId,
-        eventDate: item.eventDate,
-        amount: remaining,
-      })
-      .subscribe({
-        next: (res) => {
-          const url = String(res?.cashAppLink?.url ?? '').trim();
-          if (!url) {
-            this.paymentLinkError.set('SMS sent flow succeeded but no Cash App URL was returned.');
-            this.publicPayLinkLoadingId.set(null);
-            return;
-          }
-          this.paymentLinksByReservationId.update((current) => ({
-            ...current,
-            [item.reservationId]: {
-              method: 'cashapp',
-              url,
-              amount: Number(res?.reservation?.linkAmount ?? remaining),
-              createdAtMs: Date.now(),
-            },
-          }));
-          const to = String(res?.sms?.to ?? '').trim();
-          const messageId = String(res?.sms?.messageId ?? '').trim();
-          this.paymentLinkNotice.set(
-            to
-              ? `Cash App link sent by FF SMS to ${to}${messageId ? ` (${messageId})` : ''}.`
-              : 'Cash App link sent by FF SMS.',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-        error: (err) => {
-          this.paymentLinkError.set(
-            err?.error?.message || err?.message || 'Failed to send Cash App link SMS',
-          );
-          this.publicPayLinkLoadingId.set(null);
-        },
-      });
   }
 
   copyPaymentLink(item: ReservationItem): void {
@@ -1630,9 +1522,8 @@ export class Reservations implements OnInit, OnDestroy {
 
   onPaymentMethodChanged(): void {
     if (!this.isCashAppPaymentMethodSelected()) {
-      this.cashAppPayReady.set(false);
-      this.cashAppPayPreparing.set(false);
-      void this.destroyCashAppPayButton();
+      this.cashAppPaymentSuccess.set(false);
+      void this.cashAppQrPad?.destroy();
     }
     if (!this.isCreditPaymentMethodSelected()) {
       this.paymentForm.controls.creditId.setValue('');
@@ -1687,62 +1578,14 @@ export class Reservations implements OnInit, OnDestroy {
     }
   }
 
-  private async prepareCashAppPayButton(
-    item: ReservationItem,
-    amount: number,
-    note: string
-  ): Promise<void> {
-    const host = this.cashAppPayHost?.nativeElement;
-    if (!host) {
-      this.paymentLinkError.set('Cash App Pay UI is not ready. Close and reopen the modal, then try again.');
-      return;
-    }
-
-    this.cashAppPayPreparing.set(true);
-    this.cashAppPayReady.set(false);
-    this.paymentLinkError.set(null);
-
-    try {
-      await this.destroyCashAppPayButton();
-      const session = await this.squareWebPayments.mountCashAppPayButton({
-        applicationId: this.squareApplicationId(),
-        locationId: this.squareLocationId(),
-        amount,
-        container: host,
-        label: `${formatTableLabel(item)} payment`,
-        referenceId: item.reservationId,
-        squareEnvMode: this.squareEnvMode(),
-        onTokenized: (sourceId) => {
-          setTimeout(() => {
-            void this.captureCashAppPayment(item, amount, sourceId, note);
-          }, 0);
-        },
-        onError: (message) => {
-          setTimeout(() => {
-            this.paymentLinkError.set(message || 'Cash App payment was not completed.');
-          }, 0);
-        },
-      });
-      this.cashAppPayDestroy = session.destroy;
-      this.cashAppPayReady.set(true);
-    } catch (err: unknown) {
-      const message =
-        (err as { message?: string } | null | undefined)?.message ||
-        'Failed to initialize Cash App Pay.';
-      this.paymentLinkError.set(message);
-      this.cashAppPayReady.set(false);
-    } finally {
-      this.cashAppPayPreparing.set(false);
-    }
-  }
-
-  private async captureCashAppPayment(
-    item: ReservationItem,
-    amount: number,
-    sourceId: string,
-    note: string
-  ): Promise<void> {
+  onCashAppTokenized(sourceId: string): void {
+    const item = this.paymentItem();
+    if (!item) return;
     if (this.loading()) return;
+
+    const amount = Number(this.paymentForm.controls.amount.value);
+    const note = String(this.paymentForm.controls.note.value ?? '').trim();
+
     this.loading.set(true);
     this.error.set(null);
     this.paymentLinkError.set(null);
@@ -1763,8 +1606,13 @@ export class Reservations implements OnInit, OnDestroy {
               x.reservationId === updated.reservationId ? updated : x,
             ),
           );
-          this.loading.set(false);
-          this.closePayment();
+          // Brief green "Paid" display before the modal closes so staff
+          // see explicit confirmation without an extra dialog.
+          this.cashAppPaymentSuccess.set(true);
+          setTimeout(() => {
+            this.loading.set(false);
+            this.closePayment();
+          }, 1500);
         },
         error: (err) => {
           this.loading.set(false);
@@ -1775,18 +1623,13 @@ export class Reservations implements OnInit, OnDestroy {
       });
   }
 
-  private async destroyCashAppPayButton(): Promise<void> {
-    const destroy = this.cashAppPayDestroy;
-    this.cashAppPayDestroy = null;
-    if (destroy) {
-      try {
-        await destroy();
-      } catch {
-        // Best-effort teardown.
-      }
-    }
-    const host = this.cashAppPayHost?.nativeElement;
-    if (host) host.innerHTML = '';
+  onCashAppErrored(message: string): void {
+    this.paymentLinkError.set(message || 'Cash App payment was not completed.');
+  }
+
+  cashAppLabel(): string {
+    const item = this.paymentItem();
+    return item ? `${formatTableLabel(item)} payment` : 'Reservation payment';
   }
 
   creditAppliedAmount(): number {
@@ -1864,9 +1707,9 @@ export class Reservations implements OnInit, OnDestroy {
         : 'Generate Link';
     }
     if (this.isCashAppPaymentMethodSelected()) {
-      if (this.cashAppPayPreparing()) return 'Preparing…';
+      if (this.cashAppQrPad?.preparing()) return 'Preparing…';
       if (this.loading()) return 'Processing…';
-      return this.cashAppPayReady() ? 'Refresh Cash App QR' : 'Show Cash App QR';
+      return this.cashAppQrPad?.ready() ? 'Refresh Cash App QR' : 'Show Cash App QR';
     }
     if (this.loading()) return 'Saving…';
     if (!this.isCreditPaymentMethodSelected()) return 'Submit Payment';

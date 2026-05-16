@@ -135,16 +135,10 @@ function defaultShared(overrides = {}) {
 }
 
 function defaultPaymentRecording(overrides = {}) {
-  const revokeCalls = [];
   const markInactiveCalls = [];
   return {
-    revokeCalls,
     markInactiveCalls,
     paymentRecording: {
-      revokeReservationCashAppLinkSession: async (args) => {
-        revokeCalls.push(args);
-        return null;
-      },
       markReservationPaymentLinkInactive: async (args) => {
         markInactiveCalls.push(args);
         return null;
@@ -225,7 +219,6 @@ function buildReservations(overrides = {}) {
     historyCalls: sharedHarness.historyCalls,
     checkInCalls: sharedHarness.checkInCalls,
     smsCalls: sharedHarness.smsCalls,
-    revokeCalls: prHarness.revokeCalls,
     markInactiveCalls: prHarness.markInactiveCalls,
     deactivateCalls,
     refundCalls: refundCalls.length === 0 ? deps.refundSquarePayment : refundCalls,
@@ -559,31 +552,6 @@ describe("cancelReservation CANCEL_NO_REFUND", () => {
     assert.ok(cancelEvent, "RESERVATION_CANCELLED history written");
     assert.equal(cancelEvent.details.resolutionType, "CANCEL_NO_REFUND");
     assert.equal(cancelEvent.details.reason, "Customer cancelled");
-  });
-
-  it("revokes ACTIVE Cash App link session", async () => {
-    const ddb = makeFakeDdb({
-      respond: {
-        UpdateCommand: (input) => ({
-          Attributes: {
-            ...input.ExpressionAttributeValues,
-            cashAppLinkStatus: "ACTIVE",
-            tableId: "T1",
-            customerName: "Alice",
-          },
-        }),
-      },
-    });
-    const { svc, revokeCalls } = buildReservations({
-      ddb,
-      shared: {
-        getReservationById: async () =>
-          reservationItem({ cashAppLinkStatus: "ACTIVE" }),
-      },
-    });
-    await svc.cancelReservation(TODAY_LOCAL_DATE, "r1", "T1", "staff@x", "test");
-    assert.equal(revokeCalls.length, 1);
-    assert.equal(revokeCalls[0].reservationId, "r1");
   });
 
   it("deactivates the Square payment link when paymentLinkId is present", async () => {

@@ -7,6 +7,8 @@ export interface ReservationRefundResult {
   paymentLocalId: string;
   providerPaymentId: string;
   amount: number;
+  // Refund applies to either a Square (card / Apple / Google) charge or an
+  // in-venue Cash App charge — both go through Square's Refund API.
   method: 'square' | 'cashapp';
   refundId?: string | null;
   refundStatus?: string | null;

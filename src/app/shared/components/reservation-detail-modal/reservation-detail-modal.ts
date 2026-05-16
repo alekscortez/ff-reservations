@@ -65,7 +65,6 @@ export class ReservationDetailModal {
   @Input() paymentLinkError: string | null = null;
   @Input() paymentLinkNotice: string | null = null;
   @Input() squareLinkLoading = false;
-  @Input() cashAppLinkLoading = false;
   @Input() checkInPass: GeneratedCheckInPass | null = null;
   @Input() checkInPassState: CheckInPassState | null = null;
   @Input() checkInPassError: string | null = null;
@@ -78,8 +77,7 @@ export class ReservationDetailModal {
 
   @Output() close = new EventEmitter<void>();
   @Output() generateSquareLink = new EventEmitter<void>();
-  @Output() generateCashAppLink = new EventEmitter<void>();
-  @Output() sendSms = new EventEmitter<'square' | 'cashapp'>();
+  @Output() sendSms = new EventEmitter<void>();
   @Output() copyLink = new EventEmitter<void>();
   @Output() openSms = new EventEmitter<void>();
   @Output() openWhatsApp = new EventEmitter<void>();

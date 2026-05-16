@@ -42,7 +42,11 @@ export interface ActiveHoldSession {
   amountDue: number;
   depositAmount: number;
   paymentStatus: 'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY';
-  paymentMethod: 'cash' | 'square' | 'client';
+  // Legacy 'client' value may exist in older persisted sessions written
+  // before Cash App was moved to in-venue-only. Readers normalize it to
+  // 'cashapp' on the fly so users with a stale session land on the new
+  // in-venue QR flow instead of a stuck "Cash App link" state.
+  paymentMethod: 'cash' | 'square' | 'cashapp';
   allowCustomDeposit: boolean;
   paymentDeadlineEnabled: boolean;
   paymentDeadlineDate: string;
@@ -56,7 +60,7 @@ const VALID_STATUSES: ActiveHoldSession['paymentStatus'][] = [
   'PENDING',
   'COURTESY',
 ];
-const VALID_METHODS: ActiveHoldSession['paymentMethod'][] = ['cash', 'square', 'client'];
+const VALID_METHODS: ActiveHoldSession['paymentMethod'][] = ['cash', 'square', 'cashapp'];
 
 export function readActiveHoldSession(): ActiveHoldSession | null {
   try {
@@ -124,9 +128,14 @@ export function readActiveHoldSession(): ActiveHoldSession | null {
           : 'PAID'
       ) as ActiveHoldSession['paymentStatus'],
       paymentMethod: (
-        VALID_METHODS.includes(paymentMethod as ActiveHoldSession['paymentMethod'])
-          ? paymentMethod
-          : 'square'
+        paymentMethod === 'client'
+          ? 'cashapp'
+          : VALID_METHODS.includes(paymentMethod as ActiveHoldSession['paymentMethod'])
+            ? paymentMethod
+            : 'square'
+        // Legacy 'client' (the pre-2026-05-16 Cash App link option)
+        // maps to 'cashapp' so a stale session continues into the new
+        // in-venue QR flow.
       ) as ActiveHoldSession['paymentMethod'],
       allowCustomDeposit: parsed.allowCustomDeposit === true,
       paymentDeadlineEnabled: parsed.paymentDeadlineEnabled === true,

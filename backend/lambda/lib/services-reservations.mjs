@@ -97,8 +97,7 @@ export function createReservationsService(
   // booking doesn't break. Explicit past deadlines from clients still
   // throw — this only rescues the auto-default path.
   const PAST_DEFAULT_DEADLINE_EXTENSION_MINUTES = 4 * 60;
-  const { revokeReservationCashAppLinkSession, markReservationPaymentLinkInactive } =
-    paymentRecording;
+  const { markReservationPaymentLinkInactive } = paymentRecording;
 
   async function assertRescheduleCreditAllowed(eventDate) {
     const normalizedEventDate = String(eventDate ?? "").trim();
@@ -721,29 +720,6 @@ export function createReservationsService(
       cancelReason === AUTO_RELEASE_REASON &&
       paymentLinkId &&
       typeof sendPaymentLinkExpiredSms === "function";
-
-    // Revoke any active Cash App self-pay session so a stale link can't go
-    // through after the reservation is cancelled. The /cashapp/session/charge
-    // route also re-checks reservation status, but flipping the link state
-    // here keeps audits/reports consistent and the public pay page honest.
-    const cashAppLinkStatus = String(cancelled?.cashAppLinkStatus ?? "")
-      .trim()
-      .toUpperCase();
-    if (cashAppLinkStatus === "ACTIVE") {
-      try {
-        await revokeReservationCashAppLinkSession({
-          eventDate,
-          reservationId,
-          actor: user,
-        });
-      } catch (err) {
-        console.warn("cash_app_link_revoke_failed", {
-          reservationId,
-          eventDate,
-          message: String(err?.message ?? err ?? ""),
-        });
-      }
-    }
 
     if (paymentLinkId && typeof deactivateSquarePaymentLink === "function") {
       let inactiveStatus = "DEACTIVATED";

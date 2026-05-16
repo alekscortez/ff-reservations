@@ -158,35 +158,19 @@
     </p>
 
     <article class="rounded-xl border border-brand-100 p-3" *ngIf="canGeneratePaymentLink(reservation)">
-      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Payment Links</p>
-      <div class="mt-2 grid gap-2 md:grid-cols-2">
-        <section class="rounded-lg border border-brand-100 bg-brand-50 p-2">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">Square</p>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              hlmBtn variant="outline" size="xs"
-              [disabled]="squareLinkLoading || cashAppLinkLoading || !canGeneratePaymentLink(reservation)"
-              (click)="generateSquareLink.emit()"
-            >
-              {{ squareLinkLoading ? 'Generating…' : 'Generate Square Link' }}
-            </button>
-          </div>
-        </section>
-
-        <section class="rounded-lg border border-brand-100 bg-brand-50 p-2">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">Cash App</p>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              hlmBtn size="xs"
-              [disabled]="cashAppLinkLoading || squareLinkLoading || !canGeneratePaymentLink(reservation)"
-              (click)="generateCashAppLink.emit()"
-            >
-              {{ cashAppLinkLoading ? 'Generating…' : 'Generate Cash App Link' }}
-            </button>
-          </div>
-        </section>
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Square Payment Link</p>
+      <p class="mt-1 text-xs text-brand-600">
+        For in-venue Cash App payments, open the payment modal on the reservation row and pick "Cash App Pay" to show the QR.
+      </p>
+      <div class="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          hlmBtn variant="outline" size="xs"
+          [disabled]="squareLinkLoading || !canGeneratePaymentLink(reservation)"
+          (click)="generateSquareLink.emit()"
+        >
+          {{ squareLinkLoading ? 'Generating…' : 'Generate Square Link' }}
+        </button>
       </div>
 
       <p class="mt-2 text-xs text-danger-700" *ngIf="paymentLinkError">{{ paymentLinkError }}</p>
@@ -205,7 +189,7 @@
 
       <div class="mt-2 grid min-w-0 gap-2" *ngIf="paymentLink as link">
         <p class="text-xs text-brand-600">
-          {{ link.method === 'cashapp' ? 'Cash App' : 'Square' }} link · Generated {{ link.createdAtMs | date:'shortTime' }} · ${{ link.amount | number:'1.2-2' }}
+          Square link · Generated {{ link.createdAtMs | date:'shortTime' }} · ${{ link.amount | number:'1.2-2' }}
         </p>
         <input
           type="text"
@@ -217,14 +201,10 @@
           <button
             type="button"
             hlmBtn variant="outline" size="sm" class="border-warning-300 bg-warning-50 text-warning-800"
-            [disabled]="(link.method === 'square' ? squareLinkLoading : cashAppLinkLoading) || !canGeneratePaymentLink(reservation)"
-            (click)="sendSms.emit(link.method)"
+            [disabled]="squareLinkLoading || !canGeneratePaymentLink(reservation)"
+            (click)="sendSms.emit()"
           >
-            {{
-              (link.method === 'square' ? squareLinkLoading : cashAppLinkLoading)
-                ? 'Sending…'
-                : 'Send via FF SMS'
-            }}
+            {{ squareLinkLoading ? 'Sending…' : 'Send via FF SMS' }}
           </button>
           <button type="button" hlmBtn variant="outline" size="sm" (click)="copyLink.emit()">Copy</button>
           <button type="button" hlmBtn variant="outline" size="sm" (click)="openSms.emit()">SMS App</button>

@@ -254,8 +254,10 @@ export function createSquarePaymentsService({
     shortUrlBase,
     // Optional override for Square's accepted_payment_methods. Falls back
     // to the env-driven defaults (apple_pay/google_pay/cash_app_pay all
-    // true) when omitted. Used by /me/cashapp-link to restrict the hosted
-    // checkout to Cash App only.
+    // true) when omitted. Cash App is in-venue only — staff shows the QR
+    // via the Web Payments SDK at the host stand, not a link to the
+    // customer — so callers should generally let the env defaults stand
+    // and not pass an override here.
     acceptedPaymentMethods: acceptedPaymentMethodsOverride,
   }) {
     const squareEnv = resolveSquareEnv();

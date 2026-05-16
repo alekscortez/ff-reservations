@@ -38,7 +38,6 @@ function makeReservation(overrides: Partial<ReservationItem> = {}): ReservationI
       [reservation]="reservation"
       [paymentLink]="paymentLink"
       [squareLinkLoading]="squareLinkLoading"
-      [cashAppLinkLoading]="cashAppLinkLoading"
       [checkInPass]="checkInPass"
       [checkInPassState]="checkInPassState"
       [checkInPassLoading]="checkInPassLoading"
@@ -47,8 +46,7 @@ function makeReservation(overrides: Partial<ReservationItem> = {}): ReservationI
       [canCancel]="canCancel"
       (close)="onClose()"
       (generateSquareLink)="onGenerateSquare()"
-      (generateCashAppLink)="onGenerateCashApp()"
-      (sendSms)="onSendSms($event)"
+      (sendSms)="onSendSms()"
       (copyLink)="onCopyLink()"
       (reissuePass)="onReissuePass()"
       (cancel)="onCancel()"
@@ -60,7 +58,6 @@ class Host {
   reservation: ReservationItem | null = makeReservation();
   paymentLink: GeneratedPaymentLink | null = null;
   squareLinkLoading = false;
-  cashAppLinkLoading = false;
   checkInPass: GeneratedCheckInPass | null = null;
   checkInPassState: CheckInPassState | null = null;
   checkInPassLoading = false;
@@ -70,16 +67,14 @@ class Host {
 
   closeCount = 0;
   generateSquareCount = 0;
-  generateCashAppCount = 0;
-  sendSmsLast: 'square' | 'cashapp' | null = null;
+  sendSmsCount = 0;
   copyLinkCount = 0;
   reissuePassCount = 0;
   cancelCount = 0;
 
   onClose() { this.closeCount += 1; }
   onGenerateSquare() { this.generateSquareCount += 1; }
-  onGenerateCashApp() { this.generateCashAppCount += 1; }
-  onSendSms(method: 'square' | 'cashapp') { this.sendSmsLast = method; }
+  onSendSms() { this.sendSmsCount += 1; }
   onCopyLink() { this.copyLinkCount += 1; }
   onReissuePass() { this.reissuePassCount += 1; }
   onCancel() { this.cancelCount += 1; }
@@ -137,13 +132,14 @@ describe('ReservationDetailModal', () => {
     expect(text).not.toContain('Cancel Reservation');
   });
 
-  it('switching to Links tab reveals the generate buttons', () => {
+  it('switching to Links tab reveals the generate button', () => {
     const f = createHost();
     tabButton(f, 'Links')!.click();
     f.detectChanges();
     const text = f.nativeElement.textContent ?? '';
     expect(text).toContain('Generate Square Link');
-    expect(text).toContain('Generate Cash App Link');
+    // Cash App is in-venue only — no link generation in this modal.
+    expect(text).not.toContain('Generate Cash App Link');
   });
 
   it('emits generateSquareLink when Square button is clicked', () => {
@@ -158,11 +154,11 @@ describe('ReservationDetailModal', () => {
     expect(f.componentInstance.generateSquareCount).toBe(1);
   });
 
-  it('emits sendSms with the link method when "Send via FF SMS" is clicked', () => {
+  it('emits sendSms when "Send via FF SMS" is clicked', () => {
     const f = createHost({
       paymentLink: {
-        method: 'cashapp',
-        url: 'https://cash.app/foo',
+        method: 'square',
+        url: 'https://checkout.square.site/abc',
         amount: 100,
         createdAtMs: Date.now(),
       },
@@ -174,7 +170,7 @@ describe('ReservationDetailModal', () => {
     ) as HTMLButtonElement[];
     const sendBtn = buttons.find((b) => (b.textContent ?? '').includes('Send via FF SMS'))!;
     sendBtn.click();
-    expect(f.componentInstance.sendSmsLast).toBe('cashapp');
+    expect(f.componentInstance.sendSmsCount).toBe(1);
   });
 
   it('shows "Past event" notice when eventDate is before today', () => {
