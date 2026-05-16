@@ -3,58 +3,78 @@
     <h1 class="text-2xl font-semibold text-brand-900">App Settings</h1>
   </header>
 
-  <branding-manager />
-
   <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
     <div *ngIf="loading()" class="text-sm text-brand-500">Loading settings…</div>
 
     <div *ngIf="!loading()" class="grid gap-4 xl:grid-cols-2">
-      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4" open>
+      <!-- Tier 1: tuned often -->
+
+      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2" [open]="form.controls.allowAnonymousPublicBooking.value">
         <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
-          <span>Business Hours</span>
+          <span>Customer Self-Booking</span>
           <span
-            *ngIf="sectionInvalid().operations"
+            *ngIf="sectionInvalid().publicBooking"
             class="inline-block h-2 w-2 rounded-full bg-danger-500"
             aria-label="Section has invalid fields"
             title="Section has invalid fields"
           ></span>
         </summary>
-        <div class="mt-3 grid gap-3 md:grid-cols-2">
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
-            Time zone
-            <hlm-native-select [formControl]="form.controls.operatingTz">
-              <option value="America/Chicago">America/Chicago (CT)</option>
-              <option value="America/Mexico_City">America/Mexico_City (CT)</option>
-            </hlm-native-select>
-            <span *ngIf="controlError('operatingTz') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
+        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+          <hlm-checkbox
+            [formControl]="form.controls.allowAnonymousPublicBooking"
+            label="Allow customers to self-book on the public map"
+          />
+          <p class="text-[11px] text-brand-500">
+            When off, customers can only view the map. When on, tapping an available table
+            opens a booking sheet with phone, anti-bot check, and Square payment.
+            Before turning on, make sure: (1) the anti-bot key below is set,
+            (2) the time zone is correct, (3) Square mode is Live (see Connected Services).
+          </p>
+        </div>
+
+        <div class="mt-3 grid gap-3 md:grid-cols-2 rounded-lg border border-brand-100 bg-white p-3">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            End of business day (hour, 0–23)
+            Customer payment window (seconds)
             <input
               type="number"
-              min="0"
-              max="23"
-              [formControl]="form.controls.operatingDayCutoffHour"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Reservations after this hour count toward the previous business day. Typical: 5 (5 AM).
-            </span>
-            <span *ngIf="controlError('operatingDayCutoffHour') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Staff hold timeout (seconds)
-            <input
-              type="number"
-              min="60"
+              min="300"
               max="1800"
-              [formControl]="form.controls.holdTtlSeconds"
+              [formControl]="form.controls.anonymousHoldTtlSeconds"
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How long a staff-created hold lasts before auto-releasing the table. Typical: 300 (5 min).
+              How long a customer has to pay before their hold auto-releases. 300–1800 seconds (5–30 min). Typical: 600 (10 min).
             </span>
-            <span *ngIf="controlError('holdTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+            <span *ngIf="controlError('anonymousHoldTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Maximum tables per booking
+            <input
+              type="number"
+              min="1"
+              max="10"
+              [formControl]="form.controls.anonymousMaxTablesPerBooking"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Cap on tables per customer self-booking (1–10). Typical: 4.
+            </span>
+            <span *ngIf="controlError('anonymousMaxTablesPerBooking') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
+            Anti-bot verification key (public)
+            <input
+              type="text"
+              placeholder="0x4AAAA…"
+              [formControl]="form.controls.turnstileSiteKey"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Cloudflare Turnstile site key. Required when self-booking is on.
+              Get one at dash.cloudflare.com → Turnstile.
+              The matching secret is set by your developer.
+            </span>
+            <span *ngIf="controlError('turnstileSiteKey') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
@@ -133,78 +153,7 @@
         </div>
       </details>
 
-      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
-        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
-          <span>Auto-refresh</span>
-          <span
-            *ngIf="sectionInvalid().liveUpdates"
-            class="inline-block h-2 w-2 rounded-full bg-danger-500"
-            aria-label="Section has invalid fields"
-            title="Section has invalid fields"
-          ></span>
-        </summary>
-        <p class="mt-2 text-[11px] normal-case tracking-normal text-brand-500">
-          Lower numbers = more current data, higher numbers = less load on the server.
-        </p>
-        <div class="mt-3 grid gap-3 md:grid-cols-2">
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Dashboard refresh interval (seconds)
-            <input
-              type="number"
-              min="5"
-              max="120"
-              [formControl]="form.controls.dashboardPollingSeconds"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How often the staff dashboard re-checks the server.
-            </span>
-            <span *ngIf="controlError('dashboardPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Table availability refresh (seconds)
-            <input
-              type="number"
-              min="5"
-              max="120"
-              [formControl]="form.controls.tableAvailabilityPollingSeconds"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How often the booking page re-checks which tables are open.
-            </span>
-            <span *ngIf="controlError('tableAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Topbar refresh (seconds)
-            <input
-              type="number"
-              min="5"
-              max="120"
-              [formControl]="form.controls.clientAvailabilityPollingSeconds"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How often the topbar checks for the active event.
-            </span>
-            <span *ngIf="controlError('clientAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Mark reservation urgent (minutes before deadline)
-            <input
-              type="number"
-              min="5"
-              max="1440"
-              [formControl]="form.controls.urgentPaymentWindowMinutes"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Reservations within this window of their payment deadline get the urgent flag.
-            </span>
-            <span *ngIf="controlError('urgentPaymentWindowMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-        </div>
-      </details>
+      <!-- Tier 2: tuned occasionally -->
 
       <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
         <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
@@ -300,72 +249,127 @@
         </div>
       </details>
 
-      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4 xl:col-span-2" [open]="form.controls.allowAnonymousPublicBooking.value">
+      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
         <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
-          <span>Customer Self-Booking</span>
+          <span>Auto-refresh</span>
           <span
-            *ngIf="sectionInvalid().publicBooking"
+            *ngIf="sectionInvalid().liveUpdates"
             class="inline-block h-2 w-2 rounded-full bg-danger-500"
             aria-label="Section has invalid fields"
             title="Section has invalid fields"
           ></span>
         </summary>
-        <div class="mt-3 grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
-          <hlm-checkbox
-            [formControl]="form.controls.allowAnonymousPublicBooking"
-            label="Allow customers to self-book on the public map"
-          />
-          <p class="text-[11px] text-brand-500">
-            When off, customers can only view the map. When on, tapping an available table
-            opens a booking sheet with phone, anti-bot check, and Square payment.
-            Before turning on, make sure: (1) the anti-bot key below is set,
-            (2) the time zone is correct, (3) Square mode is Live (see Connected Services).
-          </p>
+        <p class="mt-2 text-[11px] normal-case tracking-normal text-brand-500">
+          Lower numbers = more current data, higher numbers = less load on the server.
+        </p>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Dashboard refresh interval (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.dashboardPollingSeconds"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the staff dashboard re-checks the server.
+            </span>
+            <span *ngIf="controlError('dashboardPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Table availability refresh (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.tableAvailabilityPollingSeconds"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the booking page re-checks which tables are open.
+            </span>
+            <span *ngIf="controlError('tableAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Topbar refresh (seconds)
+            <input
+              type="number"
+              min="5"
+              max="120"
+              [formControl]="form.controls.clientAvailabilityPollingSeconds"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How often the topbar checks for the active event.
+            </span>
+            <span *ngIf="controlError('clientAvailabilityPollingSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Mark reservation urgent (minutes before deadline)
+            <input
+              type="number"
+              min="5"
+              max="1440"
+              [formControl]="form.controls.urgentPaymentWindowMinutes"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              Reservations within this window of their payment deadline get the urgent flag.
+            </span>
+            <span *ngIf="controlError('urgentPaymentWindowMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
         </div>
+      </details>
 
-        <div class="mt-3 grid gap-3 md:grid-cols-2 rounded-lg border border-brand-100 bg-white p-3">
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Customer payment window (seconds)
-            <input
-              type="number"
-              min="300"
-              max="1800"
-              [formControl]="form.controls.anonymousHoldTtlSeconds"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              How long a customer has to pay before their hold auto-releases. 300–1800 seconds (5–30 min). Typical: 600 (10 min).
-            </span>
-            <span *ngIf="controlError('anonymousHoldTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
-          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Maximum tables per booking
-            <input
-              type="number"
-              min="1"
-              max="10"
-              [formControl]="form.controls.anonymousMaxTablesPerBooking"
-              hlmInput size="lg"
-            />
-            <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Cap on tables per customer self-booking (1–10). Typical: 4.
-            </span>
-            <span *ngIf="controlError('anonymousMaxTablesPerBooking') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
-          </label>
+      <!-- Tier 3: set once, rarely revisited -->
+
+      <details class="rounded-xl border border-brand-100 bg-brand-50 p-4">
+        <summary class="flex cursor-pointer items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          <span>Business Hours</span>
+          <span
+            *ngIf="sectionInvalid().operations"
+            class="inline-block h-2 w-2 rounded-full bg-danger-500"
+            aria-label="Section has invalid fields"
+            title="Section has invalid fields"
+          ></span>
+        </summary>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500 md:col-span-2">
-            Anti-bot verification key (public)
+            Time zone
+            <hlm-native-select [formControl]="form.controls.operatingTz">
+              <option value="America/Chicago">America/Chicago (CT)</option>
+              <option value="America/Mexico_City">America/Mexico_City (CT)</option>
+            </hlm-native-select>
+            <span *ngIf="controlError('operatingTz') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            End of business day (hour, 0–23)
             <input
-              type="text"
-              placeholder="0x4AAAA…"
-              [formControl]="form.controls.turnstileSiteKey"
+              type="number"
+              min="0"
+              max="23"
+              [formControl]="form.controls.operatingDayCutoffHour"
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Cloudflare Turnstile site key. Required when self-booking is on.
-              Get one at dash.cloudflare.com → Turnstile.
-              The matching secret is set by your developer.
+              Reservations after this hour count toward the previous business day. Typical: 5 (5 AM).
             </span>
-            <span *ngIf="controlError('turnstileSiteKey') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+            <span *ngIf="controlError('operatingDayCutoffHour') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
+          </label>
+          <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+            Staff hold timeout (seconds)
+            <input
+              type="number"
+              min="60"
+              max="1800"
+              [formControl]="form.controls.holdTtlSeconds"
+              hlmInput size="lg"
+            />
+            <span class="text-[11px] normal-case tracking-normal text-brand-500">
+              How long a staff-created hold lasts before auto-releasing the table. Typical: 300 (5 min).
+            </span>
+            <span *ngIf="controlError('holdTtlSeconds') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
         </div>
       </details>
@@ -455,6 +459,17 @@
       </button>
     </div>
   </section>
+
+  <!--
+    Branding lives below the form — uploads are self-contained (no Save
+    needed), and the section is rarely touched, so it doesn't belong in
+    the main settings grid. The mt-4 + heading break the "page is over"
+    feeling created by the form's Save button.
+  -->
+  <header class="mt-4 px-2">
+    <h2 class="text-sm font-semibold uppercase tracking-[0.14em] text-brand-600">More admin tools</h2>
+  </header>
+  <branding-manager />
 </section>
 
 <hlm-dialog
