@@ -8,8 +8,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0E0B0A">
 
-  <!-- Favicons -->
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <!--
+    Favicons + OG images route through /branding/{filename} so admins can
+    swap them from /admin/settings without a redeploy. That path is
+    rewritten by Amplify to api.famosofuego.com/branding/{filename}, which
+    serves either a custom upload (DDB binary attribute) or 302s to the
+    static fallback baked into this build (/og-image.png etc). Static
+    fallbacks below cover non-SVG-capable clients + first-paint before
+    the SVG decodes.
+  -->
+  <link rel="icon" type="image/svg+xml" href="https://famosofuego.com/branding/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -24,14 +32,14 @@
   <meta property="og:locale" content="es_MX">
 
   <!-- Landscape 1.91:1 for Facebook/Meta ad previews -->
-  <meta property="og:image" content="https://famosofuego.com/og-image.png">
+  <meta property="og:image" content="https://famosofuego.com/branding/og-image.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="Famoso Fuego — Reserva tu mesa">
 
   <!-- Square 1:1 for WhatsApp / iMessage (they prefer square crops) -->
-  <meta property="og:image" content="https://famosofuego.com/og-image-square.png">
+  <meta property="og:image" content="https://famosofuego.com/branding/og-image-square.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="1200">
@@ -41,7 +49,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Famoso Fuego — Reserva tu mesa">
   <meta name="twitter:description" content="Asegura tu mesa en Famoso Fuego. Pago en línea, sin llamadas.">
-  <meta name="twitter:image" content="https://famosofuego.com/og-image.png">
+  <meta name="twitter:image" content="https://famosofuego.com/branding/og-image.png">
 </head>
 <body>
   <app-root></app-root>

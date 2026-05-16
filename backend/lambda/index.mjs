@@ -70,6 +70,8 @@ import { createAnonBookingsService } from "./lib/services-anon-bookings.mjs";
 import { createPresenceService } from "./lib/services-presence.mjs";
 import { createAnalyticsService } from "./lib/services-analytics.mjs";
 import { createMetaCapiService } from "./lib/services-meta-capi.mjs";
+import { createBrandingService } from "./lib/services-branding.mjs";
+import { handleBrandingRoute } from "./lib/routes-branding.mjs";
 
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
@@ -454,6 +456,17 @@ const analyticsService = createAnalyticsService({
   httpError,
 });
 
+// Branding asset storage (custom OG images + favicon for link previews).
+// Backed by binary DDB attributes on (APP, BRANDING#{type}) rows in the
+// settings table. Public GET /branding/{filename} streams bytes; admin
+// POST/DELETE /admin/branding/{type} mutates.
+const brandingService = createBrandingService({
+  ddb,
+  tableNames: { SETTINGS_TABLE },
+  nowEpoch,
+  httpError,
+});
+
 // Meta Conversions API. No-ops gracefully when META_PIXEL_ID +
 // META_CAPI_TOKEN_SECRET_ARN aren't set, so the lambda can ship before
 // the user configures the Pixel in Events Manager. Token is fetched
@@ -752,6 +765,28 @@ export const handler = async (event) => {
         rateLimitService.checkAndIncrementCustomerHoldRateLimit,
     });
     if (meRouteResponse) return meRouteResponse;
+
+    // Branding routes — both public (/branding/{filename}) and admin
+    // (/admin/branding[/{type}]). Must come BEFORE handleAdminRoute so
+    // that handler doesn't see /admin/branding paths it can't match.
+    const brandingRouteResponse = await handleBrandingRoute({
+      method,
+      path,
+      event,
+      cors,
+      json,
+      noContent,
+      httpError,
+      getBody,
+      getUserLabel,
+      requireAdmin,
+      getActiveAsset: brandingService.getActiveAsset,
+      setActiveAsset: brandingService.setActiveAsset,
+      clearActiveAsset: brandingService.clearActiveAsset,
+      listActiveAssets: brandingService.listActiveAssets,
+      publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
+    });
+    if (brandingRouteResponse) return brandingRouteResponse;
 
     const adminRouteResponse = await handleAdminRoute({
       method,

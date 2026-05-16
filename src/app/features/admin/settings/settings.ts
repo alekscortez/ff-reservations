@@ -13,6 +13,7 @@ import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNativeSelect } from '../../../shared/ui/native-select';
 import { HlmTimePicker } from '../../../shared/ui/time-picker';
+import { BrandingManager } from '../branding/branding-manager';
 
 export function joinHm(hour: unknown, minute: unknown, fallback: string): string {
   const h = Number(hour);
@@ -94,6 +95,7 @@ const SECTION_CONTROLS: Record<SectionKey, string[]> = {
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    BrandingManager,
     HlmAlert,
     HlmBadge,
     HlmButton,
