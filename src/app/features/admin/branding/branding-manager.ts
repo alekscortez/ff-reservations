@@ -125,9 +125,7 @@ export class BrandingManager implements OnInit {
         },
         error: (err) => {
           this.loading.set(false);
-          this.loadError.set(
-            this.toMessage(err, 'No se pudo cargar las imágenes')
-          );
+          this.loadError.set(this.toMessage(err, 'Could not load images'));
         },
       });
   }
@@ -162,7 +160,7 @@ export class BrandingManager implements OnInit {
 
     if (!slot.allowedContentTypes.includes(file.type)) {
       this.updateSlotState(type, {
-        error: `Formato no permitido. Permitidos: ${slot.allowedContentTypes.join(', ')}`,
+        error: `Format not allowed. Allowed: ${slot.allowedContentTypes.join(', ')}`,
         notice: null,
       });
       return;
@@ -170,7 +168,7 @@ export class BrandingManager implements OnInit {
     if (file.size > slot.maxBytes) {
       const maxKb = Math.round(slot.maxBytes / 1000);
       this.updateSlotState(type, {
-        error: `El archivo es muy grande (${Math.round(file.size / 1000)} KB). Máximo: ${maxKb} KB`,
+        error: `File too large (${Math.round(file.size / 1000)} KB). Max: ${maxKb} KB`,
         notice: null,
       });
       return;
@@ -186,7 +184,7 @@ export class BrandingManager implements OnInit {
             next: () => {
               this.updateSlotState(type, {
                 uploading: false,
-                notice: 'Imagen actualizada',
+                notice: 'Image updated',
                 error: null,
               });
               this.refresh();
@@ -195,7 +193,7 @@ export class BrandingManager implements OnInit {
               this.updateSlotState(type, {
                 uploading: false,
                 notice: null,
-                error: this.toMessage(err, 'No se pudo subir la imagen'),
+                error: this.toMessage(err, 'Upload failed'),
               });
             },
           });
@@ -203,7 +201,7 @@ export class BrandingManager implements OnInit {
       .catch(() => {
         this.updateSlotState(type, {
           uploading: false,
-          error: 'No se pudo leer el archivo',
+          error: 'Could not read file',
           notice: null,
         });
       });
@@ -229,7 +227,7 @@ export class BrandingManager implements OnInit {
           this.pendingClear.set(null);
           this.updateSlotState(type, {
             clearing: false,
-            notice: 'Restaurada la imagen original',
+            notice: 'Default image restored',
             error: null,
           });
           this.refresh();
@@ -239,7 +237,7 @@ export class BrandingManager implements OnInit {
           this.updateSlotState(type, {
             clearing: false,
             notice: null,
-            error: this.toMessage(err, 'No se pudo restaurar la imagen'),
+            error: this.toMessage(err, 'Could not restore image'),
           });
         },
       });
@@ -262,7 +260,7 @@ export class BrandingManager implements OnInit {
     const t = this.pendingClear();
     if (!t) return null;
     const slot = this.slotByType(t);
-    return slot ? `Restaurar la imagen original para: ${slot.description}` : null;
+    return slot ? `Restore the default image for: ${slot.description}` : null;
   });
 
   private updateSlotState(type: string, patch: Partial<SlotUiState>): void {

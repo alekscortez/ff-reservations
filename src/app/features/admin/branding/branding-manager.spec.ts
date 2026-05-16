@@ -85,7 +85,7 @@ describe('BrandingManager', () => {
     const evt = { target: { files: [file], value: 'evil.exe' } } as unknown as Event;
     cmp.onFilePicked('og-image', evt);
     expect(uploadSpy).not.toHaveBeenCalled();
-    expect(cmp.stateFor('og-image').error).toMatch(/no permitido/i);
+    expect(cmp.stateFor('og-image').error).toMatch(/not allowed/i);
   });
 
   it('rejects files larger than the per-type max size before posting', () => {
@@ -95,7 +95,7 @@ describe('BrandingManager', () => {
     const evt = { target: { files: [file], value: 'big.png' } } as unknown as Event;
     cmp.onFilePicked('og-image', evt);
     expect(uploadSpy).not.toHaveBeenCalled();
-    expect(cmp.stateFor('og-image').error).toMatch(/muy grande/i);
+    expect(cmp.stateFor('og-image').error).toMatch(/too large/i);
   });
 
   it('uploads a valid file as base64 and re-fetches the list on success', async () => {
@@ -120,7 +120,7 @@ describe('BrandingManager', () => {
     const [, sentData] = uploadSpy.mock.calls[0];
     expect(sentData).not.toContain('data:'); // prefix stripped
     expect(listSpy).toHaveBeenCalled();
-    expect(cmp.stateFor('og-image').notice).toBe('Imagen actualizada');
+    expect(cmp.stateFor('og-image').notice).toBe('Image updated');
   });
 
   it('clear flow: requestClear → confirmClear posts DELETE and refreshes', () => {
@@ -132,7 +132,7 @@ describe('BrandingManager', () => {
     cmp.confirmClear();
     expect(clearSpy).toHaveBeenCalledWith('og-image');
     expect(cmp.pendingClear()).toBe(null);
-    expect(cmp.stateFor('og-image').notice).toBe('Restaurada la imagen original');
+    expect(cmp.stateFor('og-image').notice).toBe('Default image restored');
     expect(listSpy).toHaveBeenCalled();
   });
 

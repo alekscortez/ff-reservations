@@ -1,21 +1,21 @@
 <section class="rounded-2xl border border-brand-100 bg-white p-4 md:p-6">
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div>
-      <h2 class="text-lg font-semibold text-brand-900">Imágenes para previews de enlaces</h2>
+      <h2 class="text-lg font-semibold text-brand-900">Link preview images</h2>
       <p class="mt-1 text-sm text-brand-600">
-        Cuando alguien comparte famosofuego.com en WhatsApp, iMessage, Facebook o un anuncio,
-        estas imágenes aparecen en la vista previa. Puedes cambiarlas en cualquier momento
-        sin tocar código.
+        When someone shares famosofuego.com on WhatsApp, iMessage, Facebook, or an ad,
+        these images show up in the link preview. You can change them anytime without
+        touching code.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
       <button type="button" hlmBtn variant="outline" size="sm" (click)="refresh()" [disabled]="loading()">
         <ng-icon name="lucideRefreshCw" class="h-4 w-4" />
-        Refrescar
+        Refresh
       </button>
       <button type="button" hlmBtn variant="outline" size="sm" (click)="openMetaDebugger()">
         <ng-icon name="lucideExternalLink" class="h-4 w-4" />
-        Actualizar caché de Meta
+        Refresh Meta cache
       </button>
     </div>
   </header>
@@ -25,7 +25,7 @@
   </hlm-alert>
 
   <div *ngIf="loading() && !loadError()" class="mt-4 text-sm text-brand-500" aria-live="polite">
-    Cargando…
+    Loading…
   </div>
 
   <ul *ngIf="!loading() && !loadError()" class="mt-4 grid gap-4 xl:grid-cols-3">
@@ -37,7 +37,7 @@
         <div>
           <h3 class="text-sm font-semibold text-brand-900">{{ slot.description }}</h3>
           <p class="mt-0.5 text-xs text-brand-500">
-            Máximo: {{ formatSizeKb(slot.maxBytes) }} ·
+            Max: {{ formatSizeKb(slot.maxBytes) }} ·
             {{ slot.allowedContentTypes.join(', ') }}
           </p>
         </div>
@@ -46,7 +46,7 @@
           [variant]="slot.active ? 'default' : 'outline'"
           class="shrink-0"
         >
-          {{ slot.active ? 'Personalizada' : 'Original' }}
+          {{ slot.active ? 'Custom' : 'Default' }}
         </span>
       </div>
 
@@ -66,15 +66,15 @@
 
       <dl *ngIf="slot.active" class="space-y-0.5 text-xs text-brand-500">
         <div class="flex justify-between gap-2">
-          <dt>Tamaño</dt>
+          <dt>Size</dt>
           <dd class="text-brand-700">{{ formatSizeKb(slot.active.sizeBytes) }}</dd>
         </div>
         <div class="flex justify-between gap-2">
-          <dt>Actualizada</dt>
+          <dt>Updated</dt>
           <dd class="text-brand-700">{{ formatTimestamp(slot.active.updatedAt) }}</dd>
         </div>
         <div *ngIf="slot.active.updatedBy as by" class="flex justify-between gap-2">
-          <dt>Por</dt>
+          <dt>By</dt>
           <dd class="text-brand-700">{{ by }}</dd>
         </div>
       </dl>
@@ -89,7 +89,7 @@
       <div class="mt-auto flex flex-wrap gap-2">
         <label hlmBtn variant="default" size="sm" class="cursor-pointer">
           <ng-icon name="lucideUpload" class="h-4 w-4" />
-          {{ stateFor(slot.type).uploading ? 'Subiendo…' : (slot.active ? 'Reemplazar' : 'Subir imagen') }}
+          {{ stateFor(slot.type).uploading ? 'Uploading…' : (slot.active ? 'Replace' : 'Upload image') }}
           <input
             *ngIf="slot.type === 'og-image'"
             #ogImageInput
@@ -128,27 +128,27 @@
           [disabled]="stateFor(slot.type).clearing"
         >
           <ng-icon name="lucideTrash2" class="h-4 w-4" />
-          {{ stateFor(slot.type).clearing ? 'Restaurando…' : 'Volver a la original' }}
+          {{ stateFor(slot.type).clearing ? 'Restoring…' : 'Use default' }}
         </button>
       </div>
     </li>
   </ul>
 
   <p class="mt-4 text-xs text-brand-500">
-    <strong>Nota sobre el caché:</strong> WhatsApp y iMessage guardan la vista previa por
-    hasta 7 días. Si compartiste el enlace antes y quieres que aparezca la imagen nueva
-    ahora, agrega <code>?v=2</code> al final de la URL al re-compartirlo, o espera a que
-    expire el caché. Para Facebook/Meta usa el botón "Actualizar caché de Meta".
+    <strong>Cache note:</strong> WhatsApp and iMessage store the preview for up to 7
+    days. If you shared the link before and want the new image to show now, add
+    <code>?v=2</code> to the end of the URL when re-sharing, or wait for the cache
+    to expire. For Facebook/Meta use the "Refresh Meta cache" button.
   </p>
 </section>
 
 <hlm-confirm-dialog
   *ngIf="pendingClear()"
-  title="Restaurar imagen original"
+  title="Restore default image"
   [message]="pendingClearLabel() ?? ''"
   [destructive]="true"
-  confirmText="Restaurar"
-  cancelText="Cancelar"
+  confirmText="Restore"
+  cancelText="Cancel"
   (confirm)="confirmClear()"
   (cancel)="cancelClear()"
 ></hlm-confirm-dialog>

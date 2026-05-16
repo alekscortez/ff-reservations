@@ -116,7 +116,7 @@ describe("services-branding", () => {
     it("rejects SVG for og-image", () => {
       assert.throws(
         () => svc.validateUpload("og-image", { data: SVG_BYTES, contentType: "image/svg+xml" }),
-        /Tipo de archivo no permitido/
+        /not allowed/
       );
     });
 
@@ -124,14 +124,14 @@ describe("services-branding", () => {
       svc.validateUpload("favicon", { data: SVG_BYTES, contentType: "image/svg+xml" });
       assert.throws(
         () => svc.validateUpload("favicon", { data: PNG_BYTES, contentType: "image/png" }),
-        /Tipo de archivo no permitido/
+        /not allowed/
       );
     });
 
     it("rejects empty uploads", () => {
       assert.throws(
         () => svc.validateUpload("og-image", { data: Buffer.alloc(0), contentType: "image/png" }),
-        /vacío/
+        /empty/
       );
     });
 
@@ -139,7 +139,7 @@ describe("services-branding", () => {
       const oversized = Buffer.alloc(BRANDING_TYPES["og-image"].maxBytes + 1);
       assert.throws(
         () => svc.validateUpload("og-image", { data: oversized, contentType: "image/png" }),
-        /muy grande/
+        /too large/
       );
     });
 
@@ -147,7 +147,7 @@ describe("services-branding", () => {
       const big = Buffer.alloc(60_000);
       assert.throws(
         () => svc.validateUpload("favicon", { data: big, contentType: "image/svg+xml" }),
-        /muy grande/
+        /too large/
       );
     });
 

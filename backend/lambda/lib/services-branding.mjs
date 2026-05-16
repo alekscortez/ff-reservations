@@ -45,19 +45,19 @@ export const BRANDING_TYPES = Object.freeze({
     maxBytes: 300_000,
     // Hint shown in admin UI / 400 error bodies — describes the slot,
     // NOT the upload validation. Validation is allowedContentTypes/maxBytes.
-    description: "Imagen ancha (1200×630) — Facebook, Meta ads, Twitter",
+    description: "Wide image (1200×630) — Facebook, Meta ads, Twitter",
     defaultStaticPath: "/og-image.png",
   },
   "og-image-square": {
     allowedContentTypes: new Set(["image/png", "image/jpeg", "image/webp"]),
     maxBytes: 300_000,
-    description: "Imagen cuadrada (1200×1200) — WhatsApp, iMessage",
+    description: "Square image (1200×1200) — WhatsApp, iMessage",
     defaultStaticPath: "/og-image-square.png",
   },
   favicon: {
     allowedContentTypes: new Set(["image/svg+xml"]),
     maxBytes: 50_000,
-    description: "Icono del navegador (SVG)",
+    description: "Browser tab icon (SVG)",
     defaultStaticPath: "/favicon.svg",
   },
 });
@@ -111,7 +111,7 @@ export function createBrandingService({ ddb, tableNames, nowEpoch, httpError }) 
       const allowed = [...spec.allowedContentTypes].join(", ");
       throw httpError(
         400,
-        `Tipo de archivo no permitido (${ct || "desconocido"}). Permitidos: ${allowed}`
+        `File type not allowed (${ct || "unknown"}). Allowed: ${allowed}`
       );
     }
 
@@ -120,13 +120,13 @@ export function createBrandingService({ ddb, tableNames, nowEpoch, httpError }) 
     }
     const sizeBytes = data.byteLength;
     if (sizeBytes <= 0) {
-      throw httpError(400, "El archivo está vacío");
+      throw httpError(400, "File is empty");
     }
     if (sizeBytes > spec.maxBytes) {
       const maxKb = Math.round(spec.maxBytes / 1000);
       throw httpError(
         400,
-        `El archivo es muy grande (${Math.round(sizeBytes / 1000)} KB). Máximo: ${maxKb} KB`
+        `File too large (${Math.round(sizeBytes / 1000)} KB). Max: ${maxKb} KB`
       );
     }
 
