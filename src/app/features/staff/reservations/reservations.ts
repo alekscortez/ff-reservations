@@ -3,7 +3,6 @@ import {
   Component,
   OnDestroy,
   OnInit,
-  ViewChild,
   computed,
   effect,
   inject,
@@ -30,7 +29,7 @@ import {
   ReservationsService,
 } from '../../../core/http/reservations.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
-import { PaymentMethod, ReservationItem } from '../../../shared/models/reservation.model';
+import { ReservationItem } from '../../../shared/models/reservation.model';
 import {
   CheckInPassState,
   GeneratedCheckInPass,
@@ -41,12 +40,16 @@ import {
 import { EventsService } from '../../../core/http/events.service';
 import { EventItem } from '../../../shared/models/event.model';
 import {
-  formatTableLabel,
   formatTableLabelLower,
   TableLabelPipe,
 } from '../../../shared/table-label.pipe';
 import { ClientsService, RescheduleCredit } from '../../../core/http/clients.service';
-import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
+import {
+  CashAppTokenizedPayload,
+  RecordPaymentPayload,
+  SquareLinkRequestPayload,
+  TakePaymentModal,
+} from '../../../shared/components/take-payment-modal/take-payment-modal';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -102,7 +105,7 @@ const PAGE_SIZE = 25;
     HlmTh,
     HlmTr,
     ReservationDetailModal,
-    CashAppQrPad,
+    TakePaymentModal,
   ],
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX })],
   templateUrl: './reservations.html',
@@ -128,6 +131,7 @@ export class Reservations implements OnInit, OnDestroy {
   readonly items = signal<ReservationItem[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly paymentError = signal<string | null>(null);
 
   private readonly query = toSignal(this.filterQuery.valueChanges, { initialValue: '' });
   readonly sorting = signal<SortingState>([{ id: 'updated', desc: true }]);
@@ -267,7 +271,6 @@ export class Reservations implements OnInit, OnDestroy {
   readonly showDetailsModal = signal(false);
   readonly paymentItem = signal<ReservationItem | null>(null);
   readonly showPaymentModal = signal(false);
-  readonly paymentSubmitAttempted = signal(false);
   readonly paymentCredits = signal<RescheduleCredit[]>([]);
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
@@ -284,18 +287,6 @@ export class Reservations implements OnInit, OnDestroy {
   readonly historyError = signal<string | null>(null);
   readonly historyByReservationId = signal<Record<string, ReservationHistoryViewItem[]>>({});
   readonly cashAppPaymentSuccess = signal(false);
-  @ViewChild('cashAppQrPad') cashAppQrPad?: CashAppQrPad;
-
-  paymentForm = new FormGroup({
-    amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
-    method: new FormControl<PaymentMethod>('square', { nonNullable: true }),
-    creditId: new FormControl('', { nonNullable: true }),
-    remainingMethod: new FormControl<'cash' | 'square'>('cash', {
-      nonNullable: true,
-    }),
-    receiptNumber: new FormControl('', { nonNullable: true }),
-    note: new FormControl('', { nonNullable: true }),
-  });
 
   constructor() {
     effect(() => {
@@ -312,7 +303,6 @@ export class Reservations implements OnInit, OnDestroy {
     this.showDetailsModal.set(false);
     this.showPaymentModal.set(false);
     this.syncSidebarModalLock();
-    void this.cashAppQrPad?.destroy();
   }
 
   private loadContextAndEvents(): void {
@@ -900,104 +890,23 @@ export class Reservations implements OnInit, OnDestroy {
   openPayment(item: ReservationItem): void {
     this.paymentItem.set(item);
     this.showPaymentModal.set(true);
-    this.paymentSubmitAttempted.set(false);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
     this.cashAppPaymentSuccess.set(false);
-    void this.cashAppQrPad?.destroy();
     this.syncSidebarModalLock();
-    const due = Number(item.amountDue ?? 0);
-    const paid = Number(item.depositAmount ?? 0);
-    const balance = Math.max(0, due - paid);
-    this.paymentForm.setValue({
-      amount: balance > 0 ? balance : 0,
-      method: 'square',
-      creditId: '',
-      remainingMethod: 'cash',
-      receiptNumber: '',
-      note: '',
-    });
     this.loadRescheduleCreditsForPayment(item);
-  }
-
-  isSquarePaymentMethodSelected(): boolean {
-    return this.paymentForm.controls.method.value === 'square';
-  }
-
-  isCashAppPaymentMethodSelected(): boolean {
-    return this.paymentForm.controls.method.value === 'cashapp';
-  }
-
-  isCreditPaymentMethodSelected(): boolean {
-    return this.paymentForm.controls.method.value === 'credit';
-  }
-
-  canUseCashAppPay(): boolean {
-    return (
-      this.isCashAppPaymentMethodSelected() &&
-      Boolean(this.squareApplicationId()) &&
-      Boolean(this.squareLocationId())
-    );
-  }
-
-  submitSquarePaymentFromModal(): void {
-    const item = this.paymentItem();
-    if (!item) return;
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.paymentLinkLoadingId()) return;
-
-    this.generatePaymentLink(item);
-    this.closePayment();
-    this.openDetails(item);
-  }
-
-  async submitCashAppPaymentFromModal(): Promise<void> {
-    const item = this.paymentItem();
-    if (!item) return;
-    if (!this.canGeneratePaymentLink(item)) return;
-    if (this.loading() || this.cashAppQrPad?.preparing()) return;
-    if (!this.canUseCashAppPay()) {
-      this.paymentLinkError.set('Cash App Pay is not configured in Square settings.');
-      return;
-    }
-
-    this.paymentSubmitAttempted.set(true);
-    const amount = Number(this.paymentForm.controls.amount.value);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      this.paymentForm.controls.amount.markAsTouched();
-      return;
-    }
-    const remaining = this.remainingAmount(item);
-    if (amount > remaining) {
-      this.paymentLinkError.set('Amount cannot exceed remaining balance.');
-      return;
-    }
-
-    this.error.set(null);
-    this.paymentLinkError.set(null);
-    this.cashAppPaymentSuccess.set(false);
-    await this.cashAppQrPad?.prepare();
   }
 
   closePayment(): void {
     this.showPaymentModal.set(false);
     this.paymentItem.set(null);
-    this.paymentSubmitAttempted.set(false);
     this.syncSidebarModalLock();
-    this.paymentForm.reset({
-      amount: 0,
-      method: 'square',
-      creditId: '',
-      remainingMethod: 'cash',
-      receiptNumber: '',
-      note: '',
-    });
     this.paymentCredits.set([]);
     this.paymentCreditsLoading.set(false);
     this.paymentCreditsError.set(null);
     this.paymentLinkError.set(null);
+    this.paymentError.set(null);
     this.cashAppPaymentSuccess.set(false);
-    void this.cashAppQrPad?.destroy();
   }
 
   canGeneratePaymentLink(item: ReservationItem): boolean {
@@ -1347,149 +1256,46 @@ export class Reservations implements OnInit, OnDestroy {
     document.body.classList.toggle('reservations-modal-open', isModalOpen);
   }
 
-  submitPayment(): void {
-    if (!this.paymentItem()) return;
-    const method = this.paymentForm.controls.method.value;
-    if (method === 'square') {
-      this.submitSquarePaymentFromModal();
-      return;
-    }
-    if (method === 'cashapp') {
-      void this.submitCashAppPaymentFromModal();
-      return;
-    }
-    this.paymentSubmitAttempted.set(true);
-    if (this.paymentForm.invalid) return;
-    const selectedCredit = this.selectedPaymentCredit();
-    if (method === 'credit' && !selectedCredit) {
-      this.paymentCreditsError.set('Select a valid reservation credit to apply.');
-      return;
-    }
-    const remainingMethod = this.paymentForm.controls.remainingMethod.value;
-    const receiptNumber = this.normalizedReceiptNumber();
-    if (this.isCashReceiptRequired() && !receiptNumber) {
-      return;
-    }
+  // ---------------------------------------------------------------------------
+  // <take-payment-modal> output handlers
+  // ---------------------------------------------------------------------------
+
+  onModalRecordPayment(item: ReservationItem, payload: RecordPaymentPayload): void {
     this.loading.set(true);
     this.error.set(null);
+    this.paymentError.set(null);
     this.paymentLinkError.set(null);
     this.paymentCreditsError.set(null);
-    const amount = Number(this.paymentForm.controls.amount.value);
-    const note = this.paymentForm.controls.note.value;
-    const paymentItem = this.paymentItem();
-    if (!paymentItem) return;
-    const reservationId = paymentItem.reservationId;
-    const eventDate = paymentItem.eventDate;
 
-    if (method === 'credit') {
-      const creditAmount = this.creditAppliedAmount();
-      if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
-        this.paymentCreditsError.set('No credit amount can be applied for this reservation.');
-        this.loading.set(false);
-        return;
-      }
+    if (payload.method === 'credit') {
+      const creditAmount = payload.amount;
       this.reservationsApi
         .addPayment({
-          reservationId,
-          eventDate,
+          reservationId: item.reservationId,
+          eventDate: item.eventDate,
           amount: creditAmount,
           method: 'credit',
-          creditId: selectedCredit?.creditId,
-          note,
+          creditId: payload.creditId,
+          note: payload.note,
         })
         .subscribe({
           next: (creditRes) => {
             const afterCredit = creditRes.item;
-            this.items.update((list) =>
-              list.map((x) =>
-                x.reservationId === afterCredit.reservationId ? afterCredit : x,
-              ),
-            );
+            this.applyItemUpdate(afterCredit);
             const remaining = this.remainingAmount(afterCredit);
             if (remaining <= 0) {
               this.loading.set(false);
               this.closePayment();
               return;
             }
-
-            if (remainingMethod === 'square') {
-              this.paymentLinkLoadingId.set(afterCredit.reservationId);
-              this.paymentLinkError.set(null);
-              this.paymentLinkNotice.set(null);
-              this.reservationsApi
-                .createSquarePaymentLink({
-                  reservationId: afterCredit.reservationId,
-                  eventDate: afterCredit.eventDate,
-                  amount: remaining,
-                  note: note || `Remaining payment for ${formatTableLabelLower(afterCredit)}`,
-                })
-                .subscribe({
-                  next: (res) => {
-                    const url = String(res?.square?.url ?? '').trim();
-                    if (!url) {
-                      this.error.set('Credit applied, but Square link URL was not returned.');
-                      this.loading.set(false);
-                      this.paymentLinkLoadingId.set(null);
-                      return;
-                    }
-                    this.paymentLinksByReservationId()[afterCredit.reservationId] = {
-                      method: 'square',
-                      url,
-                      amount: Number(res?.reservation?.linkAmount ?? remaining),
-                      createdAtMs: Date.now(),
-                      audit: res?.square?.audit,
-                    };
-                    this.paymentLinkNotice.set('Credit applied. Square link is ready.');
-                    this.loading.set(false);
-                    this.paymentLinkLoadingId.set(null);
-                    this.closePayment();
-                    this.openDetails(afterCredit);
-                  },
-                  error: (err) => {
-                    this.error.set(
-                      err?.error?.message ||
-                        err?.message ||
-                        'Credit applied, but failed to generate Square link',
-                    );
-                    this.loading.set(false);
-                    this.paymentLinkLoadingId.set(null);
-                  },
-                });
+            if (payload.remainingMethod === 'square') {
+              this.recordSquareRemainder(afterCredit, remaining, payload.note);
               return;
             }
-
-            this.reservationsApi
-              .addPayment({
-                reservationId: afterCredit.reservationId,
-                eventDate: afterCredit.eventDate,
-                amount: remaining,
-                method: remainingMethod,
-                receiptNumber: remainingMethod === 'cash' ? receiptNumber : '',
-                note: note || 'Remaining balance after credit',
-              })
-              .subscribe({
-                next: (finalRes) => {
-                  const updated = finalRes.item;
-                  this.items.update((list) =>
-                    list.map((x) =>
-                      x.reservationId === updated.reservationId ? updated : x,
-                    ),
-                  );
-                  this.loading.set(false);
-                  this.closePayment();
-                },
-                error: (err) => {
-                  this.error.set(
-                    err?.error?.message ||
-                      err?.message ||
-                      'Credit was applied, but failed to process remaining payment',
-                  );
-                  this.loading.set(false);
-                },
-              });
+            this.recordCashRemainder(afterCredit, remaining, payload.receiptNumber, payload.note);
           },
           error: (err) => {
-            this.error.set(err?.error?.message || err?.message || 'Failed to apply credit');
+            this.paymentError.set(err?.error?.message || err?.message || 'Failed to apply credit');
             this.loading.set(false);
           },
         });
@@ -1498,119 +1304,50 @@ export class Reservations implements OnInit, OnDestroy {
 
     this.reservationsApi
       .addPayment({
-        reservationId,
-        eventDate,
-        amount,
-        method,
-        receiptNumber: method === 'cash' ? receiptNumber : '',
-        note,
+        reservationId: item.reservationId,
+        eventDate: item.eventDate,
+        amount: payload.amount,
+        method: payload.method,
+        receiptNumber: payload.method === 'cash' ? payload.receiptNumber : '',
+        note: payload.note,
       })
       .subscribe({
         next: (res) => {
-          const updated = res.item;
-          this.items.update((list) =>
-            list.map((x) =>
-              x.reservationId === updated.reservationId ? updated : x,
-            ),
-          );
+          this.applyItemUpdate(res.item);
           this.loading.set(false);
           this.closePayment();
         },
         error: (err) => {
-          this.error.set(err?.error?.message || err?.message || 'Failed to record payment');
+          this.paymentError.set(err?.error?.message || err?.message || 'Failed to record payment');
           this.loading.set(false);
         },
       });
   }
 
-  onPaymentMethodChanged(): void {
-    if (!this.isCashAppPaymentMethodSelected()) {
-      this.cashAppPaymentSuccess.set(false);
-      void this.cashAppQrPad?.destroy();
-    }
-    if (!this.isCreditPaymentMethodSelected()) {
-      this.paymentForm.controls.creditId.setValue('');
-      this.paymentForm.controls.remainingMethod.setValue('cash');
-      if (this.paymentForm.controls.method.value !== 'cash') {
-        this.paymentForm.controls.receiptNumber.setValue('');
-      }
-      this.paymentCreditsError.set(null);
-      const item = this.paymentItem();
-      if (item) {
-        this.paymentForm.controls.amount.setValue(this.remainingAmount(item));
-      }
-      return;
-    }
-    const item = this.paymentItem();
-    if (item && !this.paymentCredits().length && !this.paymentCreditsLoading()) {
-      this.loadRescheduleCreditsForPayment(item);
-    }
-    if (!this.paymentForm.controls.creditId.value && this.paymentCredits().length === 1) {
-      this.paymentForm.controls.creditId.setValue(this.paymentCredits()[0].creditId);
-    } else if (!this.paymentForm.controls.creditId.value) {
-      this.paymentForm.controls.amount.setValue(0);
-    }
-    if (!this.isCashReceiptRequired()) {
-      this.paymentForm.controls.receiptNumber.setValue('');
-    }
-    this.onPaymentCreditChanged();
+  onModalRequestSquareLink(item: ReservationItem, _payload: SquareLinkRequestPayload): void {
+    if (!this.canGeneratePaymentLink(item)) return;
+    if (this.paymentLinkLoadingId()) return;
+    this.generatePaymentLink(item);
+    this.closePayment();
+    this.openDetails(item);
   }
 
-  onRemainingMethodChanged(): void {
-    if (!this.isCashReceiptRequired()) {
-      this.paymentForm.controls.receiptNumber.setValue('');
-    }
-  }
-
-  onReceiptNumberInput(): void {
-    const normalized = this.normalizedReceiptNumber();
-    const digitsOnly = normalized.replace(/\D+/g, '').slice(0, 64);
-    if (digitsOnly !== this.paymentForm.controls.receiptNumber.value) {
-      this.paymentForm.controls.receiptNumber.setValue(digitsOnly, { emitEvent: false });
-    }
-  }
-
-  onPaymentCreditChanged(): void {
-    if (!this.isCreditPaymentMethodSelected()) return;
-    const selected = this.selectedPaymentCredit();
-    const item = this.paymentItem();
-    if (!selected || !item) return;
-    const targetAmount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
-    if (targetAmount > 0) {
-      this.paymentForm.controls.amount.setValue(Number(targetAmount.toFixed(2)));
-    }
-  }
-
-  onCashAppTokenized(sourceId: string): void {
-    const item = this.paymentItem();
-    if (!item) return;
+  onModalCashAppTokenized(item: ReservationItem, payload: CashAppTokenizedPayload): void {
     if (this.loading()) return;
-
-    const amount = Number(this.paymentForm.controls.amount.value);
-    const note = String(this.paymentForm.controls.note.value ?? '').trim();
-
     this.loading.set(true);
-    this.error.set(null);
+    this.paymentError.set(null);
     this.paymentLinkError.set(null);
-
     this.reservationsApi
       .addSquarePayment({
         reservationId: item.reservationId,
         eventDate: item.eventDate,
-        amount,
-        sourceId,
-        note: note || `Cash App Pay for ${formatTableLabelLower(item)}`,
+        amount: payload.amount,
+        sourceId: payload.sourceId,
+        note: payload.note,
       })
       .subscribe({
         next: (res) => {
-          const updated = res.item;
-          this.items.update((list) =>
-            list.map((x) =>
-              x.reservationId === updated.reservationId ? updated : x,
-            ),
-          );
-          // Brief green "Paid" display before the modal closes so staff
-          // see explicit confirmation without an extra dialog.
+          this.applyItemUpdate(res.item);
           this.cashAppPaymentSuccess.set(true);
           setTimeout(() => {
             this.loading.set(false);
@@ -1619,76 +1356,98 @@ export class Reservations implements OnInit, OnDestroy {
         },
         error: (err) => {
           this.loading.set(false);
-          this.paymentLinkError.set(
+          this.paymentError.set(
             err?.error?.message || err?.message || 'Failed to process Cash App payment',
           );
         },
       });
   }
 
-  onCashAppErrored(message: string): void {
-    this.paymentLinkError.set(message || 'Cash App payment was not completed.');
-  }
-
-  cashAppLabel(): string {
-    const item = this.paymentItem();
-    return item ? `${formatTableLabel(item)} payment` : 'Reservation payment';
-  }
-
-  creditAppliedAmount(): number {
-    if (!this.isCreditPaymentMethodSelected()) return 0;
-    const selected = this.selectedPaymentCredit();
-    const item = this.paymentItem();
-    if (!selected || !item) return 0;
-    const amount = Math.min(this.remainingAmount(item), Number(selected.amountRemaining ?? 0));
-    return Number(Math.max(0, amount).toFixed(2));
-  }
-
-  creditRemainingAmount(): number {
-    if (!this.isCreditPaymentMethodSelected()) return 0;
-    const item = this.paymentItem();
-    if (!item) return 0;
-    const remaining = this.remainingAmount(item) - this.creditAppliedAmount();
-    return Number(Math.max(0, remaining).toFixed(2));
-  }
-
-  shouldShowRemainingMethodSelector(): boolean {
-    return this.isCreditPaymentMethodSelected() && this.creditRemainingAmount() > 0;
-  }
-
-  isCashReceiptRequired(): boolean {
-    if (!this.cashReceiptNumberRequired()) return false;
-    if (this.paymentForm.controls.method.value === 'cash') return true;
-    return (
-      this.isCreditPaymentMethodSelected() &&
-      this.creditRemainingAmount() > 0 &&
-      this.paymentForm.controls.remainingMethod.value === 'cash'
+  private applyItemUpdate(updated: ReservationItem): void {
+    this.items.update((list) =>
+      list.map((x) => (x.reservationId === updated.reservationId ? updated : x)),
     );
   }
 
-  shouldShowCashReceiptField(): boolean {
-    return this.isCashReceiptRequired();
+  private recordSquareRemainder(
+    afterCredit: ReservationItem,
+    remaining: number,
+    note: string,
+  ): void {
+    this.paymentLinkLoadingId.set(afterCredit.reservationId);
+    this.paymentLinkError.set(null);
+    this.paymentLinkNotice.set(null);
+    this.reservationsApi
+      .createSquarePaymentLink({
+        reservationId: afterCredit.reservationId,
+        eventDate: afterCredit.eventDate,
+        amount: remaining,
+        note: note || `Remaining payment for ${formatTableLabelLower(afterCredit)}`,
+      })
+      .subscribe({
+        next: (res) => {
+          const url = String(res?.square?.url ?? '').trim();
+          if (!url) {
+            this.paymentError.set('Credit applied, but Square link URL was not returned.');
+            this.loading.set(false);
+            this.paymentLinkLoadingId.set(null);
+            return;
+          }
+          this.paymentLinksByReservationId()[afterCredit.reservationId] = {
+            method: 'square',
+            url,
+            amount: Number(res?.reservation?.linkAmount ?? remaining),
+            createdAtMs: Date.now(),
+            audit: res?.square?.audit,
+          };
+          this.paymentLinkNotice.set('Credit applied. Square link is ready.');
+          this.loading.set(false);
+          this.paymentLinkLoadingId.set(null);
+          this.closePayment();
+          this.openDetails(afterCredit);
+        },
+        error: (err) => {
+          this.paymentError.set(
+            err?.error?.message ||
+              err?.message ||
+              'Credit applied, but failed to generate Square link',
+          );
+          this.loading.set(false);
+          this.paymentLinkLoadingId.set(null);
+        },
+      });
   }
 
-  shouldShowCashReceiptError(): boolean {
-    return this.paymentSubmitAttempted() && this.isCashReceiptRequired() && !this.normalizedReceiptNumber();
-  }
-
-  cashReceiptLabel(): string {
-    if (
-      this.isCreditPaymentMethodSelected() &&
-      this.creditRemainingAmount() > 0 &&
-      this.paymentForm.controls.remainingMethod.value === 'cash'
-    ) {
-      return 'Remaining Cash Receipt Number';
-    }
-    return 'Receipt Number';
-  }
-
-  private normalizedReceiptNumber(): string {
-    return String(this.paymentForm.controls.receiptNumber.value ?? '')
-      .replace(/\D+/g, '')
-      .trim();
+  private recordCashRemainder(
+    afterCredit: ReservationItem,
+    remaining: number,
+    receiptNumber: string,
+    note: string,
+  ): void {
+    this.reservationsApi
+      .addPayment({
+        reservationId: afterCredit.reservationId,
+        eventDate: afterCredit.eventDate,
+        amount: remaining,
+        method: 'cash',
+        receiptNumber,
+        note: note || 'Remaining balance after credit',
+      })
+      .subscribe({
+        next: (finalRes) => {
+          this.applyItemUpdate(finalRes.item);
+          this.loading.set(false);
+          this.closePayment();
+        },
+        error: (err) => {
+          this.paymentError.set(
+            err?.error?.message ||
+              err?.message ||
+              'Credit was applied, but failed to process remaining payment',
+          );
+          this.loading.set(false);
+        },
+      });
   }
 
   private normalizeBooleanSetting(value: unknown, fallback: boolean): boolean {
@@ -1701,33 +1460,6 @@ export class Reservations implements OnInit, OnDestroy {
       if (['false', '0', 'no', 'off', 'disabled'].includes(normalized)) return false;
     }
     return fallback;
-  }
-
-  paymentSubmitLabel(): string {
-    if (this.isSquarePaymentMethodSelected()) {
-      return this.paymentLinkLoadingId() === this.paymentItem()?.reservationId
-        ? 'Generating…'
-        : 'Generate Link';
-    }
-    if (this.isCashAppPaymentMethodSelected()) {
-      if (this.cashAppQrPad?.preparing()) return 'Preparing…';
-      if (this.loading()) return 'Processing…';
-      return this.cashAppQrPad?.ready() ? 'Refresh Cash App QR' : 'Show Cash App QR';
-    }
-    if (this.loading()) return 'Saving…';
-    if (!this.isCreditPaymentMethodSelected()) return 'Submit Payment';
-    if (this.creditRemainingAmount() <= 0) return 'Apply Credit';
-    return this.paymentForm.controls.remainingMethod.value === 'square'
-      ? 'Apply Credit + Generate Link'
-      : 'Apply Credit + Submit Payment';
-  }
-
-  creditOptionLabel(credit: RescheduleCredit): string {
-    const remaining = Number(credit.amountRemaining ?? 0).toFixed(2);
-    const expires = String(credit.expiresAt ?? '').trim();
-    return expires
-      ? `$${remaining} remaining · Expires ${expires}`
-      : `$${remaining} remaining`;
   }
 
   formatDeadline(deadlineAt?: string | null, eventDate?: string): string {
@@ -1765,12 +1497,6 @@ export class Reservations implements OnInit, OnDestroy {
     return deadlineUtc - eventUtc === dayMs;
   }
 
-  private selectedPaymentCredit(): RescheduleCredit | null {
-    const selectedId = String(this.paymentForm.controls.creditId.value ?? '').trim();
-    if (!selectedId) return null;
-    return this.paymentCredits().find((credit) => credit.creditId === selectedId) ?? null;
-  }
-
   private resolvePhoneCountry(item: ReservationItem): 'US' | 'MX' {
     const explicit = String((item as { phoneCountry?: unknown })?.phoneCountry ?? '')
       .trim()
@@ -1792,7 +1518,6 @@ export class Reservations implements OnInit, OnDestroy {
     this.paymentCreditsLoading.set(true);
     this.paymentCreditsError.set(null);
     this.paymentCredits.set([]);
-    this.paymentForm.controls.creditId.setValue('');
 
     this.clientsApi.listRescheduleCredits(phone, this.resolvePhoneCountry(item)).subscribe({
       next: (items) => {
@@ -1803,13 +1528,10 @@ export class Reservations implements OnInit, OnDestroy {
         this.paymentCredits.set(filtered);
         if (!filtered.length) {
           this.paymentCreditsError.set('No active reservation credits available for this client.');
-        } else if (filtered.length === 1) {
-          this.paymentForm.controls.creditId.setValue(filtered[0].creditId);
         }
+        // The modal observes `availableCredits` and auto-selects + recomputes
+        // applied amount on its own.
         this.paymentCreditsLoading.set(false);
-        if (this.isCreditPaymentMethodSelected()) {
-          this.onPaymentCreditChanged();
-        }
       },
       error: (err) => {
         this.paymentCreditsLoading.set(false);

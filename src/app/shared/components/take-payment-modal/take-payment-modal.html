@@ -1,0 +1,162 @@
+<hlm-dialog
+  *ngIf="reservation"
+  (close)="close.emit()"
+  panelClass="max-w-md"
+  [ariaLabel]="'Take Payment'"
+>
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="text-lg font-semibold text-brand-900">Take Payment</h3>
+    <button
+      type="button"
+      hlmBtn variant="outline" size="icon-sm" class="rounded-full"
+      (click)="close.emit()"
+      aria-label="Close payment modal"
+    >
+      <ng-icon name="lucideX" size="14" />
+    </button>
+  </div>
+
+  <p class="mt-2 text-sm text-brand-600">{{ reservation | tableLabel }} · {{ reservation.customerName }}</p>
+
+  <form class="mt-4 grid gap-3" [formGroup]="form" (ngSubmit)="onSubmit()">
+    <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+      Amount
+      <input
+        type="number"
+        min="0.01"
+        step="0.01"
+        formControlName="amount"
+        [readonly]="isCredit()"
+        [class.bg-brand-50]="isCredit()"
+        [class.cursor-not-allowed]="isCredit()"
+        hlmInput size="lg"
+      />
+    </label>
+
+    <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+      Method
+      <hlm-native-select
+        formControlName="method"
+        size="default"
+        class="h-11 text-sm"
+        (change)="onMethodChange($event)"
+      >
+        <option value="cash">Cash</option>
+        <option value="square">Square</option>
+        <option value="cashapp">Cash App Pay</option>
+        <option value="credit">Reservation Credit</option>
+      </hlm-native-select>
+    </label>
+
+    <div class="grid gap-2" *ngIf="isCredit()">
+      <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+        Available Credit
+        <hlm-native-select
+          formControlName="creditId"
+          size="default"
+          class="h-11 text-sm"
+          [disabled]="creditsLoading || availableCredits.length === 0"
+          (change)="onCreditChange($event)"
+        >
+          <option value="" disabled selected hidden>Select reservation credit</option>
+          <option *ngFor="let credit of availableCredits" [value]="credit.creditId">
+            {{ creditOptionLabel(credit) }}
+          </option>
+        </hlm-native-select>
+      </label>
+      <p class="text-xs text-brand-600" *ngIf="creditsLoading">Loading reservation credits…</p>
+      <hlm-alert *ngIf="creditsError" variant="destructive">{{ creditsError }}</hlm-alert>
+      <div
+        class="rounded-lg border border-brand-100 bg-brand-50 p-2 text-xs text-brand-700"
+        *ngIf="!creditsLoading && availableCredits.length > 0"
+      >
+        <p>Credit applied now: ${{ creditAppliedAmount().toFixed(2) }}</p>
+        <p *ngIf="creditRemainingAmount() > 0">Remaining after credit: ${{ creditRemainingAmount().toFixed(2) }}</p>
+      </div>
+    </div>
+
+    <label
+      class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500"
+      *ngIf="shouldShowRemainingMethodSelector()"
+    >
+      Remaining Payment Method
+      <hlm-native-select
+        formControlName="remainingMethod"
+        size="default"
+        class="h-11 text-sm"
+        (change)="onRemainingMethodChange($event)"
+      >
+        <option value="cash">Cash</option>
+        <option value="square">Square</option>
+      </hlm-native-select>
+    </label>
+
+    <label
+      class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500"
+      *ngIf="isCashReceiptRequired()"
+    >
+      {{ cashReceiptLabel() }}
+      <input
+        type="text"
+        formControlName="receiptNumber"
+        (input)="onReceiptInput()"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        enterkeyhint="done"
+        autocapitalize="off"
+        spellcheck="false"
+        maxlength="64"
+        autocomplete="off"
+        placeholder="Enter receipt number"
+        hlmInput size="lg"
+      />
+    </label>
+    <hlm-alert *ngIf="shouldShowCashReceiptError()" variant="destructive">
+      Receipt number is required for cash payments.
+    </hlm-alert>
+
+    <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+      Note
+      <textarea
+        formControlName="note"
+        rows="2"
+        hlmInput
+        placeholder="Optional context (e.g. split with table 5)"
+      ></textarea>
+    </label>
+
+    <hlm-alert *ngIf="error" variant="destructive">{{ error }}</hlm-alert>
+    <p class="text-xs text-brand-600" *ngIf="isSquare()">
+      Square in this modal generates a Square link. Reader charge can be added later.
+    </p>
+    <p class="text-xs text-brand-600" *ngIf="isCashApp()">
+      Confirm the amount, then tap "Show Cash App QR" — the customer scans the QR on their own phone and approves in Cash App.
+    </p>
+
+    <cash-app-qr-pad
+      *ngIf="isCashApp()"
+      #cashAppQrPad
+      [applicationId]="squareApplicationId"
+      [locationId]="squareLocationId"
+      [squareEnvMode]="squareEnvMode"
+      [amount]="form.controls.amount.value || 0"
+      [label]="cashAppLabel()"
+      [referenceId]="reservation?.reservationId ?? ''"
+      [success]="cashAppSuccess"
+      (tokenized)="onCashAppTokenizedInternal($event)"
+      (errored)="onCashAppErroredInternal($event)"
+    />
+
+    <hlm-alert *ngIf="isCashApp() && !canUseCashAppPay()" variant="destructive">
+      Cash App Pay is not configured. Set Square application id and location id in Lambda env vars.
+    </hlm-alert>
+
+    <button
+      type="submit"
+      hlmBtn size="lg"
+      [disabled]="submitDisabled()"
+    >
+      {{ paymentSubmitLabel() }}
+    </button>
+  </form>
+</hlm-dialog>
