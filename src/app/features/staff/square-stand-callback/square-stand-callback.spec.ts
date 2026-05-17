@@ -225,6 +225,23 @@ describe('SquareStandCallback', () => {
     expect(localStorage.getItem('ff:stand-handoff:h_test')).toBeNull();
   });
 
+  it('shows a session-expired hint when /complete returns 401', () => {
+    setLocalStorageHandoff('h_test', {
+      reservationId: 'r-stash',
+      eventDate: '2026-05-20',
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    const api = fakeReservationsApi();
+    api.setNextResponse(throwError(() => ({ status: 401 })));
+    const data = encodeURIComponent(
+      JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
+    );
+    const { page } = createCallback(api, data);
+    expect(page.phase()).toBe('error');
+    expect(page.errorMessage()).toMatch(/session expired during Square POS/i);
+    expect(page.errorMessage()).toMatch(/within ~1 minute/);
+  });
+
   it('surfaces BE /complete failures', () => {
     setLocalStorageHandoff('h_test', {
       reservationId: 'r-stash',

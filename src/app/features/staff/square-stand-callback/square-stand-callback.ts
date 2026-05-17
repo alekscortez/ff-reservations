@@ -182,9 +182,22 @@ export class SquareStandCallback implements OnInit {
           setTimeout(() => this.goBack(), 1500);
         },
         error: (err) => {
-          this.errorMessage.set(
-            String(err?.error?.message ?? err?.message ?? 'Failed to record payment'),
+          const status = Number(
+            (err as { status?: number; statusCode?: number })?.status ??
+              (err as { status?: number; statusCode?: number })?.statusCode ??
+              0,
           );
+          if (status === 401) {
+            this.errorMessage.set(
+              "Your session expired during Square POS. The payment will still be recorded automatically within ~1 minute — open the reservation to confirm.",
+            );
+          } else {
+            this.errorMessage.set(
+              String(
+                err?.error?.message ?? err?.message ?? 'Failed to record payment',
+              ),
+            );
+          }
           this.phase.set('error');
         },
       });
