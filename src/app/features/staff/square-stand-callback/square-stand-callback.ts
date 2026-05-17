@@ -93,14 +93,13 @@ export class SquareStandCallback implements OnInit {
       return;
     }
 
-    // Cross-reference the handoff row (server-side) to recover the
-    // reservation id + returnPath. The FE component attaches both as
-    // top-level query params so we don't depend on Square POS to
-    // round-trip them (state is reserved for the handoff id alone).
-    this.reservationId = this.route.snapshot.queryParamMap.get('r');
-    this.returnPath = this.route.snapshot.queryParamMap.get('returnPath');
-
+    // Square POS replaces the URL with `?data=…` on return, dropping any
+    // query strings we tried to round-trip. The <square-stand-handoff>
+    // component stashes {reservationId, returnPath, eventDate} in
+    // localStorage keyed by handoffId BEFORE the deeplink navigation;
+    // we recover them here.
     const cb = this.parsedCallback;
+    this.restoreHandoffContext(cb.state);
     if (cb.status === 'error') {
       const code = cb.errorCode ?? '';
       this.errorMessage.set(
@@ -108,6 +107,7 @@ export class SquareStandCallback implements OnInit {
           'Square POS reported an error (' + (code || 'unknown') + ').',
       );
       this.phase.set(code === 'payment_canceled' ? 'cancelled' : 'declined');
+      this.clearHandoffContext(cb.state);
       return;
     }
 
@@ -142,7 +142,13 @@ export class SquareStandCallback implements OnInit {
       this.phase.set('error');
       return;
     }
-    if (!this.reservationId) this.reservationId = '';
+    if (!this.reservationId) {
+      this.errorMessage.set(
+        'We could not match this Stand payment to a reservation. The reservation was likely paid (the Square webhook will catch it within ~1 minute) — open the reservation to confirm.',
+      );
+      this.phase.set('error');
+      return;
+    }
 
     this.phase.set('recording');
     this.errorMessage.set('');
@@ -162,6 +168,7 @@ export class SquareStandCallback implements OnInit {
           const amount = Number(latest?.amount ?? 0);
           if (Number.isFinite(amount) && amount > 0) this.paidAmount.set(amount);
           this.phase.set('done');
+          this.clearHandoffContext(cb.state);
           // Brief celebration, then navigate back. Mirrors the Cash App
           // path's ~1.5s timing.
           setTimeout(() => this.goBack(), 1500);
@@ -173,5 +180,43 @@ export class SquareStandCallback implements OnInit {
           this.phase.set('error');
         },
       });
+  }
+
+  private restoreHandoffContext(handoffId: string | null | undefined): void {
+    if (typeof localStorage === 'undefined') return;
+    const id = String(handoffId ?? '').trim();
+    if (!id) return;
+    try {
+      const raw = localStorage.getItem(`ff:stand-handoff:${id}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        reservationId?: string;
+        returnPath?: string;
+        expiresAt?: number;
+      };
+      const expiresAt = Number(parsed?.expiresAt ?? 0);
+      if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt < Date.now()) {
+        localStorage.removeItem(`ff:stand-handoff:${id}`);
+        return;
+      }
+      const reservationId = String(parsed?.reservationId ?? '').trim();
+      const returnPath = String(parsed?.returnPath ?? '').trim();
+      if (reservationId) this.reservationId = reservationId;
+      if (returnPath) this.returnPath = returnPath;
+    } catch {
+      // Corrupt entry; ignore — the rest of the page will fall through to
+      // the "open the reservation" error state.
+    }
+  }
+
+  private clearHandoffContext(handoffId: string | null | undefined): void {
+    if (typeof localStorage === 'undefined') return;
+    const id = String(handoffId ?? '').trim();
+    if (!id) return;
+    try {
+      localStorage.removeItem(`ff:stand-handoff:${id}`);
+    } catch {
+      // Storage quota / private mode — best-effort cleanup, safe to ignore.
+    }
   }
 }

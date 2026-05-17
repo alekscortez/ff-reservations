@@ -296,6 +296,13 @@ export class SquareStandHandoff implements OnDestroy {
     const url = `square-commerce-v1://payment/create?data=${serialized}`;
     this._baseStatus.set('handing-off');
 
+    // Stash reservation context locally so the callback page can recover
+    // it. Square POS replaces the entire URL with `?data=…` on return, so
+    // any query-string-based round-trip is lost. localStorage is per-
+    // origin and survives Safari being backgrounded while Square POS is
+    // foregrounded (same iPad, same Safari tab).
+    this.stashHandoffContext(handoff.handoffId);
+
     // Schedule the "Square POS didn't open" detection BEFORE we navigate
     // so it runs even if iOS swallows the navigation silently.
     this.scheduleMissingAppCheck();
@@ -304,6 +311,23 @@ export class SquareStandHandoff implements OnDestroy {
     // Safari back-stack intact so the callback page can also use
     // history.back as a fallback.
     window.location.href = url;
+  }
+
+  private stashHandoffContext(handoffId: string): void {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      const payload = {
+        reservationId: this.reservationId,
+        eventDate: this.eventDate,
+        returnPath: this.returnPath,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      };
+      localStorage.setItem(`ff:stand-handoff:${handoffId}`, JSON.stringify(payload));
+    } catch {
+      // localStorage can be full, blocked by Safari private mode, etc.
+      // The BE handoff row is still the source of truth — the FE can fall
+      // back to a "look up handoff" call if we ever wire one.
+    }
   }
 
   private scheduleMissingAppCheck(): void {
