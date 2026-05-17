@@ -88,6 +88,10 @@ import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
 import { SquareStandHandoff } from '../../../shared/components/square-stand-handoff/square-stand-handoff';
+import {
+  consumeJustPaidBeacon,
+  peekJustPaidBeacon,
+} from '../../../shared/components/take-payment-modal/just-paid-beacon';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog, HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -2304,12 +2308,21 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     // /square-stand-callback hits /complete leaves the reservation as
     // CONFIRMED+PENDING. Stash so the user can resume or cancel from
     // the banner above the map.
-    if (
-      created &&
-      created.linkMode === 'square_stand' &&
-      !this.squareStandSuccess()
-    ) {
-      this.pendingSquareStandPayment.set(created);
+    //
+    // Exception: if the callback page wrote the `ff:stand-just-paid`
+    // beacon for THIS reservation, the payment IS already recorded —
+    // flip squareStandSuccess so the pad shows "Paid" and skip the
+    // misleading pending-banner. We `peek` first so we don't burn the
+    // beacon for an unrelated reservation; only `consume` (clear) when
+    // the id matches ours.
+    if (created && created.linkMode === 'square_stand') {
+      const beacon = peekJustPaidBeacon();
+      if (beacon && beacon.reservationId === created.reservationId) {
+        consumeJustPaidBeacon();
+        this.squareStandSuccess.set(true);
+      } else if (!this.squareStandSuccess()) {
+        this.pendingSquareStandPayment.set(created);
+      }
     }
     this.clearActiveHoldSession();
     this.resetCreatedReservationState();
