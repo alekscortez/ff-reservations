@@ -243,6 +243,42 @@ describe('SquareStandCallback', () => {
     expect(page.errorMessage()).toMatch(/Handoff expired/);
   });
 
+  it('writes ff:stand-just-paid beacon on success so the destination page can suppress the spurious banner', () => {
+    setLocalStorageHandoff('h_test', {
+      reservationId: 'r-beacon',
+      eventDate: '2026-05-20',
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    const api = fakeReservationsApi();
+    const data = encodeURIComponent(
+      JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
+    );
+    createCallback(api, data);
+    const raw = localStorage.getItem('ff:stand-just-paid');
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(String(raw));
+    expect(parsed.reservationId).toBe('r-beacon');
+    expect(parsed.amount).toBe(75);
+  });
+
+  it('does NOT write the just-paid beacon on Square POS error', () => {
+    setLocalStorageHandoff('h_test', {
+      reservationId: 'r-no-beacon',
+      eventDate: '2026-05-20',
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    const api = fakeReservationsApi();
+    const data = encodeURIComponent(
+      JSON.stringify({
+        status: 'error',
+        error_code: 'payment_canceled',
+        state: 'h_test',
+      }),
+    );
+    createCallback(api, data);
+    expect(localStorage.getItem('ff:stand-just-paid')).toBeNull();
+  });
+
   it('clears localStorage on Square POS error so a retry does not reuse stale context', () => {
     setLocalStorageHandoff('h_test', {
       reservationId: 'r-stash',

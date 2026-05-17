@@ -12,6 +12,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { ReservationsService } from '../../../core/http/reservations.service';
+import { writeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmButton } from '../../../shared/ui/button';
 
@@ -169,6 +170,13 @@ export class SquareStandCallback implements OnInit {
           if (Number.isFinite(amount) && amount > 0) this.paidAmount.set(amount);
           this.phase.set('done');
           this.clearHandoffContext(cb.state);
+          // Write the just-paid beacon so the destination page (wizard or
+          // /staff/reservations) can suppress the spurious "pending stand
+          // payment" banner and show a toast instead. See
+          // just-paid-beacon.ts for the rationale + TTL.
+          if (this.reservationId && amount > 0) {
+            writeJustPaidBeacon({ reservationId: this.reservationId, amount });
+          }
           // Brief celebration, then navigate back. Mirrors the Cash App
           // path's ~1.5s timing.
           setTimeout(() => this.goBack(), 1500);
