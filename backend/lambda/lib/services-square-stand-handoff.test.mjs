@@ -52,10 +52,32 @@ function reservationItem(overrides = {}) {
 function buildService(overrides = {}) {
   const ddb = overrides.ddb ?? makeFakeDdb();
   const addPaymentCalls = [];
+  const refundCalls = [];
+  const historyCalls = [];
   const orderResponses = overrides.orderResponses ?? [];
   const paymentResponses = overrides.paymentResponses ?? [];
   let orderIdx = 0;
   let paymentIdx = 0;
+  const addReservationPayment =
+    overrides.addReservationPayment ??
+    (async (reservationId, payload, actor) => {
+      addPaymentCalls.push({ reservationId, payload, actor });
+      return { reservationId, paid: true };
+    });
+  const refundSquarePayment = overrides.refundSquarePayment
+    ? async (input) => {
+        refundCalls.push(input);
+        return overrides.refundSquarePayment(input);
+      }
+    : async ({ paymentId, amount, idempotencyKey, reason }) => {
+        refundCalls.push({ paymentId, amount, idempotencyKey, reason });
+        return { refund: { id: `refund_${paymentId}`, status: "PENDING" } };
+      };
+  const appendReservationHistory =
+    overrides.appendReservationHistory ??
+    (async (entry) => {
+      historyCalls.push(entry);
+    });
   const svc = createSquareStandHandoffService({
     ddb,
     tableNames: { HOLDS_TABLE: "ff-table-holds" },
@@ -86,18 +108,17 @@ function buildService(overrides = {}) {
         }
       );
     },
-    addReservationPayment: async (reservationId, payload, actor) => {
-      addPaymentCalls.push({ reservationId, payload, actor });
-      return { reservationId, paid: true };
-    },
+    addReservationPayment,
+    refundSquarePayment: overrides.skipRefundService ? undefined : refundSquarePayment,
+    appendReservationHistory: overrides.skipHistory ? undefined : appendReservationHistory,
     getReservationById: overrides.getReservationById ??
       (async () => reservationItem()),
     defaultCallbackUrl:
       overrides.defaultCallbackUrl ??
-      "https://reservations.famosofuego.com/staff/square-stand-callback",
+      "https://famosofuego.com/square-stand-callback",
     handoffTtlSeconds: overrides.handoffTtlSeconds ?? 900,
   });
-  return { svc, ddb, addPaymentCalls };
+  return { svc, ddb, addPaymentCalls, refundCalls, historyCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +251,7 @@ describe("startHandoff happy path", () => {
     assert.equal(out.handoffId, "fake-handoff-uuid");
     assert.equal(
       out.callbackUrl,
-      "https://reservations.famosofuego.com/staff/square-stand-callback"
+      "https://famosofuego.com/square-stand-callback"
     );
     assert.equal(out.amount, 50);
     assert.equal(out.expiresAt, FIXED_NOW + 900);
@@ -503,5 +524,118 @@ describe("cancelHandoff", () => {
       () => svc.cancelHandoff({ handoffId: "" }),
       (err) => err?.statusCode === 400 && /handoffId/.test(err.message)
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// completeHandoff — auto-refund after addReservationPayment failure (audit
+// finding #1). Mirrors autoRefundAfterRecordFailure in routes-reservations-
+// holds.mjs so a Stand charge can never be orphaned at Square without a
+// reservation record AND without an automatic refund attempt.
+// ---------------------------------------------------------------------------
+
+function pendingHandoffItem(overrides = {}) {
+  return {
+    status: "PENDING",
+    reservationId: "r1",
+    eventDate: "2026-05-20",
+    amount: 75,
+    expiresAt: FIXED_NOW + 60,
+    note: "deposit",
+    ...overrides,
+  };
+}
+
+describe("completeHandoff auto-refund (record-failure path)", () => {
+  it("auto-refunds when addReservationPayment throws 409 (CCFE), surfaces 409 with refund id", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem() }],
+    });
+    const ccfe = new Error("Reservation changed concurrently — refresh and try again.");
+    ccfe.statusCode = 409;
+    const { svc, refundCalls, historyCalls } = buildService({
+      ddb,
+      addReservationPayment: async () => {
+        throw ccfe;
+      },
+    });
+    await assert.rejects(
+      () => svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" }),
+      (err) =>
+        err?.statusCode === 409 &&
+        /refunded automatically/i.test(err.message) &&
+        /refund_pay_1/.test(err.message)
+    );
+    assert.equal(refundCalls.length, 1);
+    assert.equal(refundCalls[0].paymentId, "pay_1");
+    assert.equal(refundCalls[0].amount, 75);
+    assert.equal(refundCalls[0].idempotencyKey, "auto-refund-pay_1");
+    const refundedHistory = historyCalls.find(
+      (h) => h.eventType === "AUTO_REFUND_AFTER_RECORD_FAILURE"
+    );
+    assert.ok(refundedHistory, "expected AUTO_REFUND_AFTER_RECORD_FAILURE history entry");
+    assert.equal(refundedHistory.details.integration, "square-stand");
+  });
+
+  it("surfaces 502 with manual-reconciliation hint when BOTH addReservationPayment AND refund fail", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem() }],
+    });
+    const recordErr = new Error("amount cannot exceed remaining balance");
+    recordErr.statusCode = 400;
+    const refundErr = new Error("Square refund failed (502): UPSTREAM_TIMEOUT");
+    const { svc, refundCalls, historyCalls } = buildService({
+      ddb,
+      addReservationPayment: async () => {
+        throw recordErr;
+      },
+      refundSquarePayment: async () => {
+        throw refundErr;
+      },
+    });
+    await assert.rejects(
+      () => svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" }),
+      (err) =>
+        err?.statusCode === 502 &&
+        /manual reconciliation required/i.test(err.message) &&
+        /pay_1/.test(err.message)
+    );
+    assert.equal(refundCalls.length, 1);
+    const failedHistory = historyCalls.find(
+      (h) => h.eventType === "AUTO_REFUND_FAILED"
+    );
+    assert.ok(failedHistory, "expected AUTO_REFUND_FAILED history entry");
+    assert.equal(failedHistory.details.integration, "square-stand");
+  });
+
+  it("falls back to 502 without refund when refundSquarePayment is not wired (defensive)", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem() }],
+    });
+    const recordErr = new Error("Reservation is already fully paid");
+    recordErr.statusCode = 400;
+    const { svc, refundCalls } = buildService({
+      ddb,
+      skipRefundService: true,
+      addReservationPayment: async () => {
+        throw recordErr;
+      },
+    });
+    await assert.rejects(
+      () => svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" }),
+      (err) =>
+        err?.statusCode === 502 && /manual reconciliation/i.test(err.message)
+    );
+    assert.equal(refundCalls.length, 0);
+  });
+
+  it("does NOT auto-refund on the happy path", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem() }],
+    });
+    const { svc, refundCalls, addPaymentCalls } = buildService({ ddb });
+    await svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" });
+    assert.equal(addPaymentCalls.length, 1);
+    assert.equal(refundCalls.length, 0);
   });
 });

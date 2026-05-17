@@ -59,6 +59,15 @@ export function createSquareStandHandoffService({
   getPaymentById,
   addReservationPayment,
   getReservationById,
+  // Optional: when set, completeHandoff auto-refunds Square charges that
+  // can't be recorded against the reservation (concurrent payment landed,
+  // reservation cancelled mid-flow, captured amount exceeds handoff).
+  // Mirrors autoRefundAfterRecordFailure from routes-reservations-holds.
+  // Omit only in tests that explicitly cover the no-refund fallback.
+  refundSquarePayment,
+  // Optional: fire-and-forget history hook for audit trail of refunds.
+  // Same shape as services-reservations-shared.appendReservationHistory.
+  appendReservationHistory,
   // Optional: override the callback URL (e.g. for tests). When omitted,
   // the route handler is expected to inject the URL it computed from the
   // request origin + path.
@@ -84,6 +93,120 @@ export function createSquareStandHandoffService({
 
   function roundMoney(value) {
     return Math.round(Number(value ?? 0) * 100) / 100;
+  }
+
+  // Auto-refund a Square charge whose reservation-recording leg failed.
+  // Idempotency key is stable per Square paymentId so retries are safe and
+  // Square returns the existing refund. Mirrors the pattern in
+  // routes-reservations-holds.autoRefundAfterRecordFailure — kept here so
+  // the service stays the single owner of the Square-side state machine.
+  async function tryAutoRefund({
+    paymentId,
+    amount,
+    eventDate,
+    reservationId,
+    recordError,
+    actor,
+  }) {
+    if (typeof refundSquarePayment !== "function") {
+      // eslint-disable-next-line no-console
+      console.error("auto_refund_skipped_no_refund_service", {
+        scope: "square-stand",
+        reservationId,
+        eventDate,
+        paymentId,
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      return { refunded: false, reason: "refund_service_unavailable" };
+    }
+    if (!paymentId || !(amount > 0)) {
+      return { refunded: false, reason: "missing_payment_or_amount" };
+    }
+    try {
+      const refund = await refundSquarePayment({
+        paymentId,
+        amount,
+        idempotencyKey: `auto-refund-${paymentId}`,
+        reason: "Card on Stand reservation update failed — auto refund",
+      });
+      // eslint-disable-next-line no-console
+      console.warn("auto_refund_after_record_failure", {
+        scope: "square-stand",
+        reservationId,
+        eventDate,
+        paymentId,
+        refundId: refund?.refund?.id ?? null,
+        amount,
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      if (typeof appendReservationHistory === "function") {
+        try {
+          await appendReservationHistory({
+            eventDate,
+            reservationId,
+            eventType: "AUTO_REFUND_AFTER_RECORD_FAILURE",
+            actor: String(actor ?? "").trim() || "system:square-stand",
+            source: "system",
+            details: {
+              paymentId,
+              refundId: refund?.refund?.id ?? null,
+              amount,
+              recordErrorMessage: String(
+                recordError?.message ?? recordError ?? ""
+              ).slice(0, 256),
+              integration: "square-stand",
+            },
+          });
+        } catch {
+          // Best-effort history write — never block the refund response.
+        }
+      }
+      return {
+        refunded: true,
+        refundId: refund?.refund?.id ?? null,
+        refundStatus: refund?.refund?.status ?? null,
+      };
+    } catch (refundErr) {
+      // eslint-disable-next-line no-console
+      console.error("auto_refund_failed", {
+        scope: "square-stand",
+        reservationId,
+        eventDate,
+        paymentId,
+        amount,
+        refundError: String(refundErr?.message ?? refundErr ?? ""),
+        recordError: String(recordError?.message ?? recordError ?? ""),
+      });
+      if (typeof appendReservationHistory === "function") {
+        try {
+          await appendReservationHistory({
+            eventDate,
+            reservationId,
+            eventType: "AUTO_REFUND_FAILED",
+            actor: String(actor ?? "").trim() || "system:square-stand",
+            source: "system",
+            details: {
+              paymentId,
+              amount,
+              refundErrorMessage: String(
+                refundErr?.message ?? refundErr ?? ""
+              ).slice(0, 256),
+              recordErrorMessage: String(
+                recordError?.message ?? recordError ?? ""
+              ).slice(0, 256),
+              integration: "square-stand",
+            },
+          });
+        } catch {
+          // Best-effort.
+        }
+      }
+      return {
+        refunded: false,
+        reason: "refund_failed",
+        refundErrorMessage: String(refundErr?.message ?? refundErr ?? ""),
+      };
+    }
   }
 
   async function startHandoff({
@@ -251,36 +374,63 @@ export function createSquareStandHandoffService({
     }
     const majorAmount = roundMoney(minorAmount / 100);
 
-    const item = await addReservationPayment(
-      handoff.reservationId,
-      {
-        eventDate: handoff.eventDate,
-        amount: majorAmount,
-        method: "square",
-        source: "square-stand",
-        note: String(payment?.note ?? handoff.note ?? "").trim() ||
-          `Card on Stand · handoff ${normalizedHandoffId}`,
-        provider: {
-          providerPaymentId: String(payment?.id ?? "").trim() || null,
-          providerStatus: paymentStatus,
-          receiptUrl: String(payment?.receipt_url ?? "").trim() || null,
-          orderId: String(payment?.order_id ?? "").trim() || null,
-          sourceType: String(payment?.source_type ?? "").trim() || null,
-          idempotencyKey:
-            String(payment?.idempotency_key ?? "").trim() || null,
-          amountMoney:
-            payment?.amount_money && typeof payment.amount_money === "object"
-              ? {
-                  amount: Number(payment.amount_money.amount ?? 0),
-                  currency:
-                    String(payment.amount_money.currency ?? "").trim() ||
-                    null,
-                }
-              : null,
+    const resolvedActor =
+      String(actor ?? "").trim() || "system:square-stand";
+    const squarePaymentId = String(payment?.id ?? "").trim() || null;
+
+    let item;
+    try {
+      item = await addReservationPayment(
+        handoff.reservationId,
+        {
+          eventDate: handoff.eventDate,
+          amount: majorAmount,
+          method: "square",
+          source: "square-stand",
+          note: String(payment?.note ?? handoff.note ?? "").trim() ||
+            `Card on Stand · handoff ${normalizedHandoffId}`,
+          provider: {
+            providerPaymentId: squarePaymentId,
+            providerStatus: paymentStatus,
+            receiptUrl: String(payment?.receipt_url ?? "").trim() || null,
+            orderId: String(payment?.order_id ?? "").trim() || null,
+            sourceType: String(payment?.source_type ?? "").trim() || null,
+            idempotencyKey:
+              String(payment?.idempotency_key ?? "").trim() || null,
+            amountMoney:
+              payment?.amount_money && typeof payment.amount_money === "object"
+                ? {
+                    amount: Number(payment.amount_money.amount ?? 0),
+                    currency:
+                      String(payment.amount_money.currency ?? "").trim() ||
+                      null,
+                  }
+                : null,
+          },
         },
-      },
-      String(actor ?? "").trim() || "system:square-stand"
-    );
+        resolvedActor
+      );
+    } catch (recordErr) {
+      // Square already captured the customer's card. The reservation
+      // record FAILED — typically because another payment landed first
+      // (CCFE 409), the reservation was cancelled between start +
+      // complete, or the captured amount exceeded remaining balance.
+      // Auto-refund and surface a clear, money-state-aware error.
+      const refund = await tryAutoRefund({
+        paymentId: squarePaymentId,
+        amount: majorAmount,
+        eventDate: handoff.eventDate,
+        reservationId: handoff.reservationId,
+        recordError: recordErr,
+        actor: resolvedActor,
+      });
+      const base =
+        String(recordErr?.message ?? "Failed to record payment after charge");
+      const msg = refund.refunded
+        ? `${base}. The Square charge has been refunded automatically (refund ${refund.refundId ?? "issued"}).`
+        : `${base}. Auto-refund FAILED — manual reconciliation required for Square payment ${squarePaymentId ?? "(unknown)"}.`;
+      throw httpError(refund.refunded ? 409 : 502, msg);
+    }
 
     // Mark CONSUMED so a later callback retry returns the same record
     // path through addReservationPayment's providerPaymentId dedupe

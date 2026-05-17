@@ -646,6 +646,13 @@ const squareStandHandoffService = createSquareStandHandoffService({
   getPaymentById: squarePaymentsService.getPaymentById,
   addReservationPayment: reservationsHoldsService.addReservationPayment,
   getReservationById: reservationsHoldsService.getReservationById,
+  // Wired so completeHandoff can auto-refund the customer's card if the
+  // synchronous reservation update fails (e.g. concurrent payment landed,
+  // captured amount exceeded remaining balance, reservation cancelled
+  // mid-flow). Same pattern as the customer-pad path in
+  // routes-reservations-holds.autoRefundAfterRecordFailure.
+  refundSquarePayment: squarePaymentsService.refundPayment,
+  appendReservationHistory: reservationsHoldsService.appendReservationHistory,
   defaultCallbackUrl: SQUARE_STAND_CALLBACK_URL,
 });
 
