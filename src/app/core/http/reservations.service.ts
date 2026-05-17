@@ -104,6 +104,55 @@ export interface CreateSquarePaymentLinkSmsResponse extends CreateSquarePaymentL
   };
 }
 
+export interface StartSquareStandHandoffPayload {
+  reservationId: string;
+  eventDate: string;
+  amount: number;
+  note?: string;
+  returnPath?: string;
+}
+
+export interface StartSquareStandHandoffResponse {
+  handoffId: string;
+  callbackUrl: string;
+  expiresAt: number;
+  amount: number;
+}
+
+export interface CompleteSquareStandHandoffPayload {
+  reservationId: string;
+  handoffId: string;
+  transactionId: string;
+}
+
+export interface CompleteSquareStandHandoffResponse {
+  item: ReservationItem;
+  square: {
+    paymentId: string | null;
+    status: string;
+    receiptUrl: string | null;
+    orderId: string | null;
+    sourceType: string | null;
+    idempotencyKey: string | null;
+    env: string | null;
+  };
+  handoff: {
+    handoffId: string;
+    consumedAt: number;
+  };
+}
+
+export interface CancelSquareStandHandoffPayload {
+  reservationId: string;
+  handoffId: string;
+  reason?: string;
+}
+
+export interface CancelSquareStandHandoffResponse {
+  handoffId: string;
+  cancelled: boolean;
+}
+
 export interface ReservationHistoryItem {
   eventId?: string | null;
   eventType?: string | null;
@@ -241,6 +290,40 @@ export class ReservationsService {
         note: payload.note ?? '',
         idempotencyKey: payload.idempotencyKey ?? '',
       }
+    );
+  }
+
+  // Square Stand handoff — URL-scheme bridge used when staff and the
+  // Square POS app live on the SAME iPad. See <square-stand-handoff>.
+  startSquareStandHandoff(payload: StartSquareStandHandoffPayload) {
+    return this.api.post<StartSquareStandHandoffResponse>(
+      `/reservations/${payload.reservationId}/payment/square-stand/start`,
+      {
+        eventDate: payload.eventDate,
+        amount: payload.amount,
+        note: payload.note ?? '',
+        returnPath: payload.returnPath ?? '',
+      },
+    );
+  }
+
+  completeSquareStandHandoff(payload: CompleteSquareStandHandoffPayload) {
+    return this.api.post<CompleteSquareStandHandoffResponse>(
+      `/reservations/${payload.reservationId}/payment/square-stand/complete`,
+      {
+        handoffId: payload.handoffId,
+        transactionId: payload.transactionId,
+      },
+    );
+  }
+
+  cancelSquareStandHandoff(payload: CancelSquareStandHandoffPayload) {
+    return this.api.post<CancelSquareStandHandoffResponse>(
+      `/reservations/${payload.reservationId}/payment/square-stand/cancel`,
+      {
+        handoffId: payload.handoffId,
+        reason: payload.reason ?? '',
+      },
     );
   }
 

@@ -87,6 +87,7 @@ import {
 import { PhoneDisplayPipe } from '../../../shared/phone-display.pipe';
 import { TableMap } from '../../../shared/components/table-map/table-map';
 import { CashAppQrPad } from '../../../shared/components/cash-app-qr-pad/cash-app-qr-pad';
+import { SquareStandHandoff } from '../../../shared/components/square-stand-handoff/square-stand-handoff';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog, HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -96,7 +97,7 @@ import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, SquareStandHandoff, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmToggle],
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
@@ -254,8 +255,12 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     D: '#f7941d',
     E: '#711411',
   };
-  readonly paymentMethodOptions: Array<{ value: 'cash' | 'square' | 'cashapp'; label: string }> = [
-    { value: 'square', label: 'Square' },
+  readonly paymentMethodOptions: Array<{
+    value: 'cash' | 'square' | 'cashapp' | 'square_stand';
+    label: string;
+  }> = [
+    { value: 'square_stand', label: 'Card on Stand' },
+    { value: 'square', label: 'Square link' },
     { value: 'cashapp', label: 'Cash App' },
     { value: 'cash', label: 'Cash' },
   ];
@@ -268,9 +273,10 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     paymentStatus: new FormControl<'PAID' | 'PARTIAL' | 'PENDING' | 'COURTESY'>('PAID', {
       nonNullable: true,
     }),
-    paymentMethod: new FormControl<'cash' | 'square' | 'cashapp'>('square', {
-      nonNullable: true,
-    }),
+    paymentMethod: new FormControl<'cash' | 'square' | 'cashapp' | 'square_stand'>(
+      'square',
+      { nonNullable: true },
+    ),
     useCredit: new FormControl(false, { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
     // remainingMethod (after-credit balance) intentionally excludes
@@ -424,6 +430,16 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   readonly cancelPendingConfirmOpen = signal(false);
   readonly cancelPendingLoading = signal(false);
   readonly cancelPendingError = signal<string | null>(null);
+  // Square Stand handoff: symmetric with Cash App. Wizard-level state for
+  // the post-create handoff UI and the "pending Stand payment" recovery
+  // banner shown when staff closes the modal mid-flow (Safari leaves the
+  // page during the URL-scheme handoff, but the reservation is already
+  // CONFIRMED+PENDING — we surface a Resume / Cancel reservation banner).
+  readonly squareStandSuccess = signal(false);
+  readonly pendingSquareStandPayment = signal<CreatedReservationContext | null>(null);
+  readonly cancelPendingStandConfirmOpen = signal(false);
+  readonly cancelPendingStandLoading = signal(false);
+  readonly cancelPendingStandError = signal<string | null>(null);
   private readonly _desktopSplitHeightPx = signal<number | null>(null);
   get desktopSplitHeightPx(): number | null { return this._desktopSplitHeightPx(); }
   set desktopSplitHeightPx(value: number | null) { this._desktopSplitHeightPx.set(value); }
@@ -1369,6 +1385,30 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
             return;
           }
 
+          if (paymentMethod === 'square_stand') {
+            this.createdReservation = {
+              reservationId,
+              eventDate: this.eventDate!,
+              tableId: bookingTableIds[0],
+              tableIds: bookingTableIds,
+              customerName: this.form.controls.customerName.value,
+              phone,
+              amount: amountDue,
+              confirmationCode:
+                (createdItem as { confirmationCode?: string | null })
+                  ?.confirmationCode ?? null,
+              linkMode: 'square_stand',
+            };
+            this.confirmingReservation = false;
+            this.loading = false;
+            // The handoff button mounts inside the post-create section of
+            // the modal. Square POS opens on tap, customer swipes, Safari
+            // returns to /square-stand-callback which records the payment.
+            // The wizard's "pending stand payment" banner takes over if
+            // staff closes the modal mid-flow.
+            return;
+          }
+
           this.confirmingReservation = false;
           this.loading = false;
           this.finishReservationFlow();
@@ -1530,6 +1570,55 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
 
   onCashAppResumeErrored(message: string): void {
     this.cashAppResumeError.set(message || 'Cash App payment was not completed.');
+  }
+
+  // -------------------------------------------------------------------
+  // Pending Square Stand payment banner — mirrors the Cash App pair of
+  // openCancelPendingCashApp + confirmCancelPendingCashApp.
+  // -------------------------------------------------------------------
+
+  openCancelPendingStand(): void {
+    if (!this.pendingSquareStandPayment()) return;
+    this.cancelPendingStandError.set(null);
+    this.cancelPendingStandConfirmOpen.set(true);
+  }
+
+  closeCancelPendingStand(): void {
+    if (this.cancelPendingStandLoading()) return;
+    this.cancelPendingStandConfirmOpen.set(false);
+  }
+
+  confirmCancelPendingStand(): void {
+    const ctx = this.pendingSquareStandPayment();
+    if (!ctx) return;
+    if (this.cancelPendingStandLoading()) return;
+    this.cancelPendingStandLoading.set(true);
+    this.cancelPendingStandError.set(null);
+    this.reservationsApi
+      .cancel(
+        ctx.reservationId,
+        ctx.eventDate,
+        ctx.tableId || null,
+        'Card on Stand payment not completed',
+        'CANCEL_NO_REFUND',
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.cancelPendingStandLoading.set(false);
+          this.cancelPendingStandConfirmOpen.set(false);
+          this.pendingSquareStandPayment.set(null);
+          if (this.eventDate) {
+            this.loadTables(this.eventDate);
+          }
+        },
+        error: (err: any) => {
+          this.cancelPendingStandLoading.set(false);
+          this.cancelPendingStandError.set(
+            err?.error?.message || err?.message || 'Failed to cancel reservation.',
+          );
+        },
+      });
   }
 
   cancelReleasePrompt(): void {
@@ -1800,16 +1889,19 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
 
   trackByPaymentMethodOption(
     _index: number,
-    item: { value: 'cash' | 'square' | 'cashapp' }
+    item: { value: 'cash' | 'square' | 'cashapp' | 'square_stand' }
   ): string {
     return item.value;
   }
 
-  isPaymentMethod(value: 'cash' | 'square' | 'cashapp'): boolean {
+  isPaymentMethod(value: 'cash' | 'square' | 'cashapp' | 'square_stand'): boolean {
     return this.form.controls.paymentMethod.value === value;
   }
 
-  onPaymentMethodButtonClick(event: Event, value: 'cash' | 'square' | 'cashapp'): void {
+  onPaymentMethodButtonClick(
+    event: Event,
+    value: 'cash' | 'square' | 'cashapp' | 'square_stand',
+  ): void {
     event.preventDefault();
     event.stopPropagation();
     if (this.form.controls.paymentMethod.value === value) return;
@@ -1829,24 +1921,29 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     return this.form.controls.paymentMethod.value === 'cashapp';
   }
 
+  isSquareStandMethod(): boolean {
+    return this.form.controls.paymentMethod.value === 'square_stand';
+  }
+
   isLinkCollectionFlow(): boolean {
     if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
       return this.form.controls.remainingMethod.value === 'square';
     }
-    return this.isSquareMethod() || this.isCashAppMethod();
+    return this.isSquareMethod() || this.isCashAppMethod() || this.isSquareStandMethod();
   }
 
-  private currentLinkModeFromForm(): 'square' | 'cashapp' | null {
+  private currentLinkModeFromForm(): 'square' | 'cashapp' | 'square_stand' | null {
     if (this.isUsingClientCredit() && this.shouldShowCreditRemainingMethod()) {
       return this.form.controls.remainingMethod.value === 'square' ? 'square' : null;
     }
     const method = this.form.controls.paymentMethod.value;
     if (method === 'square') return 'square';
     if (method === 'cashapp') return 'cashapp';
+    if (method === 'square_stand') return 'square_stand';
     return null;
   }
 
-  private currentLinkMode(): 'square' | 'cashapp' | null {
+  private currentLinkMode(): 'square' | 'cashapp' | 'square_stand' | null {
     return this.createdReservation?.linkMode ?? this.currentLinkModeFromForm();
   }
 
@@ -2030,7 +2127,10 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   }
 
   linkCollectionTitle(): string {
-    return this.currentLinkMode() === 'cashapp' ? 'Cash App QR' : 'Square Link';
+    const mode = this.currentLinkMode();
+    if (mode === 'cashapp') return 'Cash App QR';
+    if (mode === 'square_stand') return 'Card on Stand';
+    return 'Square Link';
   }
 
   reservationActionLabel(): string {
@@ -2038,6 +2138,7 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     if (this.isLinkCollectionFlow()) {
       const mode = this.currentLinkModeFromForm();
       if (mode === 'cashapp') return 'Confirm & Show Cash App QR';
+      if (mode === 'square_stand') return 'Confirm & Hand off to Square POS';
       return 'Confirm & Generate Square Link';
     }
     return 'Confirm Reservation';
@@ -2180,6 +2281,17 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
       !this.cashAppCharging()
     ) {
       this.pendingCashAppPayment.set(created);
+    }
+    // Same idea for the Stand handoff. Closing the wizard before the
+    // /square-stand-callback hits /complete leaves the reservation as
+    // CONFIRMED+PENDING. Stash so the user can resume or cancel from
+    // the banner above the map.
+    if (
+      created &&
+      created.linkMode === 'square_stand' &&
+      !this.squareStandSuccess()
+    ) {
+      this.pendingSquareStandPayment.set(created);
     }
     this.clearActiveHoldSession();
     this.resetCreatedReservationState();

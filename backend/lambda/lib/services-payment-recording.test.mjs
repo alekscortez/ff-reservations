@@ -811,6 +811,25 @@ describe("addReservationPayment non-credit", () => {
     );
     assert.equal(historyCalls[0].source, "square-direct");
   });
+
+  it("accepts source=square-stand for the iPad URL-scheme handoff", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: reservationItem() }],
+    });
+    const { svc, historyCalls } = buildPaymentRecording({ ddb });
+    await svc.addReservationPayment(
+      "r1",
+      {
+        eventDate: "2026-05-09",
+        amount: 30,
+        method: "square",
+        source: "square-stand",
+        provider: { providerPaymentId: "sq_stand_1" },
+      },
+      "staff@x"
+    );
+    assert.equal(historyCalls[0].source, "square-stand");
+  });
 });
 
 // ---------------------------------------------------------------------------

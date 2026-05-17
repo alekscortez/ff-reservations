@@ -24,11 +24,17 @@ export interface CreatedReservationContext {
   customerName: string;
   phone: string;
   amount: number;
+  // Optional: short FF-XXXXXX so the Square POS notes line carries a
+  // customer-friendly reference (the webhook can also reconcile via this).
+  confirmationCode?: string | null;
   // What the wizard renders after the reservation is created:
-  // - 'square'  → Square hosted-checkout link to share with the customer.
-  // - 'cashapp' → in-venue Cash App QR (Web Payments SDK) mounted inline.
-  // - null      → no follow-up (cash already recorded at create time).
-  linkMode: 'square' | 'cashapp' | null;
+  // - 'square'        → Square hosted-checkout link to share with the customer.
+  // - 'cashapp'       → in-venue Cash App QR (Web Payments SDK) mounted inline.
+  // - 'square_stand'  → in-venue card swipe on the Stand reader via the
+  //                     Square POS URL-scheme handoff. Stays here as a
+  //                     "pending stand payment" until the callback fires.
+  // - null            → no follow-up (cash already recorded at create time).
+  linkMode: 'square' | 'cashapp' | 'square_stand' | null;
 }
 
 // "Table 5" / "Tables 5, 7, 9". Empty list returns "" so callers can branch.
@@ -49,22 +55,28 @@ export function formatTablesLabel(tableIds: string[] | undefined | null): string
 // is recorded later via POST /reservations/{id}/payments when the SDK
 // tokenizes.
 export function toCreatePaymentMethod(
-  method: 'cash' | 'square' | 'cashapp'
+  method: 'cash' | 'square' | 'cashapp' | 'square_stand'
 ): 'cash' | 'square' | 'cashapp' | null {
   if (method === 'cash') return 'cash';
-  if (method === 'square') return 'square';
+  // Card-on-Stand and Square hosted-link both end up recorded as
+  // method:"square" on the BE; at create time they look identical to
+  // the reservation row (PENDING with method:square). The follow-up
+  // step differs: stand = local URL-scheme handoff, square = SMS link.
+  if (method === 'square_stand' || method === 'square') return 'square';
   if (method === 'cashapp') return 'cashapp';
   return null;
 }
 
 // Returns the link mode if the chosen method requires a follow-up step
-// after reservation creation: 'square' = generate hosted-checkout link,
-// 'cashapp' = mount in-venue QR pad. Null for cash (recorded at create).
+// after reservation creation. Square = generate hosted-checkout link.
+// Cash App = mount in-venue QR pad. Square Stand = mount Stand handoff.
+// Null for cash (recorded at create).
 export function toLinkMode(
-  method: 'cash' | 'square' | 'cashapp'
-): 'square' | 'cashapp' | null {
+  method: 'cash' | 'square' | 'cashapp' | 'square_stand'
+): 'square' | 'cashapp' | 'square_stand' | null {
   if (method === 'square') return 'square';
   if (method === 'cashapp') return 'cashapp';
+  if (method === 'square_stand') return 'square_stand';
   return null;
 }
 

@@ -42,7 +42,8 @@
         (change)="onMethodChange($event)"
       >
         <option value="cash">Cash</option>
-        <option value="square">Square</option>
+        <option value="square_stand">Card on Stand</option>
+        <option value="square">Square link (send to customer)</option>
         <option value="cashapp">Cash App Pay</option>
         <option value="credit">Reservation Credit</option>
       </hlm-native-select>
@@ -129,6 +130,11 @@
     <p class="text-xs text-brand-600" *ngIf="isSquare()">
       Square in this modal generates a Square link. Reader charge can be added later.
     </p>
+    <p class="text-xs text-brand-600" *ngIf="isSquareStand()">
+      "Card on Stand" hands the payment off to Square POS on this iPad —
+      the customer's card is swiped on the Stand reader, and the reservation
+      is updated automatically when Square POS returns.
+    </p>
     <p class="text-xs text-brand-600" *ngIf="isCashApp()">
       Confirm the amount, then tap "Show Cash App QR" — the customer scans the QR on their own phone and approves in Cash App.
     </p>
@@ -147,8 +153,26 @@
       (errored)="onCashAppErroredInternal($event)"
     />
 
+    <square-stand-handoff
+      *ngIf="isSquareStand()"
+      #squareStandHandoff
+      [reservationId]="reservation.reservationId"
+      [eventDate]="reservation.eventDate"
+      [amount]="form.controls.amount.value || 0"
+      [applicationId]="squareApplicationId"
+      [note]="form.controls.note.value"
+      [confirmationCode]="reservation.confirmationCode"
+      [returnPath]="squareStandReturnPath"
+      [label]="cashAppLabel()"
+      [success]="squareStandSuccess"
+      [hideInternalButton]="true"
+    />
+
     <hlm-alert *ngIf="isCashApp() && !canUseCashAppPay()" variant="destructive">
       Cash App Pay is not configured. Set Square application id and location id in Lambda env vars.
+    </hlm-alert>
+    <hlm-alert *ngIf="isSquareStand() && !canUseSquareStand()" variant="destructive">
+      Square is not configured. Set the Square Application ID in /admin/settings before using Card on Stand.
     </hlm-alert>
 
     <button

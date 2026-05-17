@@ -318,13 +318,14 @@ export function createPaymentRecordingService(
       "manual",
       "square-direct",
       "square-webhook",
+      "square-stand",
       "reschedule-credit",
     ]);
     let paymentSource = sourceInput || "";
     if (paymentSource && !allowedSources.has(paymentSource)) {
       throw httpError(
         400,
-        "source must be manual | square-direct | square-webhook | reschedule-credit"
+        "source must be manual | square-direct | square-webhook | square-stand | reschedule-credit"
       );
     }
     if (!paymentSource) {

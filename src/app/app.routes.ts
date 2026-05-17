@@ -43,6 +43,20 @@ export const routes: Routes = [
       ),
   },
   {
+    // Square POS API URL-scheme callback. Square POS redirects Safari
+    // here with ?data=<urlEncoded JSON> after the staff swipes a card
+    // on the Stand reader. The component decodes the payload, POSTs
+    // /complete to the server, then navigates back to the returnPath.
+    // Auth-guarded so non-staff can't hit /complete via a forged URL.
+    path: 'square-stand-callback',
+    title: 'Recording payment — Famoso Fuego',
+    canMatch: [authGuard, roleGuard(['Staff', 'Admin'])],
+    loadComponent: () =>
+      import(
+        './features/staff/square-stand-callback/square-stand-callback'
+      ).then((m) => m.SquareStandCallback),
+  },
+  {
     path: 'reserva',
     title: 'Famoso Fuego — Reserva tu mesa',
     loadComponent: () =>

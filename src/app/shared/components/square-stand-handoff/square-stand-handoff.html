@@ -1,0 +1,73 @@
+<section
+  class="rounded-xl border border-warm-200 bg-warm-50 p-3"
+  aria-live="polite"
+  data-square-stand-handoff
+>
+  <hlm-alert
+    *ngIf="showPhoneHint"
+    variant="warning"
+    class="mb-3 text-xs"
+  >
+    For in-person card payments on the Stand, use the host-stand iPad —
+    Square POS app must be installed on the same device as Safari for the
+    handoff to open. On phones the URL scheme has no app to launch.
+  </hlm-alert>
+
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <p
+      class="text-xs font-semibold"
+      [class.text-warm-700]="status() !== 'success' && status() !== 'error' && status() !== 'cancelled'"
+      [class.text-success-700]="status() === 'success'"
+      [class.text-danger-700]="status() === 'error' || status() === 'cancelled'"
+    >
+      {{ statusLabel() }}
+    </p>
+    <span hlmBadge size="sm" [variant]="statusBadgeVariant()">{{ statusBadgeText() }}</span>
+  </div>
+
+  <div class="mt-3" *ngIf="!hideInternalButton">
+    <button
+      hlmBtn
+      type="button"
+      class="w-full"
+      [disabled]="isWorking() || status() === 'success'"
+      (click)="start()"
+    >
+      <ng-container [ngSwitch]="status()">
+        <ng-container *ngSwitchCase="'starting'">Preparing…</ng-container>
+        <ng-container *ngSwitchCase="'handing-off'">Opening Square POS…</ng-container>
+        <ng-container *ngSwitchCase="'awaiting-callback'">Waiting in Square POS…</ng-container>
+        <ng-container *ngSwitchCase="'success'">Paid ✓</ng-container>
+        <ng-container *ngSwitchDefault>Hand off to Square POS</ng-container>
+      </ng-container>
+    </button>
+  </div>
+
+  <p
+    class="mt-3 text-center text-xs text-warm-700"
+    *ngIf="status() === 'idle'"
+  >
+    Square POS opens on this iPad. Insert/tap the customer's card on the
+    Stand reader; tip + signature are handled in Square POS. Square POS
+    returns here automatically when finished.
+  </p>
+  <p
+    class="mt-3 text-center text-xs text-warm-700"
+    *ngIf="status() === 'awaiting-callback'"
+  >
+    Stay on this tab — Safari will reload with the payment result the
+    moment Square POS finishes.
+  </p>
+  <p
+    class="mt-3 text-center text-xs font-semibold text-success-700"
+    *ngIf="status() === 'success'"
+  >
+    Paid · ${{ amount | number:'1.2-2' }}
+  </p>
+  <p
+    class="mt-3 text-center text-xs text-danger-700"
+    *ngIf="status() === 'error' && errorMessage() as msg"
+  >
+    {{ msg }}
+  </p>
+</section>

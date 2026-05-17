@@ -46,7 +46,7 @@ export interface ActiveHoldSession {
   // before Cash App was moved to in-venue-only. Readers normalize it to
   // 'cashapp' on the fly so users with a stale session land on the new
   // in-venue QR flow instead of a stuck "Cash App link" state.
-  paymentMethod: 'cash' | 'square' | 'cashapp';
+  paymentMethod: 'cash' | 'square' | 'cashapp' | 'square_stand';
   allowCustomDeposit: boolean;
   paymentDeadlineEnabled: boolean;
   paymentDeadlineDate: string;
@@ -60,7 +60,12 @@ const VALID_STATUSES: ActiveHoldSession['paymentStatus'][] = [
   'PENDING',
   'COURTESY',
 ];
-const VALID_METHODS: ActiveHoldSession['paymentMethod'][] = ['cash', 'square', 'cashapp'];
+const VALID_METHODS: ActiveHoldSession['paymentMethod'][] = [
+  'cash',
+  'square',
+  'cashapp',
+  'square_stand',
+];
 
 export function readActiveHoldSession(): ActiveHoldSession | null {
   try {

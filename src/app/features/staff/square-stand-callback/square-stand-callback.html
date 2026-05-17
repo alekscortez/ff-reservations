@@ -1,0 +1,57 @@
+<div class="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6">
+  <h1 class="text-lg font-semibold text-warm-900">Square Stand</h1>
+
+  <div class="mt-6 w-full" [ngSwitch]="phase()">
+    <ng-container *ngSwitchCase="'parsing'">
+      <hlm-alert variant="info">Reading payment result from Square POS…</hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'recording'">
+      <hlm-alert variant="info">Recording payment…</hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'done'">
+      <hlm-alert variant="success">
+        <strong>Paid ✓</strong>
+        <span *ngIf="paidAmount() as amt"> · ${{ amt | number:'1.2-2' }}</span>
+      </hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'cancelled'">
+      <hlm-alert variant="warning">
+        <strong>Payment cancelled.</strong>
+        The customer didn't complete the swipe. The reservation is unchanged.
+      </hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'declined'">
+      <hlm-alert variant="destructive">
+        <strong>Card declined.</strong>
+        {{ errorMessage() }}
+      </hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'error'">
+      <hlm-alert variant="destructive">
+        <strong>Something went wrong.</strong>
+        {{ errorMessage() }}
+      </hlm-alert>
+    </ng-container>
+    <ng-container *ngSwitchCase="'missing'">
+      <hlm-alert variant="warning">
+        Open this page from inside the reservations app — there's no
+        handoff result attached to this URL.
+      </hlm-alert>
+    </ng-container>
+  </div>
+
+  <div class="mt-6 flex w-full flex-col gap-2">
+    <button
+      *ngIf="phase() === 'declined' || phase() === 'error'"
+      hlmBtn
+      type="button"
+      (click)="retry()"
+      [disabled]="recording()"
+    >
+      Retry recording
+    </button>
+    <button hlmBtn variant="outline" type="button" (click)="goBack()">
+      Back to reservation
+    </button>
+  </div>
+</div>

@@ -580,6 +580,45 @@ export function createSquarePaymentsService({
     };
   }
 
+  async function getOrderById(orderId) {
+    const normalizedOrderId = String(orderId ?? "").trim();
+    if (!normalizedOrderId) throw httpError(400, "orderId is required");
+
+    const squareEnv = resolveSquareEnv();
+    const apiBaseUrl = resolveSquareApiBaseUrl(squareEnv);
+    const apiVersion = String(env.SQUARE_API_VERSION ?? "2026-01-22").trim();
+    const secret = await loadSquareSecret();
+
+    const response = await squareFetch(
+      `${apiBaseUrl}/v2/orders/${encodeURIComponent(normalizedOrderId)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${secret.SQUARE_ACCESS_TOKEN}`,
+          "Square-Version": apiVersion,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const text = await response.text();
+    const payload = parseJsonPayload(text);
+    if (!response.ok) {
+      const message = parseSquareErrorMessage(
+        payload,
+        `Square order lookup failed (${response.status})`
+      );
+      throw httpError(502, message);
+    }
+    if (!payload?.order?.id) {
+      throw httpError(502, "Square order lookup response missing order");
+    }
+    return {
+      squareEnv,
+      order: payload.order,
+    };
+  }
+
   async function verifyWebhookSignature({
     signatureHeader,
     rawBody,
@@ -825,5 +864,7 @@ export function createSquarePaymentsService({
     verifyWebhookSignature,
     getWebhookHealthSummary,
     processSquareWebhookEvent,
+    getOrderById,
+    getPaymentById,
   };
 }

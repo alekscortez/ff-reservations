@@ -42,6 +42,9 @@ function makeCtx(overrides = {}) {
     cancelReservation: [],
     getRuntimeSettingsSubset: [],
     getEventByDate: [],
+    startSquareStandHandoff: [],
+    completeSquareStandHandoff: [],
+    cancelSquareStandHandoff: [],
   };
   return {
     calls,
@@ -157,6 +160,51 @@ function makeCtx(overrides = {}) {
       listEvents: async () => overrides.events ?? [],
       resolveBusinessDate: async () =>
         overrides.businessCtx ?? { businessDate: "2026-05-16" },
+      startSquareStandHandoff: overrides.startSquareStandHandoff
+        ? async (args) => {
+            calls.startSquareStandHandoff.push(args);
+            return overrides.startSquareStandHandoff(args);
+          }
+        : overrides.disableStandHandoffServices
+        ? undefined
+        : async (args) => {
+            calls.startSquareStandHandoff.push(args);
+            return {
+              handoffId: "h_fake",
+              callbackUrl: "https://app.example/staff/square-stand-callback",
+              expiresAt: 0,
+              amount: args?.amount ?? 0,
+            };
+          },
+      completeSquareStandHandoff: overrides.completeSquareStandHandoff
+        ? async (args) => {
+            calls.completeSquareStandHandoff.push(args);
+            return overrides.completeSquareStandHandoff(args);
+          }
+        : overrides.disableStandHandoffServices
+        ? undefined
+        : async (args) => {
+            calls.completeSquareStandHandoff.push(args);
+            return {
+              item: { reservationId: args.reservationId },
+              square: { paymentId: "sq-stand-1" },
+              handoff: { handoffId: args.handoffId, consumedAt: 0 },
+            };
+          },
+      cancelSquareStandHandoff: overrides.cancelSquareStandHandoff
+        ? async (args) => {
+            calls.cancelSquareStandHandoff.push(args);
+            return overrides.cancelSquareStandHandoff(args);
+          }
+        : overrides.disableStandHandoffServices
+        ? undefined
+        : async (args) => {
+            calls.cancelSquareStandHandoff.push(args);
+            return { handoffId: args.handoffId, cancelled: true };
+          },
+      squareStandCallbackUrl:
+        overrides.squareStandCallbackUrl ??
+        "https://app.example/staff/square-stand-callback",
     },
   };
 }
@@ -629,6 +677,172 @@ describe("PUT /reservations/{id}/payment", () => {
       payload: { eventDate: "2026-05-09", amount: 50, method: "cash" },
       user: "staff@x",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /reservations/{id}/payment/square-stand/{start|complete|cancel}
+// ---------------------------------------------------------------------------
+
+describe("POST /reservations/{id}/payment/square-stand/start", () => {
+  it("requireStaffOrAdmin first", async () => {
+    const denied = Object.assign(new Error("forbidden"), { statusCode: 403 });
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      requireStaffOrAdminThrows: denied,
+    });
+    await assert.rejects(() => handleReservationsAndHoldsRoute(ctx));
+    assert.equal(calls.startSquareStandHandoff.length, 0);
+  });
+
+  it("500 when handoff service is not wired", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      body: { eventDate: "2026-05-09", amount: 50 },
+      disableStandHandoffServices: true,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 500);
+    assert.match(res.body.message, /not configured/);
+  });
+
+  it("400 on bad JSON body", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      body: null,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("400 on bad eventDate", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      body: { eventDate: "tomorrow", amount: 50 },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /YYYY-MM-DD/);
+  });
+
+  it("400 on non-positive amount", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      body: { eventDate: "2026-05-09", amount: 0 },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /amount must be > 0/);
+  });
+
+  it("happy path: 200 with handoffId + callbackUrl, releases overdue first, forwards actor", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/start",
+      body: {
+        eventDate: "2026-05-09",
+        amount: 50,
+        note: "deposit",
+        returnPath: "/staff/reservations",
+      },
+      userLabel: "host@x",
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.handoffId, "h_fake");
+    assert.equal(
+      res.body.callbackUrl,
+      "https://app.example/staff/square-stand-callback"
+    );
+    assert.deepEqual(
+      calls.releaseOverdueReservationsForEventDate,
+      ["2026-05-09"]
+    );
+    assert.equal(calls.startSquareStandHandoff.length, 1);
+    assert.equal(calls.startSquareStandHandoff[0].reservationId, "r1");
+    assert.equal(calls.startSquareStandHandoff[0].amount, 50);
+    assert.equal(calls.startSquareStandHandoff[0].note, "deposit");
+    assert.equal(calls.startSquareStandHandoff[0].returnPath, "/staff/reservations");
+    assert.equal(
+      calls.startSquareStandHandoff[0].callbackUrl,
+      "https://app.example/staff/square-stand-callback"
+    );
+    assert.equal(calls.startSquareStandHandoff[0].actor, "host@x");
+  });
+});
+
+describe("POST /reservations/{id}/payment/square-stand/complete", () => {
+  it("400 missing handoffId", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/complete",
+      body: { transactionId: "tx_1" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /handoffId/);
+  });
+
+  it("400 missing transactionId", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/complete",
+      body: { handoffId: "h_fake" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /transactionId/);
+  });
+
+  it("happy path: 200 with item + square payload; forwards reservationId+handoffId+transactionId+actor", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/complete",
+      body: { handoffId: "h_fake", transactionId: "tx_1" },
+      userLabel: "host@x",
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.item.reservationId, "r1");
+    assert.equal(res.body.square.paymentId, "sq-stand-1");
+    assert.equal(calls.completeSquareStandHandoff.length, 1);
+    assert.equal(calls.completeSquareStandHandoff[0].reservationId, "r1");
+    assert.equal(calls.completeSquareStandHandoff[0].handoffId, "h_fake");
+    assert.equal(calls.completeSquareStandHandoff[0].transactionId, "tx_1");
+    assert.equal(calls.completeSquareStandHandoff[0].actor, "host@x");
+  });
+});
+
+describe("POST /reservations/{id}/payment/square-stand/cancel", () => {
+  it("400 missing handoffId", async () => {
+    const { ctx } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/cancel",
+      body: { reason: "oops" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /handoffId/);
+  });
+
+  it("happy path: 200, forwards handoffId+reason+actor", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/payment/square-stand/cancel",
+      body: { handoffId: "h_fake", reason: "staff_changed_mind" },
+      userLabel: "host@x",
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.cancelled, true);
+    assert.equal(calls.cancelSquareStandHandoff[0].handoffId, "h_fake");
+    assert.equal(calls.cancelSquareStandHandoff[0].reason, "staff_changed_mind");
+    assert.equal(calls.cancelSquareStandHandoff[0].actor, "host@x");
   });
 });
 

@@ -40,6 +40,12 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     listEvents,
     resolveBusinessDate,
     checkInPassBaseUrl,
+    // Square Stand handoff (URL-scheme bridge). See
+    // services-square-stand-handoff.mjs.
+    startSquareStandHandoff,
+    completeSquareStandHandoff,
+    cancelSquareStandHandoff,
+    squareStandCallbackUrl,
   } = ctx;
 
   // After a Square charge succeeds, addReservationPayment may still reject
@@ -1026,6 +1032,104 @@ export async function handleReservationsAndHoldsRoute(ctx) {
         durationMs: Date.now() - routeStartedAtMs,
       });
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Square Stand handoff routes
+  // ---------------------------------------------------------------------
+  // Single-iPad flow: Safari triggers the URL scheme; Square POS app on
+  // the same device runs the swipe via the Stand reader; redirects back
+  // to our callback page; FE POSTs /complete with the transaction id.
+  // See services-square-stand-handoff.mjs for the full state machine.
+
+  const standStartMatch = path.match(
+    /^\/reservations\/([^/]+)\/payment\/square-stand\/start$/
+  );
+  if (standStartMatch && method === "POST") {
+    requireStaffOrAdmin(event);
+    if (typeof startSquareStandHandoff !== "function") {
+      return json(500, { message: "Square Stand handoff is not configured" }, cors);
+    }
+    const reservationId = standStartMatch[1];
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const eventDate = String(body?.eventDate ?? "").trim();
+    const amount = Number(body?.amount);
+    const note = String(body?.note ?? "").trim();
+    const returnPath = String(body?.returnPath ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      return json(400, { message: "eventDate must be YYYY-MM-DD" }, cors);
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return json(400, { message: "amount must be > 0" }, cors);
+    }
+    if (typeof releaseOverdueReservationsForEventDate === "function") {
+      await releaseOverdueReservationsForEventDate(eventDate);
+    }
+    const user = await getUserLabel(event);
+    const out = await startSquareStandHandoff({
+      reservationId,
+      eventDate,
+      amount,
+      note,
+      returnPath,
+      callbackUrl: squareStandCallbackUrl,
+      actor: user,
+    });
+    return json(200, out, cors);
+  }
+
+  const standCompleteMatch = path.match(
+    /^\/reservations\/([^/]+)\/payment\/square-stand\/complete$/
+  );
+  if (standCompleteMatch && method === "POST") {
+    requireStaffOrAdmin(event);
+    if (typeof completeSquareStandHandoff !== "function") {
+      return json(500, { message: "Square Stand handoff is not configured" }, cors);
+    }
+    const reservationId = standCompleteMatch[1];
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const handoffId = String(body?.handoffId ?? "").trim();
+    const transactionId = String(body?.transactionId ?? "").trim();
+    if (!handoffId) {
+      return json(400, { message: "handoffId is required" }, cors);
+    }
+    if (!transactionId) {
+      return json(400, { message: "transactionId is required" }, cors);
+    }
+    const user = await getUserLabel(event);
+    const out = await completeSquareStandHandoff({
+      reservationId,
+      handoffId,
+      transactionId,
+      actor: user,
+    });
+    return json(200, out, cors);
+  }
+
+  const standCancelMatch = path.match(
+    /^\/reservations\/([^/]+)\/payment\/square-stand\/cancel$/
+  );
+  if (standCancelMatch && method === "POST") {
+    requireStaffOrAdmin(event);
+    if (typeof cancelSquareStandHandoff !== "function") {
+      return json(500, { message: "Square Stand handoff is not configured" }, cors);
+    }
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const handoffId = String(body?.handoffId ?? "").trim();
+    const reason = String(body?.reason ?? "").trim();
+    if (!handoffId) {
+      return json(400, { message: "handoffId is required" }, cors);
+    }
+    const user = await getUserLabel(event);
+    const out = await cancelSquareStandHandoff({
+      handoffId,
+      reason,
+      actor: user,
+    });
+    return json(200, out, cors);
   }
 
   const cancelMatch = path.match(/^\/reservations\/([^/]+)\/cancel$/);

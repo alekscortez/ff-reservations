@@ -183,6 +183,55 @@
       (cancel)="closeCancelPendingCashApp()"
     />
 
+    <hlm-alert
+      *ngIf="pendingSquareStandPayment() as pending"
+      variant="warning"
+      class="mt-2"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          <strong>Card on Stand payment pending</strong>
+          for {{ pending.customerName || 'guest' }} ·
+          {{ pending.tableIds.length > 1 ? 'tables ' + pending.tableIds.join(', ') : 'table ' + pending.tableId }}
+          · ${{ pending.amount | number:'1.2-2' }}.
+          Reopen the wizard to retry the handoff, or cancel the reservation.
+        </span>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            hlmBtn variant="destructive" size="xs"
+            (click)="openCancelPendingStand()"
+          >
+            Cancel reservation
+          </button>
+        </div>
+      </div>
+      <p class="mt-1 text-xs text-warning-700" *ngIf="cancelPendingStandError() as err">
+        {{ err }}
+      </p>
+    </hlm-alert>
+
+    <hlm-confirm-dialog
+      *ngIf="cancelPendingStandConfirmOpen() && pendingSquareStandPayment() as pending"
+      title="Cancel reservation?"
+      [message]="
+        'This will cancel the reservation for ' +
+        (pending.customerName || 'this guest') +
+        ' on ' +
+        (pending.tableIds.length > 1 ? 'tables ' + pending.tableIds.join(', ') : 'table ' + pending.tableId) +
+        ' and release the ' +
+        (pending.tableIds.length > 1 ? 'tables' : 'table') +
+        '. No refund will be issued because no payment was recorded on the Stand.'
+      "
+      confirmText="Cancel reservation"
+      cancelText="Keep reservation"
+      [destructive]="true"
+      [loading]="cancelPendingStandLoading()"
+      loadingText="Cancelling…"
+      (confirm)="confirmCancelPendingStand()"
+      (cancel)="closeCancelPendingStand()"
+    />
+
     <div class="mt-4 grid gap-2 lg:hidden">
       <div class="mt-1 flex items-center justify-between gap-2 lg:hidden">
         <div class="inline-flex rounded-full border border-brand-200 bg-white p-1">
@@ -988,7 +1037,7 @@
             </p>
 
             <ng-container *ngIf="isLinkCollectionFlow(); else nonSquareSummary">
-              <ng-container *ngIf="createdReservation?.linkMode === 'cashapp'; else squareLinkBlock">
+              <ng-container *ngIf="createdReservation?.linkMode === 'cashapp'">
                 <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
                   <div class="flex items-center justify-between gap-3">
                     <p class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ linkCollectionTitle() }}</p>
@@ -1032,7 +1081,28 @@
                 </div>
               </ng-container>
 
-              <ng-template #squareLinkBlock>
+              <ng-container *ngIf="createdReservation?.linkMode === 'square_stand'">
+                <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
+                  <p class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ linkCollectionTitle() }}</p>
+                  <square-stand-handoff
+                    [reservationId]="createdReservation?.reservationId ?? ''"
+                    [eventDate]="createdReservation?.eventDate ?? ''"
+                    [amount]="createdReservation?.amount ?? 0"
+                    [applicationId]="squareApplicationId()"
+                    [confirmationCode]="createdReservation?.confirmationCode"
+                    [returnPath]="'/staff/reservations/new'"
+                    [label]="cashAppPadLabel()"
+                    [success]="squareStandSuccess()"
+                  />
+                  <p class="text-xs text-brand-600">
+                    Tap "Hand off to Square POS" — the app opens on this iPad
+                    and the customer's card is swiped on the Stand reader.
+                    Safari returns automatically when payment is complete.
+                  </p>
+                </div>
+              </ng-container>
+
+              <ng-container *ngIf="createdReservation?.linkMode === 'square'">
                 <div class="grid gap-2 rounded-lg border border-brand-100 bg-white p-3">
                   <div class="flex items-center justify-between gap-3">
                     <p class="text-xs uppercase tracking-[0.12em] text-brand-500">{{ linkCollectionTitle() }}</p>
@@ -1073,7 +1143,7 @@
                     <p class="text-xs text-brand-500">{{ generatedLinkShareMessage() }}</p>
                   </ng-container>
                 </div>
-              </ng-template>
+              </ng-container>
             </ng-container>
 
             <ng-template #nonSquareSummary>

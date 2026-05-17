@@ -55,6 +55,7 @@ import { handlePackagesRoute } from "./lib/routes-packages.mjs";
 import { createPackagesService } from "./lib/services-packages.mjs";
 import { createClientsService } from "./lib/services-clients.mjs";
 import { createReservationsHoldsService } from "./lib/services-reservations-holds.mjs";
+import { createSquareStandHandoffService } from "./lib/services-square-stand-handoff.mjs";
 import { createPushNotificationsService } from "./lib/services-push-notifications.mjs";
 import { createWalletPassService } from "./lib/services-wallet-pass.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
@@ -629,6 +630,25 @@ const reservationsHoldsService = createReservationsHoldsService({
   pushNotifications: pushNotificationsService,
 });
 
+// Square Stand handoff (URL-scheme bridge for the iPad host stand).
+// Routes wired in routes-reservations-holds.mjs. State lives in HOLDS_TABLE
+// under PK="STANDPAY".
+const SQUARE_STAND_CALLBACK_URL =
+  String(process.env.SQUARE_STAND_CALLBACK_URL ?? "").trim() ||
+  "https://reservations.famosofuego.com/square-stand-callback";
+const squareStandHandoffService = createSquareStandHandoffService({
+  ddb,
+  tableNames: { HOLDS_TABLE },
+  httpError,
+  nowEpoch,
+  randomUUID,
+  getOrderById: squarePaymentsService.getOrderById,
+  getPaymentById: squarePaymentsService.getPaymentById,
+  addReservationPayment: reservationsHoldsService.addReservationPayment,
+  getReservationById: reservationsHoldsService.getReservationById,
+  defaultCallbackUrl: SQUARE_STAND_CALLBACK_URL,
+});
+
 // ---------- router ----------
 export const handler = async (event) => {
   // EventBridge scheduled invocations: not HTTP. Run cron sweeps and return.
@@ -971,6 +991,10 @@ export const handler = async (event) => {
       listEvents: eventsService.listEvents,
       resolveBusinessDate: settingsService.resolveBusinessDate,
       checkInPassBaseUrl: CHECKIN_PASS_BASE_URL,
+      startSquareStandHandoff: squareStandHandoffService.startHandoff,
+      completeSquareStandHandoff: squareStandHandoffService.completeHandoff,
+      cancelSquareStandHandoff: squareStandHandoffService.cancelHandoff,
+      squareStandCallbackUrl: SQUARE_STAND_CALLBACK_URL,
     });
     if (reservationsAndHoldsResponse) return reservationsAndHoldsResponse;
 

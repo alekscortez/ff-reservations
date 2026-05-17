@@ -24,7 +24,14 @@ import { HlmInput } from '../../ui/input';
 import { HlmNativeSelect } from '../../ui/native-select';
 import { PaymentMethod, ReservationItem } from '../../models/reservation.model';
 import { CashAppQrPad } from '../cash-app-qr-pad/cash-app-qr-pad';
+import { SquareStandHandoff } from '../square-stand-handoff/square-stand-handoff';
 import { RescheduleCredit } from '../../../core/http/clients.service';
+
+// UI-only method union. The persisted PaymentMethod enum stops at
+// 'cash | square | cashapp | credit' — "Card on Stand" is a UI
+// shortcut that triggers a Square POS URL-scheme handoff and ends up
+// recorded as method:"square" source:"square-stand" server-side.
+export type TakePaymentMethod = PaymentMethod | 'square_stand';
 
 export interface RecordPaymentPayload {
   method: 'cash' | 'credit';
@@ -76,6 +83,7 @@ export interface CashAppTokenizedPayload {
     HlmInput,
     HlmNativeSelect,
     CashAppQrPad,
+    SquareStandHandoff,
   ],
   providers: [provideIcons({ lucideX })],
   templateUrl: './take-payment-modal.html',
@@ -94,7 +102,14 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
   @Input() error: string | null = null;
   @Input() squareLinkLoading = false;
   @Input() cashAppSuccess = false;
-  @Input() defaultMethod: PaymentMethod = 'cash';
+  // Parent flips true when /complete returns 200. Used to show a brief
+  // green "Paid" state in <square-stand-handoff> before the callback
+  // page navigates back here.
+  @Input() squareStandSuccess = false;
+  @Input() defaultMethod: TakePaymentMethod = 'cash';
+  // Where to send the user after a successful Stand callback. Defaults
+  // to the staff Reservations page; parents on other pages override.
+  @Input() squareStandReturnPath = '/staff/reservations';
 
   @Output() close = new EventEmitter<void>();
   @Output() recordPayment = new EventEmitter<RecordPaymentPayload>();
@@ -103,10 +118,11 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
   @Output() cashAppError = new EventEmitter<string>();
 
   @ViewChild('cashAppQrPad') cashAppQrPad?: CashAppQrPad;
+  @ViewChild('squareStandHandoff') squareStandHandoff?: SquareStandHandoff;
 
   readonly form = new FormGroup({
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.min(0.01)] }),
-    method: new FormControl<PaymentMethod>('cash', { nonNullable: true }),
+    method: new FormControl<TakePaymentMethod>('cash', { nonNullable: true }),
     creditId: new FormControl('', { nonNullable: true }),
     remainingMethod: new FormControl<'cash' | 'square'>('cash', { nonNullable: true }),
     receiptNumber: new FormControl('', { nonNullable: true }),
@@ -114,7 +130,7 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
   });
 
   readonly submitAttempted = signal(false);
-  readonly methodSignal = signal<PaymentMethod>('cash');
+  readonly methodSignal = signal<TakePaymentMethod>('cash');
   readonly creditIdSignal = signal<string>('');
   readonly remainingMethodSignal = signal<'cash' | 'square'>('cash');
 
@@ -122,6 +138,7 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
   readonly isSquare = computed(() => this.methodSignal() === 'square');
   readonly isCashApp = computed(() => this.methodSignal() === 'cashapp');
   readonly isCredit = computed(() => this.methodSignal() === 'credit');
+  readonly isSquareStand = computed(() => this.methodSignal() === 'square_stand');
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['reservation'] && this.reservation) {
@@ -155,13 +172,17 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     void this.cashAppQrPad?.destroy();
+    this.squareStandHandoff?.resetToIdle();
   }
 
   onMethodChange(next: string): void {
-    const method = next as PaymentMethod;
+    const method = next as TakePaymentMethod;
     this.methodSignal.set(method);
     if (method !== 'cashapp') {
       void this.cashAppQrPad?.destroy();
+    }
+    if (method !== 'square_stand') {
+      this.squareStandHandoff?.resetToIdle();
     }
     if (method !== 'credit') {
       this.form.controls.creditId.setValue('');
@@ -275,6 +296,10 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     return this.isCashApp() && Boolean(this.squareApplicationId) && Boolean(this.squareLocationId);
   }
 
+  canUseSquareStand(): boolean {
+    return this.isSquareStand() && Boolean(this.squareApplicationId);
+  }
+
   cashAppLabel(): string {
     return this.reservation ? `${formatTableLabel(this.reservation)} payment` : 'Reservation payment';
   }
@@ -296,6 +321,14 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
       if (this.loading) return 'Processing…';
       return this.cashAppQrPad?.ready() ? 'Refresh Cash App QR' : 'Show Cash App QR';
     }
+    if (this.isSquareStand()) {
+      if (this.squareStandSuccess) return 'Paid ✓';
+      const status = this.squareStandHandoff?.status();
+      if (status === 'starting') return 'Preparing…';
+      if (status === 'handing-off') return 'Opening Square POS…';
+      if (status === 'awaiting-callback') return 'Waiting in Square POS…';
+      return 'Hand off to Square POS';
+    }
     if (this.loading) return 'Saving…';
     if (!this.isCredit()) return 'Submit Payment';
     if (this.creditRemainingAmount() <= 0) return 'Apply Credit';
@@ -312,6 +345,14 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     if (this.cashAppQrPad?.preparing()) return true;
     if (this.form.invalid) return true;
     if (this.isCashApp() && !this.canUseCashAppPay()) return true;
+    if (this.isSquareStand()) {
+      if (!this.canUseSquareStand()) return true;
+      if (this.squareStandSuccess) return true;
+      const status = this.squareStandHandoff?.status();
+      if (status === 'starting' || status === 'handing-off' || status === 'awaiting-callback') {
+        return true;
+      }
+    }
     if (this.isCredit()) {
       if (this.creditsLoading) return true;
       if (!this.form.controls.creditId.value) return true;
@@ -352,6 +393,13 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
         return;
       }
       await this.cashAppQrPad?.prepare();
+      return;
+    }
+
+    if (method === 'square_stand') {
+      if (this.squareStandSuccess) return;
+      if (!this.canUseSquareStand()) return;
+      this.squareStandHandoff?.start();
       return;
     }
 
