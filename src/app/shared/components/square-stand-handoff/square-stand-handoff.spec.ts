@@ -276,4 +276,52 @@ describe('SquareStandHandoff', () => {
       expect(localStorage.getItem('ff:stand-handoff:h_test')).toBeNull();
     });
   });
+
+  describe('showPhoneHint is reactive to resize', () => {
+    let originalInnerWidth: number;
+    let originalMaxTouchPoints: number | undefined;
+
+    beforeEach(() => {
+      originalInnerWidth = window.innerWidth;
+      const navProto = Object.getOwnPropertyDescriptor(
+        navigator,
+        'maxTouchPoints',
+      );
+      originalMaxTouchPoints = navProto?.value;
+      // Simulate a touch device so the touch>1 guard is satisfied.
+      Object.defineProperty(navigator, 'maxTouchPoints', {
+        configurable: true,
+        value: 5,
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+      if (originalMaxTouchPoints != null) {
+        Object.defineProperty(navigator, 'maxTouchPoints', {
+          configurable: true,
+          value: originalMaxTouchPoints,
+        });
+      }
+    });
+
+    it('flips false → true when window resizes from wide to narrow', () => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 1024,
+      });
+      const api = fakeReservationsApi();
+      const { pad } = createComponent(api);
+      expect(pad.showPhoneHint()).toBe(false);
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 500,
+      });
+      window.dispatchEvent(new Event('resize'));
+      expect(pad.showPhoneHint()).toBe(true);
+    });
+  });
 });

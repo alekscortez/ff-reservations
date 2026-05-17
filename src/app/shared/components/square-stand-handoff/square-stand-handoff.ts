@@ -113,16 +113,28 @@ export class SquareStandHandoff implements OnDestroy {
   private readonly _activeHandoffId = signal<string | null>(null);
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  // Detected once at construction. The URL scheme works only on iOS
-  // devices that have Square POS installed (iPad + Stand). Surface a
-  // hint when we're on a phone-class viewport so staff knows to switch
-  // to the host iPad. Mirrors the Cash App pad's check.
-  readonly showPhoneHint = (() => {
+  // The URL scheme works only on iOS devices that have Square POS
+  // installed (iPad + Stand). Surface a hint when we're on a phone-class
+  // viewport so staff knows to switch to the host iPad. Reactive to
+  // window resize so rotating the iPad (or resizing a dev window during
+  // testing) re-evaluates without remounting the component.
+  private readonly _viewportNarrow = signal(SquareStandHandoff.detectNarrow());
+  readonly showPhoneHint = computed(() => this._viewportNarrow());
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+    const handler = (): void =>
+      this._viewportNarrow.set(SquareStandHandoff.detectNarrow());
+    window.addEventListener('resize', handler);
+    this.destroyRef.onDestroy(() => window.removeEventListener('resize', handler));
+  }
+
+  private static detectNarrow(): boolean {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
     const touch = Number((navigator as { maxTouchPoints?: number }).maxTouchPoints ?? 0);
     const narrow = window.innerWidth < 768;
     return touch > 1 && narrow;
-  })();
+  }
 
   readonly status = computed<HandoffStatus>(() =>
     this.success() ? 'success' : this._baseStatus(),
