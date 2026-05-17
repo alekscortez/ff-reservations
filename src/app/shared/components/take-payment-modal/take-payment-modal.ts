@@ -175,8 +175,18 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     this.squareStandHandoff?.resetToIdle();
   }
 
-  onMethodChange(next: string): void {
-    const method = next as TakePaymentMethod;
+  onMethodChange(next: string | Event): void {
+    // Angular fires `(change)` on a component element TWICE when the
+    // component has an Output named `change` AND the host wraps a
+    // native `<select>`: once with the Output's emitted string, then
+    // again as the bubbled DOM Event. Coerce both shapes to the value.
+    const raw =
+      typeof next === 'string'
+        ? next
+        : String(
+            ((next as Event).target as HTMLSelectElement | null)?.value ?? '',
+          );
+    const method = raw as TakePaymentMethod;
     this.methodSignal.set(method);
     if (method !== 'cashapp') {
       void this.cashAppQrPad?.destroy();
@@ -209,8 +219,14 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     this.onCreditChange(this.form.controls.creditId.value);
   }
 
-  onCreditChange(next: string): void {
-    this.creditIdSignal.set(next);
+  onCreditChange(next: string | Event): void {
+    const raw =
+      typeof next === 'string'
+        ? next
+        : String(
+            ((next as Event).target as HTMLSelectElement | null)?.value ?? '',
+          );
+    this.creditIdSignal.set(raw);
     if (!this.isCredit()) return;
     const selected = this.selectedCredit();
     if (!selected || !this.reservation) return;
@@ -220,8 +236,14 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     }
   }
 
-  onRemainingMethodChange(next: string): void {
-    const method = next as 'cash' | 'square';
+  onRemainingMethodChange(next: string | Event): void {
+    const raw =
+      typeof next === 'string'
+        ? next
+        : String(
+            ((next as Event).target as HTMLSelectElement | null)?.value ?? '',
+          );
+    const method = raw as 'cash' | 'square';
     this.remainingMethodSignal.set(method);
     if (!this.isCashReceiptRequired()) {
       this.form.controls.receiptNumber.setValue('');
