@@ -205,4 +205,63 @@ describe('SquareStandHandoff', () => {
     expect(pad.activeHandoffId()).toBe(null);
     expect(pad.errorMessage()).toBe(null);
   });
+
+  // ------------------------------------------------------------------
+  // localStorage round-trip — Square POS strips query strings on return
+  // so reservation context must be stashed locally before the deeplink
+  // navigation; the /square-stand-callback page reads it back via the
+  // handoffId echoed in `state`.
+  // ------------------------------------------------------------------
+
+  describe('localStorage stash on handoff', () => {
+    beforeEach(() => {
+      try {
+        localStorage.clear();
+      } catch {
+        // jsdom can be flaky; ignore.
+      }
+    });
+
+    it('stashes {reservationId, eventDate, returnPath, expiresAt} keyed by handoffId before navigating', () => {
+      const api = fakeReservationsApi();
+      const { pad } = createComponent(api, {
+        reservationId: 'r-stash',
+        eventDate: '2026-05-20',
+      });
+      pad.returnPath = '/staff/reservations';
+      pad.start();
+      const raw = localStorage.getItem('ff:stand-handoff:h_test');
+      expect(raw).toBeTruthy();
+      const stashed = JSON.parse(String(raw));
+      expect(stashed.reservationId).toBe('r-stash');
+      expect(stashed.eventDate).toBe('2026-05-20');
+      expect(stashed.returnPath).toBe('/staff/reservations');
+      expect(typeof stashed.expiresAt).toBe('number');
+      expect(stashed.expiresAt).toBeGreaterThan(Date.now());
+    });
+
+    it('does not crash when localStorage.setItem throws (Safari private mode)', () => {
+      const api = fakeReservationsApi();
+      const { pad } = createComponent(api);
+      const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      try {
+        expect(() => pad.start()).not.toThrow();
+        expect(api.calls.length).toBe(1);
+        expect(lastAssignedHref).toMatch(/^square-commerce-v1:\/\//);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('does not stash before the start HTTP call resolves', () => {
+      const api = fakeReservationsApi();
+      // Replace with a never-resolving observable.
+      api.setNextResponse(new Observable(() => {}));
+      const { pad } = createComponent(api);
+      pad.start();
+      expect(localStorage.getItem('ff:stand-handoff:h_test')).toBeNull();
+    });
+  });
 });

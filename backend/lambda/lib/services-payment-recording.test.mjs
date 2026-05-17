@@ -830,6 +830,78 @@ describe("addReservationPayment non-credit", () => {
     );
     assert.equal(historyCalls[0].source, "square-stand");
   });
+
+  it("dedupes a webhook arrival when the synchronous Stand /complete already recorded the same providerPaymentId", async () => {
+    // Simulates: synchronous /complete recorded {method:square,source:square-stand}
+    // first; then payment.created webhook fires for the same payment id.
+    // Expected behavior: webhook hits the providerPaymentId dedupe and
+    // returns the existing item without firing a second Update.
+    const ddb = makeFakeDdb({
+      getResponses: [
+        {
+          Item: reservationItem({
+            payments: [
+              {
+                paymentId: "p-sync",
+                amount: 30,
+                method: "square",
+                source: "square-stand",
+                provider: {
+                  provider: "square",
+                  providerPaymentId: "sq_pay_stand_1",
+                  idempotencyKey: null,
+                },
+              },
+            ],
+            depositAmount: 30,
+            paymentStatus: "PARTIAL",
+          }),
+        },
+      ],
+    });
+    const { svc } = buildPaymentRecording({ ddb });
+    const out = await svc.addReservationPayment(
+      "r1",
+      {
+        eventDate: "2026-05-09",
+        amount: 30,
+        method: "square",
+        source: "square-webhook",
+        provider: { providerPaymentId: "sq_pay_stand_1" },
+      },
+      "system:square-webhook"
+    );
+    assert.equal(out.depositAmount, 30);
+    assert.equal(out.paymentStatus, "PARTIAL");
+    const updates = ddb.calls.filter((c) => c.name === "UpdateCommand");
+    assert.equal(updates.length, 0, "webhook must not write a second payment row");
+  });
+
+  it("rejects provider metadata for non-card methods (defense against malformed Stand callers)", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: reservationItem() }],
+    });
+    const { svc } = buildPaymentRecording({ ddb });
+    await assert.rejects(
+      () =>
+        svc.addReservationPayment(
+          "r1",
+          {
+            eventDate: "2026-05-09",
+            amount: 30,
+            method: "cash",
+            source: "square-stand",
+            provider: { providerPaymentId: "sq_stand_x" },
+          },
+          "staff@x"
+        ),
+      (err) =>
+        err?.statusCode === 400 &&
+        /provider metadata is only supported when method is square or cashapp/.test(
+          err.message
+        )
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
