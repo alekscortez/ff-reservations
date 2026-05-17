@@ -255,7 +255,7 @@ export class SquareStandHandoff implements OnDestroy {
 
     const callbackUrl =
       String(handoff.callbackUrl ?? '').trim() ||
-      `${window.location.origin}/staff/square-stand-callback`;
+      `${window.location.origin}/square-stand-callback`;
 
     const data = {
       client_id: this.applicationId,

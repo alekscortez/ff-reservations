@@ -635,7 +635,7 @@ const reservationsHoldsService = createReservationsHoldsService({
 // under PK="STANDPAY".
 const SQUARE_STAND_CALLBACK_URL =
   String(process.env.SQUARE_STAND_CALLBACK_URL ?? "").trim() ||
-  "https://reservations.famosofuego.com/square-stand-callback";
+  "https://famosofuego.com/square-stand-callback";
 const squareStandHandoffService = createSquareStandHandoffService({
   ddb,
   tableNames: { HOLDS_TABLE },
