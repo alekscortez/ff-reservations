@@ -51,6 +51,7 @@ import {
   SquareLinkRequestPayload,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
+import { consumeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
 
 interface TableKpis {
   total: number;
@@ -178,6 +179,9 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
   readonly cashAppPaymentSuccess = signal(false);
+  readonly justPaidStandNotice = signal<{ reservationId: string; amount: number } | null>(
+    null,
+  );
 
   private snapshotSub: Subscription | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -185,6 +189,26 @@ export class Dashboard implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.refreshDashboard();
     this.startLiveVisitorsPoll();
+    this.consumeStandJustPaidBeacon();
+  }
+
+  private consumeStandJustPaidBeacon(): void {
+    const beacon = consumeJustPaidBeacon();
+    if (!beacon) return;
+    this.justPaidStandNotice.set({
+      reservationId: beacon.reservationId,
+      amount: beacon.amount,
+    });
+    setTimeout(() => {
+      const current = this.justPaidStandNotice();
+      if (current && current.reservationId === beacon.reservationId) {
+        this.justPaidStandNotice.set(null);
+      }
+    }, 6000);
+  }
+
+  dismissStandJustPaidNotice(): void {
+    this.justPaidStandNotice.set(null);
   }
 
   ngOnDestroy(): void {

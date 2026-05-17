@@ -50,6 +50,7 @@ import {
   SquareLinkRequestPayload,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
+import { consumeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -287,6 +288,12 @@ export class Reservations implements OnInit, OnDestroy {
   readonly historyError = signal<string | null>(null);
   readonly historyByReservationId = signal<Record<string, ReservationHistoryViewItem[]>>({});
   readonly cashAppPaymentSuccess = signal(false);
+  // Card on Stand "just paid" toast surfaced when /square-stand-callback
+  // hands the user back here with a fresh beacon in localStorage. Auto-
+  // dismisses after a short timer so it doesn't linger on the page.
+  readonly justPaidStandNotice = signal<{ reservationId: string; amount: number } | null>(
+    null,
+  );
 
   constructor() {
     effect(() => {
@@ -297,6 +304,28 @@ export class Reservations implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadContextAndEvents();
+    this.consumeStandJustPaidBeacon();
+  }
+
+  private consumeStandJustPaidBeacon(): void {
+    const beacon = consumeJustPaidBeacon();
+    if (!beacon) return;
+    this.justPaidStandNotice.set({
+      reservationId: beacon.reservationId,
+      amount: beacon.amount,
+    });
+    // Auto-dismiss after 6s. Long enough to read, short enough to clear
+    // before the user starts the next action.
+    setTimeout(() => {
+      const current = this.justPaidStandNotice();
+      if (current && current.reservationId === beacon.reservationId) {
+        this.justPaidStandNotice.set(null);
+      }
+    }, 6000);
+  }
+
+  dismissStandJustPaidNotice(): void {
+    this.justPaidStandNotice.set(null);
   }
 
   ngOnDestroy(): void {
