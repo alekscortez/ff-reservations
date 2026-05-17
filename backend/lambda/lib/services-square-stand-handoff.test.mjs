@@ -639,3 +639,104 @@ describe("completeHandoff auto-refund (record-failure path)", () => {
     assert.equal(refundCalls.length, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// completeHandoff — captured-vs-handoff amount cap (audit finding #2).
+// Square POS captures whatever amount its local settings produce (tipping
+// + auto-gratuity etc.). If that exceeds our handoff.amount, we treat it
+// as a seller-side misconfiguration and auto-refund the WHOLE payment.
+// ---------------------------------------------------------------------------
+
+describe("completeHandoff captured-amount cap", () => {
+  it("auto-refunds + 409 when Square captured more than handoff.amount (tipping inflation)", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem({ amount: 50 }) }],
+    });
+    const { svc, refundCalls, addPaymentCalls } = buildService({
+      ddb,
+      // Default payment in the harness captures 75 (matches default
+      // handoff amount). Override to simulate a $25 tip on a $50 deposit.
+      paymentResponses: [
+        {
+          squareEnv: "sandbox",
+          payment: {
+            id: "pay_tipped",
+            status: "COMPLETED",
+            amount_money: { amount: 7500, currency: "USD" }, // $75 captured
+            receipt_url: "https://square/r/pay_tipped",
+            order_id: "ord_tipped",
+            source_type: "CARD",
+            idempotency_key: "idem_tipped",
+          },
+        },
+      ],
+    });
+    await assert.rejects(
+      () => svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" }),
+      (err) =>
+        err?.statusCode === 409 &&
+        /captured more than the deposit/i.test(err.message) &&
+        /tipping/i.test(err.message)
+    );
+    assert.equal(refundCalls.length, 1);
+    assert.equal(refundCalls[0].paymentId, "pay_tipped");
+    assert.equal(refundCalls[0].amount, 75); // refund the full captured amount
+    // addReservationPayment must NEVER be called when over-captured.
+    assert.equal(addPaymentCalls.length, 0);
+  });
+
+  it("502 + manual-reconciliation hint when over-capture AND refund both fail", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem({ amount: 50 }) }],
+    });
+    const refundErr = new Error("Square refund failed");
+    const { svc, addPaymentCalls } = buildService({
+      ddb,
+      paymentResponses: [
+        {
+          squareEnv: "sandbox",
+          payment: {
+            id: "pay_tipped",
+            status: "COMPLETED",
+            amount_money: { amount: 7500, currency: "USD" },
+          },
+        },
+      ],
+      refundSquarePayment: async () => {
+        throw refundErr;
+      },
+    });
+    await assert.rejects(
+      () => svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" }),
+      (err) =>
+        err?.statusCode === 502 &&
+        /Manual reconciliation required/i.test(err.message) &&
+        /pay_tipped/.test(err.message)
+    );
+    assert.equal(addPaymentCalls.length, 0);
+  });
+
+  it("accepts $0.01 captured-vs-handoff drift as rounding tolerance", async () => {
+    const ddb = makeFakeDdb({
+      getResponses: [{ Item: pendingHandoffItem({ amount: 50 }) }],
+    });
+    const { svc, refundCalls, addPaymentCalls } = buildService({
+      ddb,
+      paymentResponses: [
+        {
+          squareEnv: "sandbox",
+          payment: {
+            id: "pay_close",
+            status: "COMPLETED",
+            // $50.01 — one-cent drift, allowed.
+            amount_money: { amount: 5001, currency: "USD" },
+          },
+        },
+      ],
+    });
+    await svc.completeHandoff({ handoffId: "h", transactionId: "tx_1" });
+    assert.equal(refundCalls.length, 0);
+    assert.equal(addPaymentCalls.length, 1);
+    assert.equal(addPaymentCalls[0].payload.amount, 50.01);
+  });
+});

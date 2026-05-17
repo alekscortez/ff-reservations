@@ -378,6 +378,39 @@ export function createSquareStandHandoffService({
       String(actor ?? "").trim() || "system:square-stand";
     const squarePaymentId = String(payment?.id ?? "").trim() || null;
 
+    // Captured-vs-handoff cap (audit finding #2). Square POS captures the
+    // payment locally based on the seller's POS settings — if tipping is
+    // re-enabled on the Stand iPad, the customer can add a tip that
+    // inflates the captured amount past what we asked for. The downstream
+    // addReservationPayment cap (`amount > remainingAmount`) would then
+    // reject AFTER the card was charged, leaving the customer overpaid
+    // and unhappy.
+    //
+    // We treat any overage > $0.01 as a misconfiguration: refund the WHOLE
+    // payment (not just the delta — partial refunds on tipped card
+    // transactions risk leaving the reservation half-recorded) and surface
+    // a clear seller-side error.
+    const requestedAmount = roundMoney(handoff.amount);
+    const overage = roundMoney(majorAmount - requestedAmount);
+    if (overage > 0.01) {
+      const refund = await tryAutoRefund({
+        paymentId: squarePaymentId,
+        amount: majorAmount,
+        eventDate: handoff.eventDate,
+        reservationId: handoff.reservationId,
+        recordError: new Error(
+          `captured_amount_exceeds_handoff: captured=${majorAmount} expected=${requestedAmount}`
+        ),
+        actor: resolvedActor,
+      });
+      throw httpError(
+        refund.refunded ? 409 : 502,
+        refund.refunded
+          ? "Square POS captured more than the deposit (tipping is on?). The charge has been refunded automatically. Disable tipping in Square POS settings and retry."
+          : `Square POS captured more than the deposit AND the auto-refund FAILED. Manual reconciliation required for Square payment ${squarePaymentId ?? "(unknown)"}.`
+      );
+    }
+
     let item;
     try {
       item = await addReservationPayment(
