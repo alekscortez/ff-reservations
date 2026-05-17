@@ -18,7 +18,7 @@ Restaurant table reservation system for Famoso Fuego. Staff create reservations 
 | `HlmButton` | `button[hlmBtn]`, `a[hlmBtn]` | All action buttons. `outline-current` inherits parent text color. |
 | `HlmBadge` | `[hlmBadge]` | Status pills. Use `outline` variant inside colored cards. |
 | `HlmInput` | `input[hlmInput]`, `select[hlmInput]`, `textarea[hlmInput]` | Form text inputs/selects/textareas. NOT checkboxes/radios. Prefer `<hlm-native-select>` for new selects. |
-| `HlmNativeSelect` | `<hlm-native-select>` w/ projected `<option>`s | Native dropdown w/ Spartan chevron overlay. CVA + `[formControl]` + user-only `(change)`. |
+| `HlmNativeSelect` | `<hlm-native-select>` w/ projected `<option>`s | Native dropdown w/ Spartan chevron overlay. CVA + `[formControl]` + user-only `(change)`. **Handlers MUST type `$event` as `string \| Event` and coerce — `(change)` double-fires (Output + bubbled DOM Event); see [[hlm_native_select_change_double_fire]].** |
 | `HlmCheckbox` | `<hlm-checkbox>` + `[label]` | Styled checkbox w/ lucideCheck overlay. Use for "feature on/off" + "I agree" — `HlmToggle` for inline chips. |
 | `HlmDialog` | `<hlm-dialog>` | All modals. `sheet` panel = slide-from-edge w/ `pb-env(safe-area-inset-*)`. Pair w/ sticky header/footer for long content. |
 | `HlmConfirmDialog` | `<hlm-confirm-dialog>` | Yes/no replaces `window.confirm()`. Single-line `[message]` only — for bulleted content compose `<hlm-dialog>` directly. |
@@ -172,6 +172,8 @@ Frontend config: `src/app/core/config/app-config.ts` hardcodes `apiBaseUrl: http
 - **`angular-auth-oidc-client` wipes refresh token on ANY internal failure** (`resetAuthorizationData`). Then renew throws synchronously — no retry path. Phase 1's `RefreshTokenVault` shadows it. Never call `forceRefreshSession()` directly — use `SessionWatcher.refreshOnce()`. [[phase_1_auth_resilience_plan_2026_05_15]]
 - **US SMS silently drops while TFN PENDING; MX works.** Self-resolves on ACTIVE. Don't pin OriginationIdentity for `+52`. [[sms_us_blocked_mx_works_root_cause]]
 - **SMS: SNS today, EUM planned post-TFN ACTIVE.** Don't touch during re-review. [[sms_migrate_to_eum_after_approval]]
+- **`<hlm-native-select> (change)` double-fires** — once with the Output's string, once with the bubbled DOM Event. Handlers typed `(next: string)` end up writing the Event to the form; payload serializes as `[object Object]` and BE validators reject. Type `string \| Event` + coerce. [[hlm_native_select_change_double_fire]]
+- **Square POS app caches the registered-callback-URL list at launch.** After updating a Web callback URL in the Square Developer Console, force-quit Square POS on the Stand iPad (swipe up → flick app card) and reopen — otherwise it keeps rejecting requests against the OLD list. Hit during initial Card on Stand rollout 2026-05-17.
 
 ## Wiring outside this repo
 

@@ -33,6 +33,7 @@ For deeper architecture, conventions, and known gotchas see [CLAUDE.md](./CLAUDE
 - Staff payment collection with `cash`, `square`, `cashapp`, and reschedule credit usage.
 - Square payment links + webhook reconciliation.
 - In-venue Cash App via Square Web Payments SDK: staff opens the host-stand iPad, the customer scans the QR with their Cash App, payment posts to Square + the reservation in one shot. No Cash App link is ever sent to the customer.
+- **Card on Stand** (in-venue card swipe): Safari on the host-stand iPad hands the charge off to the Square POS app on the same iPad via the Square POS API URL scheme (`square-commerce-v1://payment/create`). Customer's card swipes natively on the Stand reader; Square POS redirects back to `/square-stand-callback` which records the payment automatically. Single-iPad only (URL schemes are device-local). Requires the callback URL registered in the Square Developer Console + Open Tickets + tipping disabled in Square POS settings (POS API has no flags for those).
 - Cancellation resolutions: `CANCEL_NO_REFUND`, `RESCHEDULE_CREDIT`, `REFUND` (REFUND issues actual Square refunds for paid Square/Cash App entries).
 - SMS for payment links, check-in pass, and expired-link notices (with `Reply STOP to opt out.` per 10DLC compliance).
 - Check-in pass issue/reissue + one-time QR validation.
@@ -102,8 +103,10 @@ Main expected keys:
 - `SQUARE_SECRET_ARN`
 - `SQUARE_ENV`
 - `SQUARE_LOCATION_ID`
+- `SQUARE_APPLICATION_ID` (the `client_id` sent to Square POS during Card on Stand handoff; also surfaced to the FE for Cash App Web Payments SDK)
 - `SQUARE_API_VERSION`
 - `SQUARE_WEBHOOK_NOTIFICATION_URL`
+- `SQUARE_STAND_CALLBACK_URL` (optional; defaults to `https://famosofuego.com/square-stand-callback` — must match the Web callback URL registered in the Square Developer Console → Point of Sale API)
 - `SMS_ENABLED`
 - `SMS_SENDER_ID`
 - `SMS_TYPE`
@@ -154,6 +157,9 @@ Environment variables for `.http` runs should be kept local (not committed), for
 - Lambda DLQ has messages (`ff-res-lambda-dlq-depth` alarm fired): `aws sqs receive-message --queue-url https://sqs.us-east-1.amazonaws.com/908027422124/ff-reservations-api-dlq --max-number-of-messages 10 --region us-east-1` to inspect the failed async invocation payloads. Investigate before redriving — the same code path is still scheduled to run.
 - `429 Too Many Requests` from API Gateway: stage throttle is 200 burst / 100 RPS by default. Bump in `aws apigatewayv2 update-stage --api-id oxk1adhl3a --stage-name '$default' --default-route-settings ...` if a real workload outgrows it.
 - Reservation history rows missing in audit log: `ff-res-history-write-errors-5m` alarm + filter-log-events on `"reservation_history_write_error"` will surface the cause (IAM, throttling, schema).
+- Card on Stand handoff says "the web callback url does not match the one in your application settings": (1) confirm the URL registered at Square Developer Console → Point of Sale API → Web callback URLs is **byte-identical** to `SQUARE_STAND_CALLBACK_URL` (default `https://famosofuego.com/square-stand-callback`), and (2) **force-quit Square POS on the Stand iPad and reopen** — it caches the registered URL list at launch. After saving in the console, the iPad keeps rejecting against the OLD list until the app restarts.
+- Card on Stand handoff prompts "Enter order name" before the tender screen: Square POS → More (☰) → Settings → Checkout → Order Tickets → set to **No ticket name**. The POS API has no flag to skip this — it has to be off seller-side.
+- Card on Stand recording rejects with `amount cannot exceed remaining balance`: tipping is on in Square POS, customer added a tip, and the captured amount exceeds the deposit cap. Disable tipping in Square POS settings (`Settings → Checkout → Tips`). Card-present tips for the venue are not modeled in the reservation cap today.
 
 ## Build and test
 ```bash
