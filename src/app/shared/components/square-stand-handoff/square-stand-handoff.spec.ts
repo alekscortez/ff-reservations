@@ -66,12 +66,21 @@ function createComponent(
 }
 
 describe('SquareStandHandoff', () => {
-  let originalHref: string;
+  // Captured at file load so we can restore the real Location reference
+  // verbatim in afterEach. Replacing window.location with a plain object
+  // breaks later tests that rely on window.history.replaceState — under
+  // Angular's vitest config (`isolate: false, fileParallelism: false`)
+  // all spec files share one worker, so cross-file state must be cleaned
+  // up properly. Failing to restore here cascades into attribution.spec.ts
+  // (which uses history.replaceState to set URL fixtures).
+  const ORIGINAL_LOCATION_DESCRIPTOR = Object.getOwnPropertyDescriptor(
+    window,
+    'location',
+  );
   let lastAssignedHref: string | null;
 
   beforeEach(() => {
     vi.useFakeTimers();
-    originalHref = window.location.href;
     lastAssignedHref = null;
     // jsdom's location.href is settable but doesn't actually navigate.
     // Wrap it so we can spy without affecting the test page.
@@ -96,10 +105,13 @@ describe('SquareStandHandoff', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...window.location, href: originalHref },
-    });
+    if (ORIGINAL_LOCATION_DESCRIPTOR) {
+      Object.defineProperty(window, 'location', ORIGINAL_LOCATION_DESCRIPTOR);
+    } else {
+      // Fall back to a delete-then-restore via the prototype chain if
+      // the descriptor wasn't captured (shouldn't happen in jsdom).
+      delete (window as unknown as { location?: unknown }).location;
+    }
   });
 
   it('starts in idle status with the default copy', () => {

@@ -213,4 +213,20 @@ describe('TakePaymentModal', () => {
     );
     expect(ta).not.toBeNull();
   });
+
+  it('disables submit for Card on Stand when amount is 0 (form invalid)', () => {
+    // Host needs squareApplicationId set for canUseSquareStand() to be
+    // true — otherwise the pre-check shortcuts to "disabled" and we
+    // can't observe the amount-validation gate.
+    const f = createHost({ squareApplicationId: 'app_1' });
+    const modal = f.debugElement.query(
+      (de) => de.componentInstance instanceof TakePaymentModal,
+    ).componentInstance as TakePaymentModal;
+    modal.methodSignal.set('square_stand');
+    modal.form.controls.method.setValue('square_stand');
+    modal.form.controls.amount.setValue(0);
+    expect(modal.submitDisabled()).toBe(true);
+    modal.form.controls.amount.setValue(50);
+    expect(modal.submitDisabled()).toBe(false);
+  });
 });

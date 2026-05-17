@@ -370,6 +370,12 @@ export class TakePaymentModal implements OnChanges, OnDestroy {
     if (this.isSquareStand()) {
       if (!this.canUseSquareStand()) return true;
       if (this.squareStandSuccess) return true;
+      // Block submit until the form is valid and the amount is > 0 — the
+      // pad's own start() check is a defense in depth, but routing the
+      // error through hlmInput control state surfaces it inline on the
+      // amount field instead of as a generic pad message.
+      if (this.form.invalid) return true;
+      if (!(Number(this.form.controls.amount.value) > 0)) return true;
       const status = this.squareStandHandoff?.status();
       if (status === 'starting' || status === 'handing-off' || status === 'awaiting-callback') {
         return true;
