@@ -1862,6 +1862,24 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.paymentDeadlineTime.setValue(
       formatHm(this.defaultPaymentDeadlineHour, this.defaultPaymentDeadlineMinute)
     );
+    // If the computed (event+1d @ default hour) is in the past — typical
+    // when staff takes a post-event booking at 2-5 AM on the same
+    // business day, where the default deadline `event+1d 00:00` is
+    // already gone — push the deadline to "now + 4h" in the operating
+    // tz so the wizard's future-deadline check doesn't block them.
+    // Mirrors the BE auto-clamp in services-reservations.mjs:1028.
+    const proposed = `${this.paymentDeadlineDate.value}T${this.paymentDeadlineTime.value}:00`;
+    if (isFutureDeadline(proposed, this.paymentDeadlineTz)) return;
+    const nowIso = nowInTimeZoneLocalIso(this.paymentDeadlineTz);
+    if (!nowIso) return;
+    const [datePart, timePart] = nowIso.split('T');
+    const [h, m] = timePart.split(':').map(Number);
+    const totalMins = h * 60 + m + 4 * 60;
+    const newH = Math.floor(totalMins / 60) % 24;
+    const newM = totalMins % 60;
+    const rolledNextDay = totalMins >= 24 * 60;
+    this.paymentDeadlineDate.setValue(rolledNextDay ? nextDate(datePart) : datePart);
+    this.paymentDeadlineTime.setValue(formatHm(newH, newM));
   }
 
   private formErrorMessage(): string {
