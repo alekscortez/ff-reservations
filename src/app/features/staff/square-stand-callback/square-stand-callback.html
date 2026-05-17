@@ -1,4 +1,19 @@
-<div class="flex min-h-[80vh] w-full items-center justify-center px-6">
+<!--
+  Renders inside the "public" shell (see PUBLIC_PATHS in app.ts) so we
+  get the full viewport — no staff topbar/sidebar chrome. This page is
+  a focused moment-of-confirmation; staff/customer should see exactly
+  one thing.
+
+  Layout: outer absolute-fill flex centers content in BOTH axes on any
+  viewport (iPhone portrait through wide iPad landscape). Inner column
+  caps at max-w-md so the content stays scannable on big screens
+  instead of stretching edge to edge.
+
+  Design-preview shortcut: /square-stand-callback?preview=done
+  (also: ?preview=error&message=… / ?preview=cancelled / ?preview=declined
+  / ?preview=missing). Optional &amount=40 &code=K7M3X2 override defaults.
+-->
+<div class="fixed inset-0 flex items-center justify-center bg-white px-6 py-10">
   <div class="w-full max-w-md text-center" [ngSwitch]="phase()">
     <!-- Parsing / recording: minimal status text, no big chrome. Fast
          enough that the user usually never sees it. -->
@@ -9,23 +24,24 @@
       <hlm-alert variant="info">Recording payment…</hlm-alert>
     </ng-container>
 
-    <!-- Success: hero confirmation. Big green circle-check, the captured
-         amount, the FF-XXXXXX booking code, and a Done CTA that tries to
-         close the tab. Falls back to a tab-switch hint if iOS Safari
-         silently refuses window.close() for URL-scheme-opened tabs. -->
+    <!-- Success: focused confirmation. Naked check icon (no surrounding
+         pill — feels less "toast-y", more "receipt-y"), the captured
+         amount in the hero slot, then the FF booking code. -->
     <ng-container *ngSwitchCase="'done'">
-      <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-success-100 text-success-700">
-        <ng-icon name="lucideCircleCheck" class="text-5xl" />
-      </div>
-      <h1 class="mt-6 text-2xl font-semibold text-brand-900">Payment recorded</h1>
+      <ng-icon
+        name="lucideCircleCheck"
+        class="mx-auto block text-7xl text-success-600"
+        aria-hidden="true"
+      />
+      <h1 class="mt-5 text-xl font-semibold text-brand-900">Payment recorded</h1>
       <p
-        class="mt-3 text-4xl font-bold tabular-nums text-brand-900"
+        class="mt-2 text-5xl font-bold tabular-nums text-brand-900"
         *ngIf="paidAmount() as amt"
       >
         ${{ amt | number:'1.2-2' }}
       </p>
       <p
-        class="mt-2 text-sm font-medium text-brand-600"
+        class="mt-3 text-sm font-medium text-brand-600"
         *ngIf="confirmationCode() as code"
       >
         Booking FF-{{ code }}
@@ -42,17 +58,16 @@
       </button>
 
       <p class="mt-4 text-xs text-brand-500" *ngIf="!closeFailedHint()">
-        We've recorded the payment on the reservation. Tap Done to close.
+        Recorded on the reservation. Tap Done to close.
       </p>
 
       <!-- Shown only after window.close() didn't actually close the tab
-           (iOS Safari often ignores close() for tabs it opened on our
-           behalf via the URL scheme). Give the user a clear next step. -->
-      <div *ngIf="closeFailedHint()" class="mt-6 space-y-3">
+           (iOS Safari often ignores close() for URL-scheme-opened tabs). -->
+      <div *ngIf="closeFailedHint()" class="mt-6 space-y-3 text-left">
         <p class="text-xs text-brand-700">
           Couldn't close this tab automatically. Tap the
-          <strong>Hold &amp; Reserve</strong> tab above to continue —
-          the original tab is already showing the payment as recorded.
+          <strong>Hold &amp; Reserve</strong> tab above — the original tab
+          already shows the payment as recorded.
         </p>
         <button
           hlmBtn

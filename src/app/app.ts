@@ -24,6 +24,11 @@ const PUBLIC_PATHS = [
   '/map',
   '/pay',
   '/r',
+  // Square Stand handoff success/error screen. Auth-guarded at the route
+  // level, but the visual is meant to be a clean focused confirmation —
+  // no topbar/sidebar chrome. Without this, the staff shell's flex
+  // wrapper anchors the content to the left edge on iPad.
+  '/square-stand-callback',
 ];
 
 function isPublicPath(url: string): boolean {

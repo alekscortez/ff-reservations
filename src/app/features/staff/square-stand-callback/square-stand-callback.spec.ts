@@ -48,6 +48,44 @@ function configureRouteWithData(dataParam: string) {
   } as unknown as ActivatedRoute;
 }
 
+function configureRouteWithParams(params: Record<string, string>) {
+  return {
+    snapshot: {
+      queryParamMap: {
+        get(key: string): string | null {
+          return params[key] ?? null;
+        },
+      },
+    },
+  } as unknown as ActivatedRoute;
+}
+
+function createCallbackWithParams(
+  api: ReturnType<typeof fakeReservationsApi>,
+  params: Record<string, string>,
+): {
+  router: { navigateByUrl: ReturnType<typeof vi.fn> };
+  fixture: ReturnType<typeof TestBed.createComponent<SquareStandCallback>>;
+  page: SquareStandCallback;
+} {
+  const router = { navigateByUrl: vi.fn().mockResolvedValue(true) };
+  TestBed.configureTestingModule({
+    imports: [SquareStandCallback],
+    providers: [
+      { provide: ReservationsService, useValue: api.service },
+      { provide: ActivatedRoute, useValue: configureRouteWithParams(params) },
+      { provide: Router, useValue: router },
+    ],
+  });
+  const fixture = TestBed.createComponent(SquareStandCallback);
+  fixture.detectChanges();
+  return {
+    router: router as never,
+    fixture,
+    page: fixture.componentInstance,
+  };
+}
+
 function setLocalStorageHandoff(
   handoffId: string,
   payload: Record<string, unknown>,
@@ -216,6 +254,45 @@ describe('SquareStandCallback', () => {
     vi.advanceTimersByTime(400);
     expect(page.closeFailedHint()).toBe(true);
     closeSpy.mockRestore();
+  });
+
+  describe('?preview= shortcut (design iteration)', () => {
+    it('?preview=done jumps straight to the success layout without hitting BE', () => {
+      const api = fakeReservationsApi();
+      const { page } = createCallbackWithParams(api, {
+        preview: 'done',
+        amount: '75',
+        code: 'PREVIEW',
+      });
+      expect(page.phase()).toBe('done');
+      expect(page.paidAmount()).toBe(75);
+      expect(page.confirmationCode()).toBe('PREVIEW');
+      expect(api.calls.length).toBe(0);
+    });
+
+    it('?preview=error sets a sample error message', () => {
+      const api = fakeReservationsApi();
+      const { page } = createCallbackWithParams(api, {
+        preview: 'error',
+        message: 'Custom error copy',
+      });
+      expect(page.phase()).toBe('error');
+      expect(page.errorMessage()).toBe('Custom error copy');
+      expect(api.calls.length).toBe(0);
+    });
+
+    it('?preview=cancelled drops into the cancelled phase', () => {
+      const api = fakeReservationsApi();
+      const { page } = createCallbackWithParams(api, { preview: 'cancelled' });
+      expect(page.phase()).toBe('cancelled');
+    });
+
+    it('?preview=garbage falls through to missing phase + helpful message', () => {
+      const api = fakeReservationsApi();
+      const { page } = createCallbackWithParams(api, { preview: 'garbage' });
+      expect(page.phase()).toBe('missing');
+      expect(page.errorMessage()).toMatch(/Unknown preview phase: garbage/);
+    });
   });
 
   it('hydrates confirmationCode from the localStorage stash on success', () => {

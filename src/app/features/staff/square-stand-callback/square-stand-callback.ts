@@ -88,6 +88,16 @@ export class SquareStandCallback implements OnInit {
   readonly recording = computed(() => this.phase() === 'recording');
 
   ngOnInit(): void {
+    // ?preview=<phase>&amount=<n>&code=<X> short-circuits the lifecycle so
+    // designers/devs can iterate on the layout without burning a real
+    // Stand payment. Production callbacks always include ?data=… from
+    // Square POS, so this is a strictly opt-in design path.
+    const previewPhase = this.route.snapshot.queryParamMap.get('preview');
+    if (previewPhase) {
+      this.applyPreviewPhase(previewPhase);
+      return;
+    }
+
     const dataParam = this.route.snapshot.queryParamMap.get('data') ?? '';
     if (!dataParam) {
       this.phase.set('missing');
@@ -190,6 +200,44 @@ export class SquareStandCallback implements OnInit {
   // semantics. Success path uses done() instead.
   goBack(): void {
     this.openReservations();
+  }
+
+  /**
+   * Design-iteration shortcut. Visit `/square-stand-callback?preview=done`
+   * (or `?preview=error`, `?preview=cancelled`, `?preview=declined`,
+   * `?preview=missing`, `?preview=parsing`, `?preview=recording`) to
+   * jump straight into a phase without going through Square POS. Optional:
+   * `&amount=40&code=K7M3X2&message=Custom%20copy` for the done/error
+   * variants. Never reached on a real callback because Square POS always
+   * appends `?data=…`.
+   */
+  private applyPreviewPhase(rawPhase: string): void {
+    const phase = String(rawPhase ?? '').trim().toLowerCase() as CallbackPhase;
+    const validPhases: CallbackPhase[] = [
+      'parsing',
+      'recording',
+      'done',
+      'cancelled',
+      'declined',
+      'error',
+      'missing',
+    ];
+    if (!validPhases.includes(phase)) {
+      this.phase.set('missing');
+      this.errorMessage.set(`Unknown preview phase: ${rawPhase}`);
+      return;
+    }
+    const amount = Number(this.route.snapshot.queryParamMap.get('amount') ?? 40);
+    const code = String(this.route.snapshot.queryParamMap.get('code') ?? 'K7M3X2').trim();
+    const message = String(this.route.snapshot.queryParamMap.get('message') ?? '').trim();
+    if (Number.isFinite(amount) && amount > 0) this.paidAmount.set(amount);
+    if (code) this.confirmationCode.set(code);
+    if (phase === 'declined' || phase === 'error' || phase === 'cancelled') {
+      this.errorMessage.set(
+        message || 'Preview error — the customer experience would surface a real error here.',
+      );
+    }
+    this.phase.set(phase);
   }
 
   private complete(): void {
