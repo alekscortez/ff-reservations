@@ -142,17 +142,6 @@ export interface CompleteSquareStandHandoffResponse {
   };
 }
 
-export interface CancelSquareStandHandoffPayload {
-  reservationId: string;
-  handoffId: string;
-  reason?: string;
-}
-
-export interface CancelSquareStandHandoffResponse {
-  handoffId: string;
-  cancelled: boolean;
-}
-
 export interface ReservationHistoryItem {
   eventId?: string | null;
   eventType?: string | null;
@@ -317,15 +306,12 @@ export class ReservationsService {
     );
   }
 
-  cancelSquareStandHandoff(payload: CancelSquareStandHandoffPayload) {
-    return this.api.post<CancelSquareStandHandoffResponse>(
-      `/reservations/${payload.reservationId}/payment/square-stand/cancel`,
-      {
-        handoffId: payload.handoffId,
-        reason: payload.reason ?? '',
-      },
-    );
-  }
+  // Note: the BE route POST /reservations/{id}/payment/square-stand/cancel
+  // still exists (used by the audit + future workflows) but there's no
+  // FE consumer today — the wizard's "Cancel pending Stand" flow cancels
+  // the RESERVATION, not the handoff row (which TTLs out in 15 min).
+  // Re-add a client method here if a UI surface needs to call cancel
+  // explicitly.
 
   listHistory(reservationId: string, eventDate: string) {
     return this.api
