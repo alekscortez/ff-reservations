@@ -110,7 +110,7 @@ bash backend/lambda/deploy.sh            # deploy lambda
 - **Cash App is in-venue only** (2026-05-16): staff payment modal + `reservations-new` wizard mount `cashAppPay()` via `<cash-app-qr-pad>`. SDK renders a QR, customer scans, `ontokenization` posts `sourceId` to `/reservations/{id}/payments`. No customer-facing link/SMS/`/cashapp/session*`. [[cashapp_in_venue_only_2026_05_16]]
 - Reservation history lives in `RES_TABLE` under `SK = HIST#…`. Writes are fire-and-forget; failures emit `reservation_history_write_error` (CW metric filter + alarm at ≥1/5min).
 - Cron-based overdue release owned by EventBridge `ff-reservations-overdue-release` (rate 1 min) → dispatches to `runScheduledMaintenance`. Anonymous request paths never trigger release; staff `GET /reservations` and payment routes still do.
-- **`createReservation` auto-clamps past *default* `paymentDeadlineAt`**: omitted default that lands <= now is extended to `now + 4h` (typical at 2-5 AM on the active business day before the operating cutoff rolls). Explicit past deadlines still throw 400.
+- **`createReservation` auto-clamps past *default* `paymentDeadlineAt`**: omitted default that lands <= now is extended to `now + 4h` (typical at 2-5 AM on the active business day before the operating cutoff rolls). Explicit past deadlines still throw 400. The wizard's `setDefaultPaymentDeadline` (FE) mirrors this — it never sends an explicit past-default to the BE because its own future-deadline check would reject first.
 
 ## DynamoDB tables
 
