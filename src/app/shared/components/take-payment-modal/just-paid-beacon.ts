@@ -93,6 +93,57 @@ export function consumeJustPaidBeacon(): JustPaidBeacon | null {
 }
 
 /**
+ * Subscribe to cross-tab "just paid" events. Fires whenever ANOTHER tab
+ * writes `ff:stand-just-paid` (the browser's `storage` event only fires
+ * on tabs OTHER than the writer). Used for the case where Square POS
+ * opens Safari in a NEW tab via URL scheme — the new tab's callback
+ * page records the payment, but the original wizard tab needs to learn
+ * about it to avoid showing a spurious "missing app" error and a
+ * spurious "cancel reservation" banner.
+ *
+ * Returns an unsubscribe function. Callers should invoke it on
+ * component destroy to avoid leaking listeners across navigation.
+ *
+ * The callback receives the parsed beacon payload. Consumers should
+ * match against their own reservation id before acting (the beacon is
+ * a broadcast — multiple components on multiple tabs receive it).
+ *
+ * Falls back to a no-op when `window` is unavailable (SSR/Node tests).
+ */
+export function subscribeToJustPaid(
+  callback: (beacon: JustPaidBeacon) => void,
+): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const handler = (event: StorageEvent): void => {
+    if (event.key !== 'ff:stand-just-paid') return;
+    // Deletion (consume) events: newValue is null. We can still recover
+    // the payload from oldValue so consumers learn what was paid.
+    const raw = event.newValue ?? event.oldValue ?? null;
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as Partial<JustPaidBeacon> | null;
+      const reservationId = String(parsed?.reservationId ?? '').trim();
+      const amount = Number(parsed?.amount ?? 0);
+      const expiresAt = Number(parsed?.expiresAt ?? 0);
+      if (!reservationId || !(amount > 0)) return;
+      if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt < Date.now()) return;
+      callback({
+        reservationId,
+        amount,
+        paidAt: Number(parsed?.paidAt ?? Date.now()),
+        expiresAt,
+      });
+    } catch {
+      // Corrupt payload — silently ignore. The deterministic init-time
+      // consume path in destination components will still surface a
+      // helpful error if the user navigates to /staff/reservations.
+    }
+  };
+  window.addEventListener('storage', handler);
+  return () => window.removeEventListener('storage', handler);
+}
+
+/**
  * Peek without consuming. Used by tests + by consumers that want to
  * conditionally short-circuit before deciding to clear the slot.
  */

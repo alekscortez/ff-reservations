@@ -50,7 +50,10 @@ import {
   SquareLinkRequestPayload,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
-import { consumeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
+import {
+  consumeJustPaidBeacon,
+  subscribeToJustPaid,
+} from '../../../shared/components/take-payment-modal/just-paid-beacon';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
@@ -302,23 +305,32 @@ export class Reservations implements OnInit, OnDestroy {
     });
   }
 
+  private standJustPaidUnsub: (() => void) | null = null;
+
   ngOnInit(): void {
     this.loadContextAndEvents();
     this.consumeStandJustPaidBeacon();
+    // Cross-tab signal: if the user is sitting on this page and a Stand
+    // payment lands in another tab (e.g. host iPad opened Square POS in
+    // a new tab and the new tab's callback ran), surface the same toast.
+    this.standJustPaidUnsub = subscribeToJustPaid((beacon) => {
+      this.showJustPaidNotice(beacon.reservationId, beacon.amount);
+    });
   }
 
   private consumeStandJustPaidBeacon(): void {
     const beacon = consumeJustPaidBeacon();
     if (!beacon) return;
-    this.justPaidStandNotice.set({
-      reservationId: beacon.reservationId,
-      amount: beacon.amount,
-    });
+    this.showJustPaidNotice(beacon.reservationId, beacon.amount);
+  }
+
+  private showJustPaidNotice(reservationId: string, amount: number): void {
+    this.justPaidStandNotice.set({ reservationId, amount });
     // Auto-dismiss after 6s. Long enough to read, short enough to clear
     // before the user starts the next action.
     setTimeout(() => {
       const current = this.justPaidStandNotice();
-      if (current && current.reservationId === beacon.reservationId) {
+      if (current && current.reservationId === reservationId) {
         this.justPaidStandNotice.set(null);
       }
     }, 6000);
@@ -332,6 +344,8 @@ export class Reservations implements OnInit, OnDestroy {
     this.showDetailsModal.set(false);
     this.showPaymentModal.set(false);
     this.syncSidebarModalLock();
+    this.standJustPaidUnsub?.();
+    this.standJustPaidUnsub = null;
   }
 
   private loadContextAndEvents(): void {

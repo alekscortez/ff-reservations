@@ -51,7 +51,10 @@ import {
   SquareLinkRequestPayload,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
-import { consumeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
+import {
+  consumeJustPaidBeacon,
+  subscribeToJustPaid,
+} from '../../../shared/components/take-payment-modal/just-paid-beacon';
 
 interface TableKpis {
   total: number;
@@ -186,22 +189,28 @@ export class Dashboard implements OnInit, OnDestroy {
   private snapshotSub: Subscription | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
+  private standJustPaidUnsub: (() => void) | null = null;
+
   ngOnInit(): void {
     this.refreshDashboard();
     this.startLiveVisitorsPoll();
     this.consumeStandJustPaidBeacon();
+    this.standJustPaidUnsub = subscribeToJustPaid((beacon) => {
+      this.showJustPaidNotice(beacon.reservationId, beacon.amount);
+    });
   }
 
   private consumeStandJustPaidBeacon(): void {
     const beacon = consumeJustPaidBeacon();
     if (!beacon) return;
-    this.justPaidStandNotice.set({
-      reservationId: beacon.reservationId,
-      amount: beacon.amount,
-    });
+    this.showJustPaidNotice(beacon.reservationId, beacon.amount);
+  }
+
+  private showJustPaidNotice(reservationId: string, amount: number): void {
+    this.justPaidStandNotice.set({ reservationId, amount });
     setTimeout(() => {
       const current = this.justPaidStandNotice();
-      if (current && current.reservationId === beacon.reservationId) {
+      if (current && current.reservationId === reservationId) {
         this.justPaidStandNotice.set(null);
       }
     }, 6000);
@@ -216,6 +225,8 @@ export class Dashboard implements OnInit, OnDestroy {
     this.snapshotSub = null;
     this.stopPolling();
     this.stopLiveVisitorsPoll();
+    this.standJustPaidUnsub?.();
+    this.standJustPaidUnsub = null;
   }
 
   private startLiveVisitorsPoll(): void {

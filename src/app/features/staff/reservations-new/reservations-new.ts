@@ -91,6 +91,7 @@ import { SquareStandHandoff } from '../../../shared/components/square-stand-hand
 import {
   consumeJustPaidBeacon,
   peekJustPaidBeacon,
+  subscribeToJustPaid,
 } from '../../../shared/components/take-payment-modal/just-paid-beacon';
 import { HlmAlert } from '../../../shared/ui/alert';
 import { HlmDialog, HlmConfirmDialog } from '../../../shared/ui/dialog';
@@ -457,11 +458,35 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   get compactSectionBottomPaddingPx(): number | null { return this._compactSectionBottomPaddingPx(); }
   set compactSectionBottomPaddingPx(value: number | null) { this._compactSectionBottomPaddingPx.set(value); }
   private desktopLayoutRafId: number | null = null;
+  private standJustPaidUnsub: (() => void) | null = null;
 
   ngOnInit(): void {
     this.restoreSavedFilters();
     this.activeHoldSession = readActiveHoldSession();
     this.loadRuntimeContext();
+    // Cross-tab handoff signal: iOS Safari may open `square-commerce-v1://`
+    // in a NEW tab. The new tab's /square-stand-callback records the
+    // payment and writes the just-paid beacon to localStorage; this
+    // listener picks up that write in the original wizard tab so the pad
+    // can flip from "Square POS didn't open" error → "Paid" without
+    // requiring a refresh, and finishReservationFlow() can skip the
+    // spurious pending-banner stash.
+    this.standJustPaidUnsub = subscribeToJustPaid((beacon) => {
+      const target =
+        this.createdReservation?.reservationId ||
+        this.pendingSquareStandPayment()?.reservationId ||
+        null;
+      if (!target || beacon.reservationId !== target) return;
+      this.squareStandSuccess.set(true);
+      this.pendingSquareStandPayment.set(null);
+      this.cancelPendingStandConfirmOpen.set(false);
+      // If the user was looking at the wizard's map view, refresh table
+      // state so the just-paid table's color updates without a manual
+      // reload.
+      if (this.eventDate) {
+        this.loadTables(this.eventDate, { silent: true });
+      }
+    });
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -623,6 +648,8 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
       window.cancelAnimationFrame(this.desktopLayoutRafId);
       this.desktopLayoutRafId = null;
     }
+    this.standJustPaidUnsub?.();
+    this.standJustPaidUnsub = null;
   }
 
 
