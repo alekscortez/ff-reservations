@@ -332,6 +332,10 @@ export class SquareStandHandoff implements OnDestroy {
         reservationId: this.reservationId,
         eventDate: this.eventDate,
         returnPath: this.returnPath,
+        // Round-tripped so the success page can display "Booking FF-XXXXXX"
+        // without a separate lookup. Falls back to the leading id slice
+        // if the parent didn't pass one.
+        confirmationCode: String(this.confirmationCode ?? '').trim() || null,
         expiresAt: Date.now() + 30 * 60 * 1000,
       };
       localStorage.setItem(`ff:stand-handoff:${handoffId}`, JSON.stringify(payload));

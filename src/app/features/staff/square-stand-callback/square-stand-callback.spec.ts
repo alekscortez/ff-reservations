@@ -149,7 +149,7 @@ describe('SquareStandCallback', () => {
     expect(localStorage.getItem('ff:stand-handoff:h_test')).toBeNull();
   });
 
-  it('navigates to the stashed returnPath after success', () => {
+  it('navigates to the stashed returnPath when openReservations is called', () => {
     setLocalStorageHandoff('h_test', {
       reservationId: 'r-stash',
       eventDate: '2026-05-20',
@@ -160,8 +160,8 @@ describe('SquareStandCallback', () => {
     const data = encodeURIComponent(
       JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
     );
-    const { router } = createCallback(api, data);
-    vi.advanceTimersByTime(1600);
+    const { router, page } = createCallback(api, data);
+    page.openReservations();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/staff/reservations/new');
   });
 
@@ -175,8 +175,8 @@ describe('SquareStandCallback', () => {
     const data = encodeURIComponent(
       JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
     );
-    const { router } = createCallback(api, data);
-    vi.advanceTimersByTime(1600);
+    const { router, page } = createCallback(api, data);
+    page.openReservations();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/staff/reservations');
   });
 
@@ -191,9 +191,46 @@ describe('SquareStandCallback', () => {
     const data = encodeURIComponent(
       JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
     );
-    const { router } = createCallback(api, data);
-    vi.advanceTimersByTime(1600);
+    const { router, page } = createCallback(api, data);
+    page.openReservations();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/staff/reservations');
+  });
+
+  it('done() attempts window.close + shows tab-switch hint when close fails', () => {
+    setLocalStorageHandoff('h_test', {
+      reservationId: 'r-stash',
+      eventDate: '2026-05-20',
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    const api = fakeReservationsApi();
+    const data = encodeURIComponent(
+      JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
+    );
+    const { page } = createCallback(api, data);
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    page.done();
+    expect(closeSpy).toHaveBeenCalled();
+    expect(page.closeFailedHint()).toBe(false);
+    // After ~300ms with the tab still alive (jsdom doesn't actually
+    // close), the hint flips on.
+    vi.advanceTimersByTime(400);
+    expect(page.closeFailedHint()).toBe(true);
+    closeSpy.mockRestore();
+  });
+
+  it('hydrates confirmationCode from the localStorage stash on success', () => {
+    setLocalStorageHandoff('h_test', {
+      reservationId: 'r-stash',
+      eventDate: '2026-05-20',
+      confirmationCode: 'K7M3X2',
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    const api = fakeReservationsApi();
+    const data = encodeURIComponent(
+      JSON.stringify({ status: 'ok', transaction_id: 'tx_1', state: 'h_test' }),
+    );
+    const { page } = createCallback(api, data);
+    expect(page.confirmationCode()).toBe('K7M3X2');
   });
 
   it('shows a helpful error when localStorage is empty (no reservation context)', () => {

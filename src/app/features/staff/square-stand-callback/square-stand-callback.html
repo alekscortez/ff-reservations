@@ -1,57 +1,130 @@
-<div class="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6">
-  <h1 class="text-lg font-semibold text-warm-900">Square Stand</h1>
-
-  <div class="mt-6 w-full" [ngSwitch]="phase()">
+<div class="flex min-h-[80vh] w-full items-center justify-center px-6">
+  <div class="w-full max-w-md text-center" [ngSwitch]="phase()">
+    <!-- Parsing / recording: minimal status text, no big chrome. Fast
+         enough that the user usually never sees it. -->
     <ng-container *ngSwitchCase="'parsing'">
       <hlm-alert variant="info">Reading payment result from Square POS…</hlm-alert>
     </ng-container>
     <ng-container *ngSwitchCase="'recording'">
       <hlm-alert variant="info">Recording payment…</hlm-alert>
     </ng-container>
+
+    <!-- Success: hero confirmation. Big green circle-check, the captured
+         amount, the FF-XXXXXX booking code, and a Done CTA that tries to
+         close the tab. Falls back to a tab-switch hint if iOS Safari
+         silently refuses window.close() for URL-scheme-opened tabs. -->
     <ng-container *ngSwitchCase="'done'">
-      <hlm-alert variant="success">
-        <strong>Paid ✓</strong>
-        <span *ngIf="paidAmount() as amt"> · ${{ amt | number:'1.2-2' }}</span>
-      </hlm-alert>
+      <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-success-100 text-success-700">
+        <ng-icon name="lucideCircleCheck" class="text-5xl" />
+      </div>
+      <h1 class="mt-6 text-2xl font-semibold text-brand-900">Payment recorded</h1>
+      <p
+        class="mt-3 text-4xl font-bold tabular-nums text-brand-900"
+        *ngIf="paidAmount() as amt"
+      >
+        ${{ amt | number:'1.2-2' }}
+      </p>
+      <p
+        class="mt-2 text-sm font-medium text-brand-600"
+        *ngIf="confirmationCode() as code"
+      >
+        Booking FF-{{ code }}
+      </p>
+
+      <button
+        hlmBtn
+        type="button"
+        size="lg"
+        class="mt-8 w-full"
+        (click)="done()"
+      >
+        Done
+      </button>
+
+      <p class="mt-4 text-xs text-brand-500" *ngIf="!closeFailedHint()">
+        We've recorded the payment on the reservation. Tap Done to close.
+      </p>
+
+      <!-- Shown only after window.close() didn't actually close the tab
+           (iOS Safari often ignores close() for tabs it opened on our
+           behalf via the URL scheme). Give the user a clear next step. -->
+      <div *ngIf="closeFailedHint()" class="mt-6 space-y-3">
+        <p class="text-xs text-brand-700">
+          Couldn't close this tab automatically. Tap the
+          <strong>Hold &amp; Reserve</strong> tab above to continue —
+          the original tab is already showing the payment as recorded.
+        </p>
+        <button
+          hlmBtn
+          type="button"
+          variant="outline"
+          size="sm"
+          class="w-full"
+          (click)="openReservations()"
+        >
+          Or open the reservations list here
+        </button>
+      </div>
     </ng-container>
+
     <ng-container *ngSwitchCase="'cancelled'">
       <hlm-alert variant="warning">
         <strong>Payment cancelled.</strong>
         The customer didn't complete the swipe. The reservation is unchanged.
       </hlm-alert>
+      <button hlmBtn variant="outline" type="button" class="mt-6" (click)="goBack()">
+        Back to reservations
+      </button>
     </ng-container>
+
     <ng-container *ngSwitchCase="'declined'">
       <hlm-alert variant="destructive">
         <strong>Card declined.</strong>
         {{ errorMessage() }}
       </hlm-alert>
+      <div class="mt-6 flex flex-col gap-2">
+        <button
+          hlmBtn
+          type="button"
+          (click)="retry()"
+          [disabled]="recording()"
+        >
+          Retry recording
+        </button>
+        <button hlmBtn variant="outline" type="button" (click)="goBack()">
+          Back to reservations
+        </button>
+      </div>
     </ng-container>
+
     <ng-container *ngSwitchCase="'error'">
       <hlm-alert variant="destructive">
         <strong>Something went wrong.</strong>
         {{ errorMessage() }}
       </hlm-alert>
+      <div class="mt-6 flex flex-col gap-2">
+        <button
+          hlmBtn
+          type="button"
+          (click)="retry()"
+          [disabled]="recording()"
+        >
+          Retry recording
+        </button>
+        <button hlmBtn variant="outline" type="button" (click)="goBack()">
+          Back to reservations
+        </button>
+      </div>
     </ng-container>
+
     <ng-container *ngSwitchCase="'missing'">
       <hlm-alert variant="warning">
         Open this page from inside the reservations app — there's no
         handoff result attached to this URL.
       </hlm-alert>
+      <button hlmBtn variant="outline" type="button" class="mt-6" (click)="goBack()">
+        Back to reservations
+      </button>
     </ng-container>
-  </div>
-
-  <div class="mt-6 flex w-full flex-col gap-2">
-    <button
-      *ngIf="phase() === 'declined' || phase() === 'error'"
-      hlmBtn
-      type="button"
-      (click)="retry()"
-      [disabled]="recording()"
-    >
-      Retry recording
-    </button>
-    <button hlmBtn variant="outline" type="button" (click)="goBack()">
-      Back to reservation
-    </button>
   </div>
 </div>

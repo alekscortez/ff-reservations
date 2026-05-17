@@ -10,6 +10,8 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideCircleCheck } from '@ng-icons/lucide';
 
 import { ReservationsService } from '../../../core/http/reservations.service';
 import { writeJustPaidBeacon } from '../../../shared/components/take-payment-modal/just-paid-beacon';
@@ -51,7 +53,8 @@ const ERROR_LABELS: Record<string, string> = {
 @Component({
   selector: 'square-stand-callback',
   standalone: true,
-  imports: [CommonModule, HlmAlert, HlmButton],
+  imports: [CommonModule, HlmAlert, HlmButton, NgIcon],
+  providers: [provideIcons({ lucideCircleCheck })],
   templateUrl: './square-stand-callback.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -64,6 +67,21 @@ export class SquareStandCallback implements OnInit {
   readonly phase = signal<CallbackPhase>('parsing');
   readonly errorMessage = signal<string>('');
   readonly paidAmount = signal<number | null>(null);
+  readonly confirmationCode = signal<string | null>(null);
+  // True when we attempted window.close() and the tab is still here ~300ms
+  // later. iOS Safari often silently ignores close() for tabs it opened
+  // via URL-scheme handling (not via JS window.open). Surface a hint so
+  // staff knows to switch tabs manually.
+  readonly closeFailedHint = signal(false);
+  // Likely-new-tab heuristic: iOS opens URL-scheme returns in a new tab
+  // that has no document.referrer for our origin, and window.opener is
+  // typically null (the open was not script-driven). We use this only
+  // to decide whether to auto-redirect after success; the visible Done
+  // button works in both cases.
+  private readonly isLikelyNewTab = (() => {
+    if (typeof window === 'undefined') return false;
+    return window.opener == null && window.history.length <= 2;
+  })();
   private parsedCallback: ParsedCallback | null = null;
   private reservationId: string | null = null;
   private returnPath: string | null = null;
@@ -129,12 +147,49 @@ export class SquareStandCallback implements OnInit {
     this.complete();
   }
 
-  goBack(): void {
+  /**
+   * Primary CTA on the success page. Try to close this tab — if Square
+   * POS handed off via URL scheme, this is almost always a tab Safari
+   * opened on iOS's behalf, and we'd rather get rid of it than leave it
+   * piling up across every reservation. If window.close() is silently
+   * refused (iOS Safari often ignores close() for non-script-opened
+   * tabs), surface a hint asking the user to switch tabs manually.
+   * The original wizard tab already flips to "Paid" via the cross-tab
+   * storage event listener — no information loss either way.
+   */
+  done(): void {
+    this.closeFailedHint.set(false);
+    if (typeof window !== 'undefined' && typeof window.close === 'function') {
+      try {
+        window.close();
+      } catch {
+        // ignore — fall through to the hint timer
+      }
+      // If close() worked the tab is gone before the timer fires. If
+      // it didn't, after ~300ms we're still here → show the hint.
+      setTimeout(() => this.closeFailedHint.set(true), 300);
+    } else {
+      this.closeFailedHint.set(true);
+    }
+  }
+
+  /**
+   * Secondary CTA — explicit "open the reservations list in this tab".
+   * Used when the user didn't open in a new tab, or when window.close()
+   * failed and the user prefers to navigate instead of switching tabs.
+   */
+  openReservations(): void {
     const path =
       this.returnPath && this.returnPath.startsWith('/')
         ? this.returnPath
         : '/staff/reservations';
     void this.router.navigateByUrl(path);
+  }
+
+  // Kept for the error-state "Back to reservation" button — unchanged
+  // semantics. Success path uses done() instead.
+  goBack(): void {
+    this.openReservations();
   }
 
   private complete(): void {
@@ -168,6 +223,15 @@ export class SquareStandCallback implements OnInit {
           const latest = payments[payments.length - 1];
           const amount = Number(latest?.amount ?? 0);
           if (Number.isFinite(amount) && amount > 0) this.paidAmount.set(amount);
+          // Bubble up the FF-XXXXXX code from the BE response (if present)
+          // or from the stash (where the handoff component cached it
+          // before navigation). The big confirmation screen uses this for
+          // "Booking FF-XXXXXX".
+          const itemCode = String(
+            (res.item as { confirmationCode?: string } | undefined)
+              ?.confirmationCode ?? '',
+          ).trim();
+          if (itemCode) this.confirmationCode.set(itemCode);
           this.phase.set('done');
           this.clearHandoffContext(cb.state);
           // Write the just-paid beacon so the destination page (wizard or
@@ -177,9 +241,15 @@ export class SquareStandCallback implements OnInit {
           if (this.reservationId && amount > 0) {
             writeJustPaidBeacon({ reservationId: this.reservationId, amount });
           }
-          // Brief celebration, then navigate back. Mirrors the Cash App
-          // path's ~1.5s timing.
-          setTimeout(() => this.goBack(), 1500);
+          // Auto-redirect only when we're confident this is the SAME
+          // Safari tab the user came from (e.g. wizard returnPath case).
+          // In new-tab mode, navigating to /staff/reservations would just
+          // pollute the second tab with a list view they didn't ask for —
+          // worse, navigating away breaks the user's "swipe back to the
+          // original tab" mental model. Let them tap Done instead.
+          if (!this.isLikelyNewTab) {
+            setTimeout(() => this.openReservations(), 1500);
+          }
         },
         error: (err) => {
           const status = Number(
@@ -213,6 +283,7 @@ export class SquareStandCallback implements OnInit {
       const parsed = JSON.parse(raw) as {
         reservationId?: string;
         returnPath?: string;
+        confirmationCode?: string;
         expiresAt?: number;
       };
       const expiresAt = Number(parsed?.expiresAt ?? 0);
@@ -222,8 +293,10 @@ export class SquareStandCallback implements OnInit {
       }
       const reservationId = String(parsed?.reservationId ?? '').trim();
       const returnPath = String(parsed?.returnPath ?? '').trim();
+      const confirmationCode = String(parsed?.confirmationCode ?? '').trim();
       if (reservationId) this.reservationId = reservationId;
       if (returnPath) this.returnPath = returnPath;
+      if (confirmationCode) this.confirmationCode.set(confirmationCode);
     } catch {
       // Corrupt entry; ignore — the rest of the page will fall through to
       // the "open the reservation" error state.
