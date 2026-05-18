@@ -1511,6 +1511,7 @@ export class Dashboard implements OnInit, OnDestroy {
       passId,
       status: String(pass?.status ?? '').trim().toUpperCase() || 'UNKNOWN',
       issuedAt: Number(pass?.issuedAt ?? 0) || null,
+      issuedBy: String(pass?.issuedBy ?? '').trim() || null,
       usedAt: Number(pass?.usedAt ?? 0) || null,
       usedBy: String(pass?.usedBy ?? '').trim() || null,
       revokedAt: Number(pass?.revokedAt ?? 0) || null,

@@ -273,6 +273,12 @@
             {{ usedAtMs | date:'short' }}
           </span>
         </div>
+        <p class="mt-1 text-xs text-brand-700" *ngIf="epochSecondsToMs(state.issuedAt) as issuedAtMs">
+          Issued {{ issuedAtMs | date:'short' }}<ng-container *ngIf="state.issuedBy"> by {{ state.issuedBy | systemActorLabel }}</ng-container>
+        </p>
+        <p class="mt-1 text-xs text-brand-700" *ngIf="epochSecondsToMs(state.expiresAt) as expiresAtMs">
+          Expires {{ expiresAtMs | date:'short' }}
+        </p>
         <p class="mt-1 text-xs text-brand-700" *ngIf="state.usedBy">By {{ state.usedBy | systemActorLabel }}</p>
         <p class="mt-1 text-xs text-brand-700" *ngIf="state.revokedBy">Revoked by {{ state.revokedBy | systemActorLabel }}</p>
       </div>

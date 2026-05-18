@@ -341,6 +341,32 @@ describe('ReservationDetailModal', () => {
     );
   });
 
+  it('Pass tab: shows Issued + Expires timestamps when present on the state', () => {
+    // 2026-05-18 12:00:00 UTC + 2026-05-20 12:00:00 UTC, epoch seconds.
+    const issuedAt = Math.floor(Date.UTC(2026, 4, 18, 12, 0, 0) / 1000);
+    const expiresAt = Math.floor(Date.UTC(2026, 4, 20, 12, 0, 0) / 1000);
+    const f = createHost({
+      reservation: makeReservation({ paymentStatus: 'PAID' }),
+      checkInPassState: {
+        passId: 'pass-1',
+        status: 'ISSUED',
+        issuedAt,
+        issuedBy: 'staff@x',
+        usedAt: null,
+        usedBy: null,
+        revokedAt: null,
+        revokedBy: null,
+        expiresAt,
+      },
+    });
+    tabButton(f, 'Pass')!.click();
+    f.detectChanges();
+    const text = (f.nativeElement.textContent ?? '') as string;
+    expect(text).toMatch(/Issued\s/);
+    expect(text).toMatch(/Expires\s/);
+    expect(text).toContain('staff@x');
+  });
+
   it('history tab renders rows when history has items', () => {
     const f = createHost({
       history: [

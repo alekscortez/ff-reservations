@@ -155,6 +155,7 @@ function buildReservations(overrides = {}) {
   const deactivateCalls = [];
   const refundCalls = [];
   const expiredSmsCalls = [];
+  const revokePassesCalls = [];
 
   const deps = {
     ddb,
@@ -209,6 +210,18 @@ function buildReservations(overrides = {}) {
         expiredSmsCalls.push(args);
         return { to: args.phone, messageId: "msg-1", provider: "sns" };
       }),
+    // Default stub records every call; tests that want to assert revocation
+    // can read revokePassesCalls. Tests that want the soft-fail path can
+    // pass their own throwing override.
+    revokeActivePassesForReservation: Object.hasOwn(
+      overrides,
+      "revokeActivePassesForReservation"
+    )
+      ? overrides.revokeActivePassesForReservation
+      : async (reservationId, user) => {
+          revokePassesCalls.push({ reservationId, user });
+          return { revoked: [] };
+        },
   };
 
   const svc = createReservationsService(deps, sharedHarness.shared, prHarness.paymentRecording);
@@ -223,6 +236,7 @@ function buildReservations(overrides = {}) {
     deactivateCalls,
     refundCalls: refundCalls.length === 0 ? deps.refundSquarePayment : refundCalls,
     expiredSmsCalls,
+    revokePassesCalls,
   };
 }
 
@@ -883,6 +897,120 @@ describe("cancelReservation REFUND", () => {
     // Only p2 was refunded, not p1
     assert.equal(refundLog.length, 1);
     assert.equal(refundLog[0].paymentId, "sq_pay_2");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cancelReservation — pass revocation on each resolution path
+// (closes the door-scan gap where a cancelled customer's Wallet pass was
+// still ISSUED. The scanner only checks the pass row's status, so the
+// reservation cancel must explicitly revoke any active pass.)
+// ---------------------------------------------------------------------------
+
+describe("cancelReservation revokes active check-in passes", () => {
+  it("CANCEL_NO_REFUND path calls revokeActivePassesForReservation", async () => {
+    const { svc, revokePassesCalls } = buildReservations({
+      shared: {
+        getReservationById: async () => reservationItem(),
+      },
+    });
+    await svc.cancelReservation(
+      TODAY_LOCAL_DATE,
+      "r1",
+      "T1",
+      "staff@x",
+      "Customer cancelled"
+    );
+    assert.equal(revokePassesCalls.length, 1);
+    assert.equal(revokePassesCalls[0].reservationId, "r1");
+    assert.equal(revokePassesCalls[0].user, "staff@x");
+  });
+
+  it("RESCHEDULE_CREDIT path calls revokeActivePassesForReservation", async () => {
+    const { svc, revokePassesCalls } = buildReservations({
+      shared: {
+        getReservationById: async () => reservationItem(),
+      },
+    });
+    await svc.cancelReservation(
+      TODAY_LOCAL_DATE,
+      "r1",
+      "T1",
+      "staff@x",
+      "Customer rebooked",
+      { resolutionType: "RESCHEDULE_CREDIT" }
+    );
+    assert.equal(revokePassesCalls.length, 1);
+    assert.equal(revokePassesCalls[0].reservationId, "r1");
+    assert.equal(revokePassesCalls[0].user, "staff@x");
+  });
+
+  it("REFUND path calls revokeActivePassesForReservation", async () => {
+    const { svc, revokePassesCalls } = buildReservations({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            payments: [
+              {
+                paymentId: "p1",
+                amount: 30,
+                method: "square",
+                provider: { providerPaymentId: "sq_pay_1" },
+              },
+            ],
+          }),
+      },
+      refundSquarePayment: async () => ({
+        refund: { id: "rf1", status: "PENDING" },
+      }),
+    });
+    await svc.cancelReservation(
+      TODAY_LOCAL_DATE,
+      "r1",
+      "T1",
+      "staff@x",
+      "Refund please",
+      { resolutionType: "REFUND" }
+    );
+    assert.equal(revokePassesCalls.length, 1);
+    assert.equal(revokePassesCalls[0].reservationId, "r1");
+    assert.equal(revokePassesCalls[0].user, "staff@x");
+  });
+
+  it("revoke failure does NOT block the cancel (soft-fail with warn log)", async () => {
+    const origWarn = console.warn;
+    const warnLogs = [];
+    console.warn = (...args) => warnLogs.push(args);
+    try {
+      const { svc, historyCalls } = buildReservations({
+        shared: {
+          getReservationById: async () => reservationItem(),
+        },
+        revokeActivePassesForReservation: async () => {
+          throw new Error("DDB unreachable");
+        },
+      });
+      // Cancel should still succeed
+      await svc.cancelReservation(
+        TODAY_LOCAL_DATE,
+        "r1",
+        "T1",
+        "staff@x",
+        "Customer cancelled"
+      );
+      // History was still written + RESERVATION_CANCELLED reached
+      const cancelEvent = historyCalls.find(
+        (h) => h.eventType === "RESERVATION_CANCELLED"
+      );
+      assert.ok(cancelEvent, "RESERVATION_CANCELLED history written");
+      // Structured warn log was emitted
+      const had = warnLogs.some(
+        (args) => String(args?.[0] ?? "") === "checkin_pass_revoke_on_cancel_failed"
+      );
+      assert.ok(had, "expected checkin_pass_revoke_on_cancel_failed warn log");
+    } finally {
+      console.warn = origWarn;
+    }
   });
 });
 

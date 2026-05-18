@@ -64,6 +64,11 @@ export function createReservationsService(
     deactivateSquarePaymentLink,
     refundSquarePayment,
     sendPaymentLinkExpiredSms,
+    // Threaded so cancelReservation revokes any active check-in pass — a
+    // cancelled reservation's wallet pass would otherwise still scan at
+    // the door (scanner only checks pass status, not the reservation's
+    // status). Soft-fail on revoke errors: the cancel is source-of-truth.
+    revokeActivePassesForReservation,
   },
   shared,
   paymentRecording
@@ -688,6 +693,27 @@ export function createReservationsService(
         })
       );
       cancelled = cancelResult?.Attributes ?? null;
+    }
+
+    // Revoke any active check-in pass so a cancelled customer's Wallet
+    // pass scanner-rejects at the door. The scanner only looks at the
+    // pass row's status — it never re-reads the reservation — so without
+    // this revoke, a cancelled-but-PAID/COURTESY reservation's QR would
+    // happily check in. Idempotent (revoke is conditional on
+    // status=ISSUED) and soft-fail: the cancel above is source-of-truth,
+    // an unreachable pass-revoke can be retried via the modal's reissue
+    // flow (which itself revokes-then-issues).
+    if (typeof revokeActivePassesForReservation === "function") {
+      try {
+        await revokeActivePassesForReservation(reservationId, user);
+      } catch (err) {
+        console.warn("checkin_pass_revoke_on_cancel_failed", {
+          reservationId,
+          eventDate,
+          resolutionType,
+          message: String(err?.message ?? err ?? ""),
+        });
+      }
     }
 
     // Release every hold row tied to this reservation. Loop is

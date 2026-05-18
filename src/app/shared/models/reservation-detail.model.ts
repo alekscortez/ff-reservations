@@ -22,6 +22,7 @@ export interface CheckInPassState {
   passId: string;
   status: string;
   issuedAt: number | null;
+  issuedBy: string | null;
   usedAt: number | null;
   usedBy: string | null;
   revokedAt: number | null;
