@@ -40,6 +40,7 @@ function makeCtx(overrides = {}) {
     refundSquarePayment: [],
     sendPaymentLinkSms: [],
     cancelReservation: [],
+    changeReservationTables: [],
     getRuntimeSettingsSubset: [],
     getEventByDate: [],
     startSquareStandHandoff: [],
@@ -152,6 +153,22 @@ function makeCtx(overrides = {}) {
       cancelReservation: async (eventDate, id, tableId, user, reason, options) => {
         calls.cancelReservation.push({ eventDate, id, tableId, user, reason, options });
       },
+      changeReservationTables: overrides.changeReservationTablesDisabled
+        ? undefined
+        : async (body, user) => {
+            calls.changeReservationTables.push({ body, user });
+            return (
+              overrides.changeReservationTablesResult ?? {
+                reservation: { reservationId: body?.reservationId ?? null },
+                delta: 0,
+                newAmountDue: 0,
+                newTablePrice: 0,
+                newTablePrices: [],
+                payment: null,
+                overpayment: null,
+              }
+            );
+          },
       getRuntimeSettingsSubset: async () => overrides.runtimeSettings ?? {},
       getEventByDate: async (date) => {
         calls.getEventByDate.push(date);
@@ -909,6 +926,92 @@ describe("PUT /reservations/{id}/cancel", () => {
     });
     await handleReservationsAndHoldsRoute(ctx);
     assert.equal(calls.cancelReservation[0].options.resolutionType, "REFUND");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /reservations/{id}/tables -- change reservation tables
+// ---------------------------------------------------------------------------
+
+describe("PUT /reservations/{id}/tables", () => {
+  it("requireStaffOrAdmin + 400 on missing body", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/tables",
+      body: null,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("500 when changeReservationTables dep is not configured", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/tables",
+      body: { eventDate: "2026-05-09", newTableIds: ["T1"] },
+      changeReservationTablesDisabled: true,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 500);
+  });
+
+  it("dispatches changeReservationTables with reservationId merged from path", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/tables",
+      body: {
+        eventDate: "2026-05-09",
+        newTableIds: ["T2"],
+        newHoldsByTableId: { T2: "h-T2" },
+        expectedTablePriceTotal: 200,
+        reason: "Upgrade",
+        payment: { method: "cash", amount: 100, receiptNumber: "1247" },
+      },
+      userLabel: "staff@x",
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.changeReservationTables.length, 1);
+    const call = calls.changeReservationTables[0];
+    assert.equal(call.body.reservationId, "r1");
+    assert.equal(call.body.eventDate, "2026-05-09");
+    assert.deepEqual(call.body.newTableIds, ["T2"]);
+    assert.equal(call.user, "staff@x");
+    assert.equal(call.body.payment.amount, 100);
+  });
+
+  it("returns the service result body verbatim (delta + overpayment surfaced to caller)", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/tables",
+      body: {
+        eventDate: "2026-05-09",
+        newTableIds: ["T1"],
+        newHoldsByTableId: { T1: "h-T1" },
+        expectedTablePriceTotal: 100,
+        reason: "Downgrade",
+        overpaymentResolution: "CREDIT",
+      },
+      changeReservationTablesResult: {
+        reservation: { reservationId: "r1", tableIds: ["T1"] },
+        delta: -100,
+        newAmountDue: 100,
+        newTablePrice: 100,
+        newTablePrices: [100],
+        payment: null,
+        overpayment: {
+          surplus: 100,
+          resolution: "CREDIT",
+          credit: { creditId: "credit-1", amountTotal: 100 },
+          refund: null,
+        },
+      },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.delta, -100);
+    assert.equal(res.body.overpayment.resolution, "CREDIT");
+    assert.equal(res.body.overpayment.credit.creditId, "credit-1");
   });
 });
 

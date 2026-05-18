@@ -77,6 +77,7 @@ export class ReservationDetailModal {
 
   @Output() close = new EventEmitter<void>();
   @Output() takePayment = new EventEmitter<void>();
+  @Output() changeTables = new EventEmitter<void>();
   @Output() generateSquareLink = new EventEmitter<void>();
   @Output() sendSms = new EventEmitter<void>();
   @Output() copyLink = new EventEmitter<void>();
@@ -118,6 +119,15 @@ export class ReservationDetailModal {
 
   canCancelReservation(item: ReservationItem): boolean {
     return !this.isPastEvent(item) && item.status === 'CONFIRMED';
+  }
+
+  canChangeTables(item: ReservationItem): boolean {
+    return (
+      item.status === 'CONFIRMED' &&
+      item.paymentStatus !== 'COURTESY' &&
+      item.paymentStatus !== 'REFUNDED' &&
+      !this.isPastEvent(item)
+    );
   }
 
   isPastEvent(item: ReservationItem): boolean {

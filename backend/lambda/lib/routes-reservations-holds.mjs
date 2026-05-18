@@ -35,6 +35,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     refundSquarePayment,
     sendPaymentLinkSms,
     cancelReservation,
+    changeReservationTables,
     getRuntimeSettingsSubset,
     getEventByDate,
     listEvents,
@@ -1129,6 +1130,30 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       reason,
       actor: user,
     });
+    return json(200, out, cors);
+  }
+
+  // PUT /reservations/{id}/tables -- change the table set on an existing
+  // reservation (staff only). Single atomic TransactWrite swaps holds +
+  // updates the reservation row + optionally collects the delta payment.
+  // See services-reservations-table-change.mjs for the state machine.
+  // (PUT for consistency with the cancel/payment routes; the API GW CORS
+  // allowlist doesn't include PATCH and adding it would mean a CORS
+  // change on shared prod infra.)
+  const changeTablesMatch = path.match(/^\/reservations\/([^/]+)\/tables$/);
+  if (changeTablesMatch && method === "PUT") {
+    requireStaffOrAdmin(event);
+    if (typeof changeReservationTables !== "function") {
+      return json(500, { message: "Table change is not configured" }, cors);
+    }
+    const reservationId = changeTablesMatch[1];
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const user = await getUserLabel(event);
+    const out = await changeReservationTables(
+      { ...body, reservationId },
+      user
+    );
     return json(200, out, cors);
   }
 

@@ -1,0 +1,317 @@
+<hlm-dialog
+  *ngIf="reservation"
+  (close)="onClose()"
+  panelClass="h-[92dvh] w-[94vw] md:max-w-3xl md:h-auto md:max-h-[92dvh]"
+  [ariaLabelledBy]="'change-table-modal-title'"
+>
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand-500">Change tables</p>
+      <h3 id="change-table-modal-title" class="text-xl font-semibold text-brand-900">
+        {{ reservation | tableLabel }}
+      </h3>
+      <p class="break-words text-sm text-brand-600">
+        {{ reservation.customerName }}
+        <span *ngIf="reservation.confirmationCode" class="ml-1 font-mono text-xs uppercase tracking-[0.18em] text-brand-700">
+          · FF-{{ reservation.confirmationCode }}
+        </span>
+      </p>
+    </div>
+    <button
+      type="button"
+      hlmBtn variant="outline" size="icon-sm" class="rounded-full"
+      (click)="onClose()"
+      aria-label="Close change table"
+    >
+      <ng-icon name="lucideX" size="14" />
+    </button>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- STEP 1 — Pick tables                                         -->
+  <!-- =========================================================== -->
+  <div *ngIf="step() === 'pick'" class="mt-4 grid gap-3">
+
+    <hlm-alert *ngIf="tablesError" variant="destructive">{{ tablesError }}</hlm-alert>
+    <hlm-alert *ngIf="holdError() as msg" variant="warning">{{ msg }}</hlm-alert>
+
+    <p *ngIf="tablesLoading" class="text-sm text-brand-500">Loading tables…</p>
+
+    <div *ngIf="!tablesLoading && tables.length > 0" class="rounded-xl border border-brand-100 bg-white p-2">
+      <app-table-map
+        [tables]="tables"
+        [selectedTableIds]="mapSelectedIds()"
+        [sectionColors]="sectionColors"
+        [interactive]="true"
+        (tableSelect)="onTableSelect($event)"
+      ></app-table-map>
+    </div>
+
+    <!-- Side-by-side summary -->
+    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Current</p>
+        <p class="text-sm font-semibold text-brand-900">{{ formatCurrentSummary() || '—' }}</p>
+        <p class="mt-0.5 text-xs text-brand-600">${{ currentTablePrice() | number:'1.2-2' }} total</p>
+      </article>
+      <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">New</p>
+        <p class="text-sm font-semibold text-brand-900">{{ formatNewSummary() || '—' }}</p>
+        <p class="mt-0.5 text-xs text-brand-600">${{ newTablePriceTotal() | number:'1.2-2' }} total</p>
+      </article>
+    </div>
+
+    <!-- Delta line -->
+    <div class="grid gap-2">
+      <ng-container [ngSwitch]="true">
+        <div
+          *ngSwitchCase="delta() > 0"
+          class="rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-sm font-semibold text-warm-800"
+        >
+          Δ = +${{ delta() | number:'1.2-2' }} · Customer pays the difference in the next step.
+        </div>
+        <div
+          *ngSwitchCase="delta() < 0"
+          class="rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-sm font-semibold text-success-800"
+        >
+          Δ = −${{ (-delta()) | number:'1.2-2' }}
+          <span *ngIf="surplus() > 0" class="block text-xs font-normal text-success-700">
+            Customer overpaid by ${{ surplus() | number:'1.2-2' }} — pick how to resolve below.
+          </span>
+          <span *ngIf="surplus() === 0" class="block text-xs font-normal text-success-700">
+            No outstanding overpayment — new amount due is ${{ newAmountDue() | number:'1.2-2' }}.
+          </span>
+        </div>
+        <div
+          *ngSwitchDefault
+          class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-600"
+        >
+          No price change.
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Δ<0 resolution radios. Hidden when no surplus to resolve. -->
+    <article
+      *ngIf="delta() < 0 && surplus() > 0"
+      class="rounded-xl border border-brand-100 p-3"
+    >
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Overpayment</p>
+      <div class="mt-2 grid gap-2 sm:grid-cols-3">
+        <button
+          type="button"
+          hlmToggle variant="outline" class="justify-center text-left"
+          [active]="overpayResolution() === 'CREDIT'"
+          (click)="setOverpayResolution('CREDIT')"
+        >
+          <div class="w-full">
+            <p class="text-xs font-semibold">Reservation credit</p>
+            <p class="text-[11px] text-brand-600">Recommended · reversible · 30d</p>
+          </div>
+        </button>
+        <button
+          type="button"
+          hlmToggle variant="outline" class="justify-center text-left"
+          [active]="overpayResolution() === 'REFUND'"
+          [disabled]="!canPartialRefund()"
+          [title]="canPartialRefund() ? '' : 'No Square payment to refund against'"
+          (click)="canPartialRefund() && setOverpayResolution('REFUND')"
+        >
+          <div class="w-full">
+            <p class="text-xs font-semibold">Square refund</p>
+            <p class="text-[11px] text-brand-600">{{ canPartialRefund() ? 'Irreversible · to original card' : 'No Square payment found' }}</p>
+          </div>
+        </button>
+        <button
+          type="button"
+          hlmToggle variant="outline" class="justify-center text-left"
+          [active]="overpayResolution() === 'LEAVE'"
+          (click)="setOverpayResolution('LEAVE')"
+        >
+          <div class="w-full">
+            <p class="text-xs font-semibold">Leave overpaid</p>
+            <p class="text-[11px] text-brand-600">Log only · handle later</p>
+          </div>
+        </button>
+      </div>
+    </article>
+
+    <!-- Reason -->
+    <div class="grid gap-1">
+      <label for="change-table-reason" class="text-[11px] uppercase tracking-[0.12em] text-brand-500">
+        Reason (required)
+      </label>
+      <input
+        id="change-table-reason"
+        type="text"
+        hlmInput
+        [formControl]="form.controls.reason"
+        placeholder="e.g. Customer requested table closer to stage"
+      />
+      <p
+        *ngIf="submitAttempted() && !form.controls.reason.valid"
+        class="text-xs text-danger-700"
+      >Reason is required (min 3 characters).</p>
+    </div>
+
+    <hlm-alert *ngIf="submitError as msg" variant="destructive">{{ msg }}</hlm-alert>
+
+    <div class="mt-2 flex flex-wrap justify-end gap-2 border-t border-brand-100 pt-3">
+      <button type="button" hlmBtn variant="outline" (click)="onClose()">Cancel</button>
+      <button
+        type="button"
+        hlmBtn
+        [disabled]="primaryButtonDisabled()"
+        (click)="onPrimary()"
+      >
+        {{ primaryButtonLabel() }}
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- STEP 2 — Collect payment (delta > 0 only)                    -->
+  <!-- =========================================================== -->
+  <div *ngIf="step() === 'pay'" class="mt-4 grid gap-3">
+    <article class="rounded-xl border border-brand-100 bg-brand-50 px-3 py-2">
+      <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Amount due now</p>
+      <p class="text-2xl font-semibold text-brand-900">${{ delta() | number:'1.2-2' }}</p>
+      <p class="mt-1 text-xs text-brand-600">
+        New total ${{ newAmountDue() | number:'1.2-2' }} · already paid ${{ currentDeposit() | number:'1.2-2' }}
+      </p>
+    </article>
+
+    <hlm-alert variant="info">
+      Cash, reservation credit, and Card on Stand are supported. For Square link or Cash App QR:
+      cancel, collect the difference via Take Payment first, then come back and swap.
+    </hlm-alert>
+
+    <!-- Method picker -->
+    <div class="grid gap-2 sm:grid-cols-3">
+      <button
+        type="button"
+        hlmToggle variant="outline" class="justify-center text-left"
+        [active]="methodSignal() === 'cash'"
+        (click)="onMethodChange('cash')"
+      >
+        <div class="w-full">
+          <p class="text-xs font-semibold">Cash</p>
+          <p class="text-[11px] text-brand-600">Receipt number required</p>
+        </div>
+      </button>
+      <button
+        type="button"
+        hlmToggle variant="outline" class="justify-center text-left"
+        [active]="methodSignal() === 'credit'"
+        [disabled]="availableCredits.length === 0 && !creditsLoading"
+        (click)="onMethodChange('credit')"
+      >
+        <div class="w-full">
+          <p class="text-xs font-semibold">Reservation credit</p>
+          <p class="text-[11px] text-brand-600">
+            {{ creditsLoading ? 'Loading…' : availableCredits.length === 0 ? 'No credits available' : (availableCredits.length + ' available') }}
+          </p>
+        </div>
+      </button>
+      <button
+        type="button"
+        hlmToggle variant="outline" class="justify-center text-left"
+        [active]="methodSignal() === 'square_stand'"
+        (click)="onMethodChange('square_stand')"
+      >
+        <div class="w-full">
+          <p class="text-xs font-semibold">Card on Stand</p>
+          <p class="text-[11px] text-brand-600">Square POS handoff</p>
+        </div>
+      </button>
+    </div>
+
+    <hlm-alert *ngIf="methodSignal() === 'square_stand'" variant="info">
+      Confirming the swap will drop the reservation to PARTIAL, then Square POS opens for the
+      ${{ delta() | number:'1.2-2' }} difference. On a successful swipe the reservation flips
+      back to PAID + the customer's pass is reissued automatically.
+    </hlm-alert>
+
+    <!-- Cash branch -->
+    <div *ngIf="methodSignal() === 'cash'" class="grid gap-1">
+      <label for="change-table-receipt" class="text-[11px] uppercase tracking-[0.12em] text-brand-500">
+        Receipt number {{ cashReceiptRequired ? '(required)' : '(optional)' }}
+      </label>
+      <input
+        id="change-table-receipt"
+        type="text"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        hlmInput
+        [formControl]="form.controls.receiptNumber"
+        (input)="onReceiptInput()"
+        placeholder="e.g. 1247"
+      />
+      <p
+        *ngIf="submitAttempted() && cashReceiptRequired && !form.controls.receiptNumber.value"
+        class="text-xs text-danger-700"
+      >Receipt number is required for cash payments.</p>
+    </div>
+
+    <!-- Credit branch -->
+    <div *ngIf="methodSignal() === 'credit'" class="grid gap-2">
+      <hlm-alert *ngIf="creditsError as msg" variant="destructive">{{ msg }}</hlm-alert>
+      <p *ngIf="creditsLoading" class="text-xs text-brand-500">Loading credits…</p>
+
+      <div *ngIf="!creditsLoading && availableCredits.length > 0" class="grid gap-1">
+        <label for="change-table-credit" class="text-[11px] uppercase tracking-[0.12em] text-brand-500">
+          Credit to apply
+        </label>
+        <select
+          id="change-table-credit"
+          hlmInput
+          [value]="creditIdSignal()"
+          (change)="onCreditChange($event)"
+        >
+          <option value="" disabled>— Pick a credit —</option>
+          <option *ngFor="let c of availableCredits" [value]="c.creditId">
+            {{ creditOptionLabel(c) }}
+          </option>
+        </select>
+      </div>
+
+      <p
+        *ngIf="selectedCredit() && !creditAffordsDelta()"
+        class="text-xs text-danger-700"
+      >
+        Selected credit has only ${{ selectedCredit()!.amountRemaining | number:'1.2-2' }} remaining
+        — not enough for the ${{ delta() | number:'1.2-2' }} difference.
+      </p>
+    </div>
+
+    <div class="grid gap-1">
+      <label for="change-table-note" class="text-[11px] uppercase tracking-[0.12em] text-brand-500">
+        Note (optional)
+      </label>
+      <input
+        id="change-table-note"
+        type="text"
+        hlmInput
+        [formControl]="form.controls.note"
+        placeholder="Internal note for this payment"
+      />
+    </div>
+
+    <hlm-alert *ngIf="submitError as msg" variant="destructive">{{ msg }}</hlm-alert>
+
+    <div class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-brand-100 pt-3">
+      <button type="button" hlmBtn variant="outline" size="sm" (click)="back()">← Back</button>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" hlmBtn variant="outline" (click)="onClose()">Cancel</button>
+        <button
+          type="button"
+          hlmBtn
+          [disabled]="primaryButtonDisabled()"
+          (click)="onPrimary()"
+        >
+          {{ primaryButtonLabel() }}
+        </button>
+      </div>
+    </div>
+  </div>
+</hlm-dialog>

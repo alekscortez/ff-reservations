@@ -128,6 +128,24 @@
     </article>
 
     <article class="rounded-xl border border-brand-100 p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Tables</p>
+        <button
+          type="button"
+          hlmBtn variant="outline" size="xs"
+          [disabled]="!canChangeTables(reservation)"
+          (click)="changeTables.emit()"
+        >
+          Change Tables
+        </button>
+      </div>
+      <p class="mt-2 text-sm font-medium text-brand-900">{{ reservation | tableLabel }}</p>
+      <p class="mt-1 text-xs text-brand-500" *ngIf="!canChangeTables(reservation)">
+        Table changes are disabled for past events, cancelled, refunded, or courtesy reservations.
+      </p>
+    </article>
+
+    <article class="rounded-xl border border-brand-100 p-3">
       <p class="text-[11px] uppercase tracking-[0.12em] text-brand-500">Audit</p>
       <dl class="mt-2 grid gap-2 text-sm text-brand-800">
         <div class="flex items-center justify-between gap-3">

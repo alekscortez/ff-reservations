@@ -772,11 +772,41 @@ export function createCheckInPassesService({
     return await resultForState("CHECKED_IN", "Check-in successful", consumed);
   }
 
+  // Public revoke surface for callers that need to invalidate active
+  // passes without re-issuing — typically when a swap or status change
+  // drops the reservation below PAID and any existing pass would now
+  // show stale data (e.g. wrong table). Idempotent: each per-pass
+  // revoke swallows ConditionalCheckFailedException.
+  async function revokeActivePassesForReservation(reservationId, revokedBy) {
+    const id = String(reservationId ?? "").trim();
+    if (!id) return { revoked: 0 };
+    const passes = await listReservationPasses(id);
+    const now = nowEpoch();
+    const active = passes.filter((item) => isPassActive(item, now));
+    if (active.length === 0) return { revoked: 0 };
+    const actor = String(revokedBy ?? "").trim() || "system:pass-invalidate";
+    let revoked = 0;
+    for (const item of active) {
+      try {
+        await revokePassItem(item, actor);
+        revoked += 1;
+      } catch (err) {
+        console.warn("revoke_pass_failed", {
+          reservationId: id,
+          passId: String(item?.passId ?? "").trim() || null,
+          message: String(err?.message ?? err ?? ""),
+        });
+      }
+    }
+    return { revoked };
+  }
+
   return {
     issuePassForReservation,
     getActivePassForReservation,
     getLatestPassForReservation,
     getPassPreviewByToken,
     verifyAndConsumePass,
+    revokeActivePassesForReservation,
   };
 }

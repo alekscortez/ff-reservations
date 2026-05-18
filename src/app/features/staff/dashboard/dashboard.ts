@@ -49,8 +49,17 @@ import {
   CashAppTokenizedPayload,
   RecordPaymentPayload,
   SquareLinkRequestPayload,
+  TakePaymentMethod,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
+import {
+  ChangeTableConfirmPayload,
+  ChangeTableModal,
+} from '../../../shared/components/change-table-modal/change-table-modal';
+import type {
+  ChangeTablesPayload,
+  ChangeTablesResponse,
+} from '../../../core/http/reservations.service';
 import {
   consumeJustPaidBeacon,
   subscribeToJustPaid,
@@ -100,6 +109,7 @@ interface ActivityItem {
     HlmPopoverTrigger,
     ReservationDetailModal,
     TakePaymentModal,
+    ChangeTableModal,
   ],
   providers: [provideIcons({ lucideArrowRight, lucideChevronDown })],
   templateUrl: './dashboard.html',
@@ -176,8 +186,19 @@ export class Dashboard implements OnInit, OnDestroy {
   readonly historyByReservationId = signal<Record<string, ReservationHistoryViewItem[]>>({});
   readonly detailItem = signal<ReservationItem | null>(null);
   readonly showDetailsModal = signal(false);
+  readonly changeTableTarget = signal<ReservationItem | null>(null);
+  readonly showChangeTableModal = signal(false);
+  readonly changeTableTables = signal<TableForEvent[]>([]);
+  readonly changeTableTablesLoading = signal(false);
+  readonly changeTableTablesError = signal<string | null>(null);
+  readonly changeTableSubmitting = signal(false);
+  readonly changeTableSubmitError = signal<string | null>(null);
   readonly paymentItem = signal<ReservationItem | null>(null);
   readonly showPaymentModal = signal(false);
+  // Override for take-payment modal's [defaultMethod]. Used by the
+  // change-table deferred-payment flow to chain into the modal with
+  // Card on Stand pre-selected.
+  readonly paymentDefaultMethod = signal<TakePaymentMethod>('cash');
   readonly paymentCredits = signal<RescheduleCredit[]>([]);
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
@@ -594,6 +615,122 @@ export class Dashboard implements OnInit, OnDestroy {
     this.historyError.set(null);
   }
 
+  // Change-tables workflow: dashboard mirrors the Reservations page
+  // wiring. Tables for the reservation's event are loaded lazily; on
+  // success the dashboard's per-event tables snapshot doesn't auto-
+  // refresh (different event date is allowed), but the just-changed
+  // reservation row is patched into recent activity / reservations.
+  openChangeTables(item: ReservationItem): void {
+    this.closeDetails();
+    this.changeTableTarget.set(item);
+    this.showChangeTableModal.set(true);
+    this.changeTableSubmitError.set(null);
+    this.loadTablesForChange(item);
+    this.loadRescheduleCreditsForPayment(item);
+  }
+
+  closeChangeTables(): void {
+    this.showChangeTableModal.set(false);
+    this.changeTableTarget.set(null);
+    this.changeTableTables.set([]);
+    this.changeTableTablesLoading.set(false);
+    this.changeTableTablesError.set(null);
+    this.changeTableSubmitError.set(null);
+    this.changeTableSubmitting.set(false);
+  }
+
+  onConfirmChangeTables(payload: ChangeTableConfirmPayload): void {
+    const target = this.changeTableTarget();
+    if (!target) return;
+    this.changeTableSubmitting.set(true);
+    this.changeTableSubmitError.set(null);
+    const body: ChangeTablesPayload = {
+      reservationId: target.reservationId,
+      eventDate: target.eventDate,
+      newTableIds: payload.newTableIds,
+      newHoldsByTableId: payload.newHoldsByTableId,
+      expectedTablePriceTotal: payload.expectedTablePriceTotal,
+      reason: payload.reason,
+    };
+    if (payload.payment) body.payment = payload.payment;
+    if (payload.deferredPaymentMethod) {
+      body.deferredPaymentMethod = payload.deferredPaymentMethod;
+    }
+    if (payload.overpaymentResolution) {
+      body.overpaymentResolution = payload.overpaymentResolution;
+    }
+    this.reservationsApi.changeTables(body).subscribe({
+      next: (res: ChangeTablesResponse) => {
+        this.changeTableSubmitting.set(false);
+        const updated = res?.reservation as ReservationItem | undefined;
+        if (updated?.reservationId) {
+          // Patch the single-event list if the reservation belongs to
+          // the currently-loaded event. For cross-event activity (Recent
+          // Activity card), patch the by-id map so the next render shows
+          // the new tables.
+          if (updated.eventDate === this.contextEvent()?.eventDate) {
+            this.reservations.update((arr) =>
+              arr.map((r) =>
+                r.reservationId === updated.reservationId
+                  ? { ...r, ...updated }
+                  : r,
+              ),
+            );
+          }
+          this.recentReservationsById.update((map) => ({
+            ...map,
+            [updated.reservationId]: { ...map[updated.reservationId], ...updated },
+          }));
+        }
+        this.closeChangeTables();
+        if (!updated) return;
+        if (res?.deferredPaymentMethod) {
+          // Chain into take-payment modal pre-loaded for the deferred
+          // method so staff can collect the delta in one workflow.
+          this.openUrgentPayment(
+            {
+              reservation: updated,
+              deadlineMs: this.toDeadlineMs(updated.paymentDeadlineAt) ?? 0,
+              urgency: 'DUE_SOON',
+            },
+            { defaultMethod: res.deferredPaymentMethod as TakePaymentMethod },
+          );
+          return;
+        }
+        this.openReservationDetails(updated);
+      },
+      error: (err) => {
+        this.changeTableSubmitting.set(false);
+        this.changeTableSubmitError.set(
+          err?.error?.message ||
+            err?.message ||
+            'Failed to change tables. Refresh and try again.',
+        );
+      },
+    });
+  }
+
+  private loadTablesForChange(item: ReservationItem): void {
+    if (!item?.eventDate) return;
+    this.changeTableTablesLoading.set(true);
+    this.changeTableTablesError.set(null);
+    this.changeTableTables.set([]);
+    this.tablesApi.getForEvent(item.eventDate).subscribe({
+      next: (res) => {
+        this.changeTableTablesLoading.set(false);
+        this.changeTableTables.set(res?.tables ?? []);
+      },
+      error: (err) => {
+        this.changeTableTablesLoading.set(false);
+        this.changeTableTablesError.set(
+          err?.error?.message ||
+            err?.message ||
+            'Failed to load tables for this event.',
+        );
+      },
+    });
+  }
+
   takePaymentFromDetail(item: ReservationItem): void {
     if (!this.canTakePayment(item)) return;
     this.closeDetails();
@@ -604,13 +741,17 @@ export class Dashboard implements OnInit, OnDestroy {
     });
   }
 
-  openUrgentPayment(item: UrgentPaymentItem): void {
+  openUrgentPayment(
+    item: UrgentPaymentItem,
+    opts?: { defaultMethod?: TakePaymentMethod },
+  ): void {
     if (!this.canTakePayment(item.reservation)) return;
     this.paymentError.set(null);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);
     this.cashAppPaymentSuccess.set(false);
     this.paymentItem.set(item.reservation);
+    this.paymentDefaultMethod.set(opts?.defaultMethod ?? 'cash');
     this.showPaymentModal.set(true);
     this.loadRescheduleCreditsForPayment(item.reservation);
   }

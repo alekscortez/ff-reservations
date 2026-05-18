@@ -322,8 +322,25 @@
     (openSmsPass)="openSmsShareCheckInPass(detail)"
     (openWhatsAppPass)="openWhatsAppShareCheckInPass(detail)"
     (sharePass)="shareCheckInPassLink(detail)"
+    (changeTables)="openChangeTables(detail)"
   />
 </ng-container>
+
+<change-table-modal
+  *ngIf="showChangeTableModal() && changeTableTarget() as target"
+  [reservation]="target"
+  [tables]="changeTableTables()"
+  [tablesLoading]="changeTableTablesLoading()"
+  [tablesError]="changeTableTablesError()"
+  [availableCredits]="paymentCredits()"
+  [creditsLoading]="paymentCreditsLoading()"
+  [creditsError]="paymentCreditsError()"
+  [cashReceiptRequired]="cashReceiptNumberRequired()"
+  [submitError]="changeTableSubmitError()"
+  [submitLoading]="changeTableSubmitting()"
+  (confirm)="onConfirmChangeTables($event)"
+  (close)="closeChangeTables()"
+/>
 
 <take-payment-modal
   *ngIf="showPaymentModal() && paymentItem() as payment"
@@ -339,7 +356,7 @@
   [error]="paymentError() || paymentLinkError()"
   [squareLinkLoading]="paymentLinkLoadingId() === payment.reservationId"
   [cashAppSuccess]="cashAppPaymentSuccess()"
-  [defaultMethod]="'cash'"
+  [defaultMethod]="paymentDefaultMethod()"
   (close)="closeUrgentPayment()"
   (recordPayment)="onModalRecordPayment(payment, $event)"
   (requestSquareLink)="onModalRequestSquareLink(payment, $event)"

@@ -25,10 +25,14 @@ import {
   getSortedRowModel,
 } from '@tanstack/angular-table';
 import {
+  ChangeTablesPayload,
+  ChangeTablesResponse,
   ReservationHistoryItem,
   ReservationsService,
 } from '../../../core/http/reservations.service';
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
+import { TablesService } from '../../../core/http/tables.service';
+import { TableForEvent } from '../../../shared/models/table.model';
 import { ReservationItem } from '../../../shared/models/reservation.model';
 import {
   CheckInPassState,
@@ -48,6 +52,7 @@ import {
   CashAppTokenizedPayload,
   RecordPaymentPayload,
   SquareLinkRequestPayload,
+  TakePaymentMethod,
   TakePaymentModal,
 } from '../../../shared/components/take-payment-modal/take-payment-modal';
 import {
@@ -78,6 +83,10 @@ import {
   HlmTr,
 } from '../../../shared/ui/table';
 import { ReservationDetailModal } from '../../../shared/components/reservation-detail-modal/reservation-detail-modal';
+import {
+  ChangeTableConfirmPayload,
+  ChangeTableModal,
+} from '../../../shared/components/change-table-modal/change-table-modal';
 
 
 const PAGE_SIZE = 25;
@@ -110,6 +119,7 @@ const PAGE_SIZE = 25;
     HlmTr,
     ReservationDetailModal,
     TakePaymentModal,
+    ChangeTableModal,
   ],
   providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX })],
   templateUrl: './reservations.html',
@@ -121,6 +131,7 @@ export class Reservations implements OnInit, OnDestroy {
   private eventsApi = inject(EventsService);
   private checkInApi = inject(CheckInService);
   private clientsApi = inject(ClientsService);
+  private tablesApi = inject(TablesService);
 
   filterDate = new FormControl('', { nonNullable: true });
   // Staff lookup by 6-char confirmation code (FF-XXXXXX). Drives the
@@ -275,6 +286,17 @@ export class Reservations implements OnInit, OnDestroy {
   readonly showDetailsModal = signal(false);
   readonly paymentItem = signal<ReservationItem | null>(null);
   readonly showPaymentModal = signal(false);
+  // Override for the take-payment modal's [defaultMethod] input. Lets
+  // the change-table deferred-payment flow chain into the modal with
+  // Card on Stand pre-selected (instead of the page-wide default).
+  readonly paymentDefaultMethod = signal<TakePaymentMethod>('square');
+  readonly changeTableTarget = signal<ReservationItem | null>(null);
+  readonly showChangeTableModal = signal(false);
+  readonly changeTableTables = signal<TableForEvent[]>([]);
+  readonly changeTableTablesLoading = signal(false);
+  readonly changeTableTablesError = signal<string | null>(null);
+  readonly changeTableSubmitting = signal(false);
+  readonly changeTableSubmitError = signal<string | null>(null);
   readonly paymentCredits = signal<RescheduleCredit[]>([]);
   readonly paymentCreditsLoading = signal(false);
   readonly paymentCreditsError = signal<string | null>(null);
@@ -691,6 +713,116 @@ export class Reservations implements OnInit, OnDestroy {
     this.historyError.set(null);
   }
 
+  // Change-tables workflow: parent owns the table list + service call;
+  // the modal owns the picker UI, hold lifecycle, and price-delta math.
+  openChangeTables(item: ReservationItem): void {
+    this.closeDetails();
+    this.changeTableTarget.set(item);
+    this.showChangeTableModal.set(true);
+    this.changeTableSubmitError.set(null);
+    this.syncSidebarModalLock();
+    this.loadTablesForChange(item);
+    // Reuse the existing payment-credits loader so the change-table
+    // modal can offer 'Apply credit' when delta > 0 without a second
+    // request shape.
+    this.loadRescheduleCreditsForPayment(item);
+  }
+
+  closeChangeTables(): void {
+    this.showChangeTableModal.set(false);
+    this.changeTableTarget.set(null);
+    this.changeTableTables.set([]);
+    this.changeTableTablesLoading.set(false);
+    this.changeTableTablesError.set(null);
+    this.changeTableSubmitError.set(null);
+    this.changeTableSubmitting.set(false);
+    this.syncSidebarModalLock();
+  }
+
+  onConfirmChangeTables(payload: ChangeTableConfirmPayload): void {
+    const target = this.changeTableTarget();
+    if (!target) return;
+    this.changeTableSubmitting.set(true);
+    this.changeTableSubmitError.set(null);
+    const body: ChangeTablesPayload = {
+      reservationId: target.reservationId,
+      eventDate: target.eventDate,
+      newTableIds: payload.newTableIds,
+      newHoldsByTableId: payload.newHoldsByTableId,
+      expectedTablePriceTotal: payload.expectedTablePriceTotal,
+      reason: payload.reason,
+    };
+    if (payload.payment) body.payment = payload.payment;
+    if (payload.deferredPaymentMethod) {
+      body.deferredPaymentMethod = payload.deferredPaymentMethod;
+    }
+    if (payload.overpaymentResolution) {
+      body.overpaymentResolution = payload.overpaymentResolution;
+    }
+    this.reservationsApi.changeTables(body).subscribe({
+      next: (res: ChangeTablesResponse) => {
+        this.changeTableSubmitting.set(false);
+        const updated = res?.reservation;
+        if (updated?.reservationId) {
+          // Merge the new row into the in-memory list so the table + sort
+          // refresh immediately without a round-trip to GET /reservations.
+          this.items.update((arr) =>
+            arr.map((r) =>
+              r.reservationId === updated.reservationId
+                ? { ...r, ...updated }
+                : r,
+            ),
+          );
+        }
+        this.closeChangeTables();
+        if (!updated) return;
+        // Deferred-payment branch: backend committed the swap but the
+        // reservation is now PARTIAL. Chain into the take-payment modal
+        // pre-loaded for the chosen method so staff can collect the
+        // delta in one continuous workflow.
+        if (res?.deferredPaymentMethod) {
+          this.openPayment(updated as ReservationItem, {
+            defaultMethod: res.deferredPaymentMethod as TakePaymentMethod,
+          });
+          return;
+        }
+        // Bundled-payment / no-delta branch: re-open the detail modal
+        // showing the freshly-updated reservation so staff see the new
+        // tables + Activity entry without re-clicking.
+        this.openDetails(updated as ReservationItem);
+      },
+      error: (err) => {
+        this.changeTableSubmitting.set(false);
+        this.changeTableSubmitError.set(
+          err?.error?.message ||
+            err?.message ||
+            'Failed to change tables. Refresh and try again.',
+        );
+      },
+    });
+  }
+
+  private loadTablesForChange(item: ReservationItem): void {
+    if (!item?.eventDate) return;
+    this.changeTableTablesLoading.set(true);
+    this.changeTableTablesError.set(null);
+    this.changeTableTables.set([]);
+    this.tablesApi.getForEvent(item.eventDate).subscribe({
+      next: (res) => {
+        this.changeTableTablesLoading.set(false);
+        this.changeTableTables.set(res?.tables ?? []);
+      },
+      error: (err) => {
+        this.changeTableTablesLoading.set(false);
+        this.changeTableTablesError.set(
+          err?.error?.message ||
+            err?.message ||
+            'Failed to load tables for this event.',
+        );
+      },
+    });
+  }
+
   // Resolve a staff-typed confirmation code to a reservation. Strips
   // a "FF-" prefix and uppercases before sending — backend also handles
   // both shapes but we mirror its parsing client-side for the inline
@@ -930,8 +1062,9 @@ export class Reservations implements OnInit, OnDestroy {
     this.openPayment(item);
   }
 
-  openPayment(item: ReservationItem): void {
+  openPayment(item: ReservationItem, opts?: { defaultMethod?: TakePaymentMethod }): void {
     this.paymentItem.set(item);
+    this.paymentDefaultMethod.set(opts?.defaultMethod ?? 'square');
     this.showPaymentModal.set(true);
     this.paymentLinkError.set(null);
     this.paymentLinkNotice.set(null);

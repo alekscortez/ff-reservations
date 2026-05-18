@@ -160,6 +160,94 @@ export type CancellationResolutionType =
   | 'RESCHEDULE_CREDIT'
   | 'REFUND';
 
+// PUT /reservations/{id}/tables — change the table set on an existing
+// reservation. The backend handles the atomic swap (release old RESERVED,
+// upgrade new HOLD->RESERVED, update the reservation row) and any bundled
+// payment / overpayment resolution as a single TransactWrite. See
+// backend/lambda/lib/services-reservations-table-change.mjs for the
+// state machine and edge cases.
+// PUT (not PATCH) for consistency with /cancel and /payment, and because
+// the API GW CORS allowlist doesn't include PATCH on shared infra.
+export interface ChangeTablesPayload {
+  reservationId: string;
+  eventDate: string;
+  // Full desired final set of table IDs (1..10).
+  newTableIds: string[];
+  // holdId per *added* table only (kept tables stay RESERVED untouched).
+  // Caller must create each hold via HoldsService.createHold first.
+  newHoldsByTableId: Record<string, string>;
+  // Sum of the new table prices as the FE sees them. Backend re-derives
+  // from the event and 409s on mismatch (stale UI guard).
+  expectedTablePriceTotal: number;
+  reason: string;
+  // For delta > 0: pick exactly ONE of `payment` (bundled instant
+  // settlement) or `deferredPaymentMethod` (collect async after swap
+  // commits). Backend rejects with 400 if both are set, or if either
+  // is set for delta <= 0.
+  payment?: {
+    method: 'cash' | 'credit';
+    amount: number;
+    creditId?: string;
+    receiptNumber?: string;
+    note?: string;
+  };
+  // When set, the swap commits without a bundled payment. Reservation
+  // drops to PARTIAL; the FE chains into the take-payment modal pre-
+  // loaded with this method + amount = delta. Used for methods that
+  // need an async settlement loop: Card on Stand (URL handoff to the
+  // Square POS app), Square hosted-checkout link via SMS, or Cash App
+  // QR scan via Web Payments SDK.
+  deferredPaymentMethod?: 'square_stand' | 'square' | 'cashapp';
+  // Required when the new total < current. Picks how to resolve any
+  // surplus (deposit > new amountDue): CREDIT issues a reschedule credit,
+  // REFUND issues a partial Square refund, LEAVE just logs it.
+  overpaymentResolution?: 'CREDIT' | 'REFUND' | 'LEAVE';
+}
+
+export interface ChangeTablesResponse {
+  reservation: ReservationItem & { idempotentReplay?: boolean };
+  delta: number;
+  newAmountDue: number;
+  newTablePrice: number;
+  newTablePrices: number[];
+  payment: {
+    paymentId?: string;
+    amount: number;
+    method: 'cash' | 'credit';
+    receiptNumber: string | null;
+    source: string;
+    note: string | null;
+    credit: { creditId: string | null } | null;
+    createdAt?: number;
+    createdBy?: string;
+  } | null;
+  overpayment: {
+    surplus: number;
+    resolution: 'CREDIT' | 'REFUND' | 'LEAVE';
+    credit: {
+      creditId: string;
+      amountTotal: number;
+      amountRemaining: number;
+      expiresAt: string;
+    } | null;
+    refund: {
+      providerPaymentId: string;
+      amount: number;
+      refundId: string | null;
+      refundStatus: string | null;
+      idempotencyKey: string;
+    } | null;
+  } | null;
+  idempotentReplay?: boolean;
+  // Echoed back when the swap took the deferred-payment branch. null
+  // when bundled-payment path was used. FE uses this to decide
+  // whether to chain into the take-payment modal post-swap.
+  deferredPaymentMethod?: 'square_stand' | 'square' | 'cashapp' | null;
+  // Reissued check-in pass on the non-deferred PAID path (or null on
+  // the deferred path / when reservation isn't PAID).
+  reissuedPass?: { passId: string; url: string } | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ReservationsService {
   private api = inject(ApiClient);
@@ -317,5 +405,28 @@ export class ReservationsService {
     return this.api
       .get<{ items: ReservationHistoryItem[] }>(`/reservations/${reservationId}/history`, { eventDate })
       .pipe(map((res) => res.items ?? []));
+  }
+
+  changeTables(payload: ChangeTablesPayload) {
+    // Body intentionally omits reservationId (it's in the path). Backend
+    // accepts both for back-compat but we keep the wire format minimal.
+    const body: Record<string, unknown> = {
+      eventDate: payload.eventDate,
+      newTableIds: payload.newTableIds,
+      newHoldsByTableId: payload.newHoldsByTableId,
+      expectedTablePriceTotal: payload.expectedTablePriceTotal,
+      reason: payload.reason,
+    };
+    if (payload.payment) body['payment'] = payload.payment;
+    if (payload.deferredPaymentMethod) {
+      body['deferredPaymentMethod'] = payload.deferredPaymentMethod;
+    }
+    if (payload.overpaymentResolution) {
+      body['overpaymentResolution'] = payload.overpaymentResolution;
+    }
+    return this.api.put<ChangeTablesResponse>(
+      `/reservations/${payload.reservationId}/tables`,
+      body,
+    );
   }
 }

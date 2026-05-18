@@ -193,4 +193,90 @@ describe('ReservationsService', () => {
     const { svc } = setup({ 'GET /reservations/r1/history': {} });
     expect(await firstValueFrom(svc.listHistory('r1', '2026-05-09'))).toEqual([]);
   });
+
+  it('changeTables: PUT /reservations/:id/tables with full payload (delta>0 cash)', async () => {
+    const { svc, calls } = setup({
+      'PUT /reservations/r1/tables': {
+        reservation: { reservationId: 'r1', tableIds: ['T2'] },
+        delta: 100,
+        newAmountDue: 200,
+      },
+    });
+    await firstValueFrom(
+      svc.changeTables({
+        reservationId: 'r1',
+        eventDate: '2026-05-09',
+        newTableIds: ['T2'],
+        newHoldsByTableId: { T2: 'h-T2' },
+        expectedTablePriceTotal: 200,
+        reason: 'Upgrade',
+        payment: { method: 'cash', amount: 100, receiptNumber: '1247' },
+      }),
+    );
+    expect(calls[0]).toEqual({
+      method: 'PUT',
+      path: '/reservations/r1/tables',
+      body: {
+        eventDate: '2026-05-09',
+        newTableIds: ['T2'],
+        newHoldsByTableId: { T2: 'h-T2' },
+        expectedTablePriceTotal: 200,
+        reason: 'Upgrade',
+        payment: { method: 'cash', amount: 100, receiptNumber: '1247' },
+      },
+    });
+  });
+
+  it('changeTables: omits payment + overpaymentResolution from body when undefined (delta=0)', async () => {
+    const { svc, calls } = setup();
+    await firstValueFrom(
+      svc.changeTables({
+        reservationId: 'r1',
+        eventDate: '2026-05-09',
+        newTableIds: ['T2', 'T3'],
+        newHoldsByTableId: { T2: 'h-T2', T3: 'h-T3' },
+        expectedTablePriceTotal: 100,
+        reason: 'Same total swap',
+      }),
+    );
+    const body = (calls[0] as Call).body as Record<string, unknown>;
+    expect('payment' in body).toBe(false);
+    expect('overpaymentResolution' in body).toBe(false);
+  });
+
+  it('changeTables: includes deferredPaymentMethod for delta>0 deferred', async () => {
+    const { svc, calls } = setup();
+    await firstValueFrom(
+      svc.changeTables({
+        reservationId: 'r1',
+        eventDate: '2026-05-09',
+        newTableIds: ['T2'],
+        newHoldsByTableId: { T2: 'h-T2' },
+        expectedTablePriceTotal: 200,
+        reason: 'Upgrade via Stand',
+        deferredPaymentMethod: 'square_stand',
+      }),
+    );
+    const body = (calls[0] as Call).body as Record<string, unknown>;
+    expect(body['deferredPaymentMethod']).toBe('square_stand');
+    expect('payment' in body).toBe(false);
+  });
+
+  it('changeTables: includes overpaymentResolution for delta<0', async () => {
+    const { svc, calls } = setup();
+    await firstValueFrom(
+      svc.changeTables({
+        reservationId: 'r1',
+        eventDate: '2026-05-09',
+        newTableIds: ['T1'],
+        newHoldsByTableId: { T1: 'h-T1' },
+        expectedTablePriceTotal: 100,
+        reason: 'Downgrade',
+        overpaymentResolution: 'CREDIT',
+      }),
+    );
+    const body = (calls[0] as Call).body as Record<string, unknown>;
+    expect(body['overpaymentResolution']).toBe('CREDIT');
+    expect('payment' in body).toBe(false);
+  });
 });

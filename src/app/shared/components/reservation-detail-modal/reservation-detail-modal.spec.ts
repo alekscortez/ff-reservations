@@ -51,6 +51,7 @@ function makeReservation(overrides: Partial<ReservationItem> = {}): ReservationI
       (copyLink)="onCopyLink()"
       (reissuePass)="onReissuePass()"
       (cancel)="onCancel()"
+      (changeTables)="onChangeTables()"
     />
   `,
 })
@@ -73,6 +74,7 @@ class Host {
   copyLinkCount = 0;
   reissuePassCount = 0;
   cancelCount = 0;
+  changeTablesCount = 0;
 
   onClose() { this.closeCount += 1; }
   onTakePayment() { this.takePaymentCount += 1; }
@@ -81,6 +83,7 @@ class Host {
   onCopyLink() { this.copyLinkCount += 1; }
   onReissuePass() { this.reissuePassCount += 1; }
   onCancel() { this.cancelCount += 1; }
+  onChangeTables() { this.changeTablesCount += 1; }
 }
 
 function createHost(initial?: Partial<Host>) {
@@ -252,6 +255,68 @@ describe('ReservationDetailModal', () => {
     tabButton(f, 'Activity')!.click();
     f.detectChanges();
     expect((f.nativeElement.textContent ?? '')).toContain('No history yet for this reservation');
+  });
+
+  it('Tables card renders on Overview with "Change Tables" button enabled for future CONFIRMED', () => {
+    const f = createHost();
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const changeBtn = buttons.find(
+      (b) => (b.textContent ?? '').trim() === 'Change Tables',
+    );
+    expect(changeBtn).toBeTruthy();
+    expect(changeBtn!.disabled).toBe(false);
+  });
+
+  it('"Change Tables" emits changeTables output when clicked', () => {
+    const f = createHost();
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const changeBtn = buttons.find(
+      (b) => (b.textContent ?? '').trim() === 'Change Tables',
+    );
+    expect(changeBtn).toBeTruthy();
+    changeBtn!.click();
+    expect(f.componentInstance.changeTablesCount).toBe(1);
+  });
+
+  it('"Change Tables" is disabled for past events', () => {
+    const f = createHost({
+      reservation: makeReservation({ eventDate: '2000-01-01' }),
+    });
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const changeBtn = buttons.find(
+      (b) => (b.textContent ?? '').trim() === 'Change Tables',
+    );
+    expect(changeBtn).toBeTruthy();
+    expect(changeBtn!.disabled).toBe(true);
+  });
+
+  function expectChangeTablesDisabled(reservation: ReservationItem): void {
+    const f = createHost({ reservation });
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button[hlmBtn]'),
+    ) as HTMLButtonElement[];
+    const changeBtn = buttons.find(
+      (b) => (b.textContent ?? '').trim() === 'Change Tables',
+    );
+    expect(changeBtn!.disabled).toBe(true);
+  }
+
+  it('"Change Tables" is disabled for COURTESY reservations', () => {
+    expectChangeTablesDisabled(makeReservation({ paymentStatus: 'COURTESY' }));
+  });
+
+  it('"Change Tables" is disabled for REFUNDED reservations', () => {
+    expectChangeTablesDisabled(makeReservation({ paymentStatus: 'REFUNDED' }));
+  });
+
+  it('"Change Tables" is disabled for CANCELLED reservations', () => {
+    expectChangeTablesDisabled(makeReservation({ status: 'CANCELLED' }));
   });
 
   it('history tab renders rows when history has items', () => {

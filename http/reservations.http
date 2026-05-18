@@ -150,3 +150,122 @@ Content-Type: application/json
 ###
 GET {{baseUrl}}/reservations/8b6fbbb5-82dc-42a7-853b-f335cbfe4409/history?eventDate=2026-02-21
 Authorization: Bearer {{accessToken}}
+
+###
+
+### Change reservation tables -- delta = 0 (swap to same-price set)
+### Preconditions: create a HOLD on each "added" table first via holds.http.
+### newHoldsByTableId only needs entries for tables NOT already on the reservation.
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["C108", "C109"],
+  "newHoldsByTableId": {
+    "C109": "REPLACE_WITH_HOLD_ID_FOR_C109"
+  },
+  "expectedTablePriceTotal": 200,
+  "reason": "Customer requested second table"
+}
+
+###
+
+### Change reservation tables -- delta > 0 (cost increases, collect delta cash)
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["E113"],
+  "newHoldsByTableId": {
+    "E113": "REPLACE_WITH_HOLD_ID_FOR_E113"
+  },
+  "expectedTablePriceTotal": 250,
+  "reason": "Upgrade to E113",
+  "payment": {
+    "method": "cash",
+    "amount": 50,
+    "receiptNumber": "1247",
+    "note": "Delta for table upgrade"
+  }
+}
+
+###
+
+### Change reservation tables -- delta > 0 (cost increases, redeem reschedule credit)
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["E113"],
+  "newHoldsByTableId": {
+    "E113": "REPLACE_WITH_HOLD_ID_FOR_E113"
+  },
+  "expectedTablePriceTotal": 250,
+  "reason": "Upgrade to E113 paid with credit",
+  "payment": {
+    "method": "credit",
+    "amount": 50,
+    "creditId": "8624b71c-50fd-4d4b-8be9-903d0a3d9681",
+    "note": "Delta paid from reschedule credit"
+  }
+}
+
+###
+
+### Change reservation tables -- delta < 0 + CREDIT (default for downgrades)
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["C108"],
+  "newHoldsByTableId": {
+    "C108": "REPLACE_WITH_HOLD_ID_FOR_C108"
+  },
+  "expectedTablePriceTotal": 100,
+  "reason": "Customer downgrade",
+  "overpaymentResolution": "CREDIT"
+}
+
+###
+
+### Change reservation tables -- delta < 0 + REFUND (only when a Square payment exists)
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["C108"],
+  "newHoldsByTableId": {
+    "C108": "REPLACE_WITH_HOLD_ID_FOR_C108"
+  },
+  "expectedTablePriceTotal": 100,
+  "reason": "Customer wants refund on downgrade",
+  "overpaymentResolution": "REFUND"
+}
+
+###
+
+### Change reservation tables -- delta < 0 + LEAVE (log overpayment, no money moves)
+PUT {{baseUrl}}/reservations/{{reservationId}}/tables
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "newTableIds": ["C108"],
+  "newHoldsByTableId": {
+    "C108": "REPLACE_WITH_HOLD_ID_FOR_C108"
+  },
+  "expectedTablePriceTotal": 100,
+  "reason": "Comp the difference, handle manually later",
+  "overpaymentResolution": "LEAVE"
+}

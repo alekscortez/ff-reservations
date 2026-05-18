@@ -26,6 +26,7 @@ import { createReservationsShared } from "./services-reservations-shared.mjs";
 import { createPaymentRecordingService } from "./services-payment-recording.mjs";
 import { createReservationsService } from "./services-reservations.mjs";
 import { createHoldsService } from "./services-holds.mjs";
+import { createReservationsTableChangeService } from "./services-reservations-table-change.mjs";
 
 export function createReservationsHoldsService(deps) {
   const shared = createReservationsShared(deps);
@@ -35,6 +36,11 @@ export function createReservationsHoldsService(deps) {
     releaseOverdueReservationsForEventDate:
       reservations.releaseOverdueReservationsForEventDate,
   });
+  const tableChange = createReservationsTableChangeService(
+    deps,
+    shared,
+    paymentRecording
+  );
 
   return {
     // hold lifecycle
@@ -55,6 +61,7 @@ export function createReservationsHoldsService(deps) {
     cancelReservation: reservations.cancelReservation,
     createReservation: reservations.createReservation,
     rescheduleReservationForCustomer: reservations.rescheduleReservationForCustomer,
+    changeReservationTables: tableChange.changeReservationTables,
     // payment recording + payment-link state
     addReservationPayment: paymentRecording.addReservationPayment,
     setReservationPaymentLinkWindow:

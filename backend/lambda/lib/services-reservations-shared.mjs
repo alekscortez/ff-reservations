@@ -272,21 +272,28 @@ export function createReservationsShared({
     }
   }
 
-  async function tryEnsureCheckInPass(reservation, user) {
+  async function tryEnsureCheckInPass(reservation, user, options = {}) {
     if (typeof ensureCheckInPassForReservation !== "function") return null;
     if (!reservation) return null;
     if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") return null;
     if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") return null;
+    // `reissue:true` forces a fresh pass id + token, revoking the old one.
+    // Use this when the displayed pass content changed (table swap, customer
+    // name correction, etc.) so the QR + wallet pass no longer show stale
+    // data. The default `reissue:false` is the idempotent "ensure exists"
+    // path used at creation / first PAID transition.
+    const reissue = Boolean(options?.reissue);
     try {
       return await ensureCheckInPassForReservation({
         reservation,
         issuedBy: user,
-        reissue: false,
+        reissue,
       });
     } catch (err) {
       console.error("Check-in pass issuance failed", {
         reservationId: String(reservation?.reservationId ?? "").trim() || null,
         eventDate: String(reservation?.eventDate ?? "").trim() || null,
+        reissue,
         message: String(err?.message ?? err ?? ""),
       });
       return null;

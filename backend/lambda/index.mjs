@@ -619,6 +619,12 @@ const reservationsHoldsService = createReservationsHoldsService({
   getDisabledTablesFromFrequent: clientsService.getDisabledTablesFromFrequent,
   getTablePriceForEvent,
   ensureCheckInPassForReservation: checkInPassesService.issuePassForReservation,
+  // Used by the table-change service on the deferred-payment path
+  // (delta > 0 + Card on Stand / Square link / Cash App). When the
+  // swap drops status to PARTIAL, any existing pass shows stale tables
+  // and must be invalidated.
+  revokeActivePassesForReservation:
+    checkInPassesService.revokeActivePassesForReservation,
   deactivateSquarePaymentLink: squarePaymentsService.deactivatePaymentLink,
   refundSquarePayment: squarePaymentsService.refundPayment,
   sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
@@ -992,6 +998,7 @@ export const handler = async (event) => {
       refundSquarePayment: squarePaymentsService.refundPayment,
       sendPaymentLinkSms: smsNotificationsService.sendPaymentLinkSms,
       cancelReservation: reservationsHoldsService.cancelReservation,
+      changeReservationTables: reservationsHoldsService.changeReservationTables,
       getRuntimeSettingsSubset: async () =>
         settingsService.runtimeSettingsSubset(await settingsService.getAppSettings()),
       getEventByDate: eventsService.getEventByDate,
