@@ -501,7 +501,7 @@
     <div class="min-w-0">
       <h3 class="text-lg font-semibold text-brand-900">Payment links — {{ target.name }}</h3>
       <p class="mt-1 text-sm text-brand-600">
-        Share or extend deadlines on this guest's upcoming bookings.
+        Share links, push deadlines, or add tables to this guest's upcoming bookings.
       </p>
     </div>
     <button
@@ -570,6 +570,13 @@
       </div>
 
       <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          hlmBtn variant="outline" size="sm"
+          (click)="manageReservation(link)"
+        >
+          Manage reservation
+        </button>
         <button
           *ngIf="link.paymentLinkUrl"
           type="button"

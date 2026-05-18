@@ -11,6 +11,7 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
   lucideChevronDown,
@@ -124,6 +125,7 @@ export class FrequentClients implements OnInit {
   private tablesApi = inject(TablesService);
   private settingsApi = inject(SettingsService);
   private destroyRef = inject(DestroyRef);
+  private router = inject(Router);
 
   readonly items = signal<FrequentClient[]>([]);
   readonly loading = signal(false);
@@ -825,6 +827,20 @@ export class FrequentClients implements OnInit {
           this.setRowMutating(reservationId, false);
         },
       });
+  }
+
+  // Deep-link to the staff Reservations page with the detail modal
+  // auto-opened on this row. From there staff uses the existing Change
+  // Tables flow (Overview tab → "Change Tables") to add a table, swap a
+  // table, or downgrade — that path already collects the delta, deactivates
+  // the old payment link, and re-issues the pass. Reservations page reads
+  // ?date= + ?open= via ActivatedRoute on init.
+  manageReservation(link: FrequentClientActiveLink): void {
+    if (!link?.eventDate || !link?.reservationId) return;
+    this.closeLinks();
+    this.router.navigate(['/staff/reservations'], {
+      queryParams: { date: link.eventDate, open: link.reservationId },
+    });
   }
 
   tableLabelFor(link: FrequentClientActiveLink): string {

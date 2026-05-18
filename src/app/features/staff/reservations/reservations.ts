@@ -11,6 +11,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
 import { NgIcon, provideIcons } from '@ng-icons/core';
 import { lucideChevronDown, lucideEllipsis, lucideRefreshCw, lucideX } from '@ng-icons/lucide';
 import {
@@ -132,6 +133,14 @@ export class Reservations implements OnInit, OnDestroy {
   private checkInApi = inject(CheckInService);
   private clientsApi = inject(ClientsService);
   private tablesApi = inject(TablesService);
+  private route = inject(ActivatedRoute);
+
+  // One-shot: if /staff/reservations was deep-linked with ?open=<id>, the
+  // load() callback opens the detail modal for that reservation once the
+  // list arrives. Cleared after the first match so refreshes or filter
+  // changes don't keep re-opening it. Set in ngOnInit from the query
+  // param map; consumed in load().subscribe.next.
+  private pendingOpenReservationId: string | null = null;
 
   filterDate = new FormControl('', { nonNullable: true });
   // Staff lookup by 6-char confirmation code (FF-XXXXXX). Drives the
@@ -330,6 +339,24 @@ export class Reservations implements OnInit, OnDestroy {
   private standJustPaidUnsub: (() => void) | null = null;
 
   ngOnInit(): void {
+    // Deep-link from /admin/frequent-clients → Payment links → Manage
+    // reservation. Setting filterDate here pre-empts autoSelectCurrentWeek
+    // Event (which bails when filterDate is already set), so the loaded
+    // page lands directly on the linked event. The reservationId is
+    // stashed in `pendingOpenReservationId` and consumed when load()
+    // finishes — at that point we know the row is in `items()` and can
+    // openDetails() it. One-shot: any later refresh / filter change does
+    // NOT re-open the modal.
+    const qp = this.route.snapshot.queryParamMap;
+    const linkDate = String(qp.get('date') ?? '').trim();
+    const linkOpen = String(qp.get('open') ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(linkDate)) {
+      this.filterDate.setValue(linkDate);
+      this.load();
+    }
+    if (linkOpen) {
+      this.pendingOpenReservationId = linkOpen;
+    }
     this.loadContextAndEvents();
     this.consumeStandJustPaidBeacon();
     // Cross-tab signal: if the user is sitting on this page and a Stand
@@ -501,6 +528,7 @@ export class Reservations implements OnInit, OnDestroy {
         this.pagination.update((s) => ({ ...s, pageIndex: 0 }));
         this.hydrateStoredPaymentLinks(next);
         this.loading.set(false);
+        this.consumePendingDeepLink(next);
       },
       error: (err) => {
         this.error.set(err?.error?.message || err?.message || 'Failed to load reservations');
@@ -700,6 +728,15 @@ export class Reservations implements OnInit, OnDestroy {
     this.checkInPassNotice.set(null);
     this.loadCheckInPass(item);
     this.loadHistory(item);
+  }
+
+  private consumePendingDeepLink(items: ReservationItem[]): void {
+    const targetId = this.pendingOpenReservationId;
+    if (!targetId) return;
+    const match = items.find((r) => r.reservationId === targetId);
+    if (!match) return;
+    this.pendingOpenReservationId = null;
+    this.openDetails(match);
   }
 
   closeDetails(): void {
