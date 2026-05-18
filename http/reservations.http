@@ -269,3 +269,20 @@ Content-Type: application/json
   "reason": "Comp the difference, handle manually later",
   "overpaymentResolution": "LEAVE"
 }
+
+###
+
+### Extend a reservation's payment deadline (Staff/Admin)
+### Only mutates CONFIRMED + (PENDING|PARTIAL) rows. paymentLinkExpiresAt
+### bumps in lockstep if a Square link is currently ACTIVE. Past times → 400.
+### Concurrent state change → 409. Used by /admin/frequent-clients →
+### Payment links → "Extend deadline".
+PUT {{baseUrl}}/reservations/{{reservationId}}/payment-deadline
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "eventDate": "2026-02-21",
+  "paymentDeadlineAt": "2026-02-22T03:00:00",
+  "paymentDeadlineTz": "America/Chicago"
+}

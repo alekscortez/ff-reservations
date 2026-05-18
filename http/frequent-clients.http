@@ -62,3 +62,11 @@ Content-Type: application/json
 ### Delete frequent client (Admin)
 DELETE {{baseUrl}}/frequent-clients/{{frequentClientId}}
 Authorization: Bearer {{accessToken}}
+
+###
+
+### List a frequent client's upcoming reservations with Square link state (Staff/Admin)
+### Fans out across ACTIVE upcoming events; one row per FREQUENT_AUTO reservation.
+### Powers /admin/frequent-clients → Payment links panel.
+GET {{baseUrl}}/frequent-clients/{{frequentClientId}}/active-links
+Authorization: Bearer {{accessToken}}
