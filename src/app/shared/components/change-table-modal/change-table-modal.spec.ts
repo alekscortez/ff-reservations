@@ -298,6 +298,41 @@ describe('ChangeTableModal — delta > 0 deferred (Card on Stand)', () => {
     expect(m.primaryButtonLabel()).toContain('Card on Stand');
     expect(m.primaryButtonLabel()).toContain('$100.00');
   });
+
+  it('square link: emits deferredPaymentMethod=square + button label', () => {
+    const f = createHost();
+    const m = getModal(f);
+    m.onTableSelect(tablesFixture()[1]); // +T2
+    m.onTableSelect(tablesFixture()[0]); // -T1
+    m.form.controls.reason.setValue('Customer will pay remotely');
+    m.onPrimary();
+    m.onMethodChange('square');
+    expect(m.primaryButtonDisabled()).toBe(false);
+    expect(m.primaryButtonLabel()).toContain('Square link');
+    expect(m.primaryButtonLabel()).toContain('$100.00');
+    m.onPrimary();
+    const out = f.componentInstance.lastConfirm;
+    expect(out).toBeTruthy();
+    expect(out!.payment).toBeUndefined();
+    expect(out!.deferredPaymentMethod).toBe('square');
+  });
+
+  it('cash app: emits deferredPaymentMethod=cashapp + button label', () => {
+    const f = createHost();
+    const m = getModal(f);
+    m.onTableSelect(tablesFixture()[1]);
+    m.onTableSelect(tablesFixture()[0]);
+    m.form.controls.reason.setValue('Customer scanning Cash App');
+    m.onPrimary();
+    m.onMethodChange('cashapp');
+    expect(m.primaryButtonDisabled()).toBe(false);
+    expect(m.primaryButtonLabel()).toContain('Cash App QR');
+    m.onPrimary();
+    const out = f.componentInstance.lastConfirm;
+    expect(out).toBeTruthy();
+    expect(out!.payment).toBeUndefined();
+    expect(out!.deferredPaymentMethod).toBe('cashapp');
+  });
 });
 
 describe('ChangeTableModal — delta = 0', () => {

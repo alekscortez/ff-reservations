@@ -181,13 +181,8 @@
       </p>
     </article>
 
-    <hlm-alert variant="info">
-      Cash, reservation credit, and Card on Stand are supported. For Square link or Cash App QR:
-      cancel, collect the difference via Take Payment first, then come back and swap.
-    </hlm-alert>
-
     <!-- Method picker -->
-    <div class="grid gap-2 sm:grid-cols-3">
+    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
       <button
         type="button"
         hlmToggle variant="outline" class="justify-center text-left"
@@ -224,12 +219,48 @@
           <p class="text-[11px] text-brand-600">Square POS handoff</p>
         </div>
       </button>
+      <button
+        type="button"
+        hlmToggle variant="outline" class="justify-center text-left"
+        [active]="methodSignal() === 'square'"
+        (click)="onMethodChange('square')"
+      >
+        <div class="w-full">
+          <p class="text-xs font-semibold">Square link</p>
+          <p class="text-[11px] text-brand-600">Send to customer</p>
+        </div>
+      </button>
+      <button
+        type="button"
+        hlmToggle variant="outline" class="justify-center text-left"
+        [active]="methodSignal() === 'cashapp'"
+        (click)="onMethodChange('cashapp')"
+      >
+        <div class="w-full">
+          <p class="text-xs font-semibold">Cash App Pay</p>
+          <p class="text-[11px] text-brand-600">In-venue QR</p>
+        </div>
+      </button>
     </div>
 
     <hlm-alert *ngIf="methodSignal() === 'square_stand'" variant="info">
       Confirming the swap will drop the reservation to PARTIAL, then Square POS opens for the
       ${{ delta() | number:'1.2-2' }} difference. On a successful swipe the reservation flips
       back to PAID + the customer's pass is reissued automatically.
+    </hlm-alert>
+
+    <hlm-alert *ngIf="methodSignal() === 'square'" variant="info">
+      Confirming the swap will drop the reservation to PARTIAL and open the Take Payment flow
+      pre-loaded with Square link. From there generate the link for the ${{ delta() | number:'1.2-2' }}
+      difference and share it with the customer. The reservation flips back to PAID + the pass
+      is reissued when they pay.
+    </hlm-alert>
+
+    <hlm-alert *ngIf="methodSignal() === 'cashapp'" variant="info">
+      Confirming the swap will drop the reservation to PARTIAL and open the Take Payment flow
+      pre-loaded with Cash App. Show the customer the QR code on this iPad for the
+      ${{ delta() | number:'1.2-2' }} difference. The reservation flips back to PAID + the pass
+      is reissued automatically on tokenization.
     </hlm-alert>
 
     <!-- Cash branch -->

@@ -487,6 +487,12 @@ export class ChangeTableModal implements OnChanges, OnDestroy {
     if (this.methodSignal() === 'square_stand') {
       return `Confirm swap → Card on Stand ($${delta.toFixed(2)})`;
     }
+    if (this.methodSignal() === 'square') {
+      return `Confirm swap → Square link ($${delta.toFixed(2)})`;
+    }
+    if (this.methodSignal() === 'cashapp') {
+      return `Confirm swap → Cash App QR ($${delta.toFixed(2)})`;
+    }
     return `Collect $${delta.toFixed(2)} + change tables`;
   }
 
