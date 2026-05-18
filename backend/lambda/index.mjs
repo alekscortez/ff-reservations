@@ -626,6 +626,12 @@ const reservationsHoldsService = createReservationsHoldsService({
   revokeActivePassesForReservation:
     checkInPassesService.revokeActivePassesForReservation,
   deactivateSquarePaymentLink: squarePaymentsService.deactivatePaymentLink,
+  // Threaded so the table-change service can auto-mint a fresh Square
+  // link for FREQUENT reservations after a swap drops them back to
+  // PENDING|PARTIAL. Non-frequent reservations keep the manual-regen
+  // behavior. See [[change-tables-2026-05-17]] +
+  // [[frequent-client-payment-links-2026-05-18]].
+  createSquarePaymentLink: squarePaymentsService.createPaymentLink,
   refundSquarePayment: squarePaymentsService.refundPayment,
   sendPaymentLinkExpiredSms: smsNotificationsService.sendPaymentLinkExpiredSms,
   sendCheckInPassSms: smsNotificationsService.sendCheckInPassSms,

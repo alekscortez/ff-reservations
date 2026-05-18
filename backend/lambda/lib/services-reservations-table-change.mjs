@@ -70,6 +70,15 @@ export function createReservationsTableChangeService(
     // tables). On payment landing the regular addReservationPayment
     // flow issues a fresh pass automatically.
     revokeActivePassesForReservation,
+    // Optional. When wired, the table-change flow auto-mints a fresh
+    // Square payment link for FREQUENT reservations that land back at
+    // PENDING|PARTIAL with a remaining balance. Mirrors the eager
+    // link-gen we already do at FREQUENT_AUTO creation so frequent
+    // guests don't lose their shareable link across a table swap.
+    // Best-effort: Square failures log a warning and leave the
+    // reservation without a link; staff regenerates via the Payment
+    // Links panel or Take Payment modal.
+    createSquarePaymentLink,
   },
   shared,
   paymentRecording
@@ -85,6 +94,11 @@ export function createReservationsTableChangeService(
     resolveCashReceiptNumberRequired,
     appendReservationHistory,
     getReservationById,
+    // Predicate that closes over the clientsService's frequent-table
+    // lookup at index-mjs wiring time. Drives the auto-link-regen
+    // gate below — non-frequent reservations keep the old behavior
+    // (link stays deactivated; staff regenerates manually).
+    shouldUseFrequentPaymentLinkTtl,
     // Post-swap pass refresh: the customer's check-in pass shows the
     // OLD table label until we revoke it + mint a new one. We pipe
     // through the same helpers createReservation uses so the SMS +
@@ -93,7 +107,10 @@ export function createReservationsTableChangeService(
     tryEnsureCheckInPass,
     trySendCheckInPassSms,
   } = shared;
-  const { markReservationPaymentLinkInactive } = paymentRecording;
+  const {
+    markReservationPaymentLinkInactive,
+    setReservationPaymentLinkWindow,
+  } = paymentRecording;
 
   async function changeReservationTables(payload, user) {
     requiredEnv("HOLDS_TABLE", HOLDS_TABLE);
@@ -810,7 +827,10 @@ export function createReservationsTableChangeService(
     }
 
     // Active Square payment link encodes the old amount; deactivate so a
-    // customer can't pay the wrong total via a stale link. No auto-regen.
+    // customer can't pay the wrong total via a stale link. Frequent
+    // reservations get an auto-regen further down (post `updatedReservation`
+    // build) so the shareable link doesn't go dark across a swap. Non-
+    // frequent reservations stay on the manual-regen path.
     const paymentLinkId = String(current?.paymentLinkId ?? "").trim();
     const paymentLinkStatusEnum = String(current?.paymentLinkStatus ?? "")
       .toUpperCase();
@@ -1134,7 +1154,7 @@ export function createReservationsTableChangeService(
 
     // Build the response. Mirror the row shape the FE expects so it can
     // refresh state without a second GET.
-    const updatedReservation = {
+    let updatedReservation = {
       ...current,
       tableId: newTableIds[0],
       tableIds: newTableIds,
@@ -1158,6 +1178,101 @@ export function createReservationsTableChangeService(
         ...paymentEntries,
       ],
     };
+
+    // Auto-regen the Square payment link for FREQUENT reservations that
+    // land back at PENDING|PARTIAL with a remaining balance. The old
+    // link was already deactivated above (delta != 0 path) — without
+    // this, frequent guests would lose their shareable link across a
+    // table swap and staff would have to mint a new one by hand.
+    //
+    // Gates:
+    //   - Square deps wired (createSquarePaymentLink +
+    //     setReservationPaymentLinkWindow). Tests without them silently
+    //     skip.
+    //   - nextStatus is PENDING or PARTIAL (PAID means no remaining;
+    //     COURTESY shouldn't have a link).
+    //   - Remaining > 0 after the swap.
+    //   - shouldUseFrequentPaymentLinkTtl(updatedReservation) is true.
+    //     Non-frequent reservations keep the old "staff regenerates
+    //     manually" behavior so the blast radius of this change is
+    //     scoped to the frequent path.
+    //
+    // Best-effort: any failure (Square 5xx, network, etc.) logs a
+    // warning and leaves the reservation without a link. The Payment
+    // Links panel + Take Payment modal both surface "Generate link"
+    // for recovery.
+    const remainingAfterSwap = roundMoney(
+      Math.max(0, Number(newAmountDue) - Number(nextDeposit))
+    );
+    const autoRegenEligible =
+      remainingAfterSwap > 0 &&
+      (nextStatus === "PENDING" || nextStatus === "PARTIAL") &&
+      typeof createSquarePaymentLink === "function" &&
+      typeof setReservationPaymentLinkWindow === "function" &&
+      typeof shouldUseFrequentPaymentLinkTtl === "function";
+    if (autoRegenEligible) {
+      let isFrequent = false;
+      try {
+        isFrequent = await shouldUseFrequentPaymentLinkTtl(updatedReservation);
+      } catch (predicateErr) {
+        // Treat predicate failures as "not frequent" — the worst case is
+        // the existing manual-regen behavior, which is what every
+        // non-frequent reservation already gets.
+        console.warn("table_change_auto_regen_predicate_failed", {
+          reservationId,
+          eventDate,
+          message: String(predicateErr?.message ?? predicateErr ?? ""),
+        });
+      }
+      if (isFrequent) {
+        try {
+          const square = await createSquarePaymentLink({
+            reservationId,
+            eventDate,
+            tableId: newTableIds[0],
+            tableIds: newTableIds,
+            customerName: String(updatedReservation.customerName ?? "").trim(),
+            phone: String(updatedReservation.phone ?? "").trim(),
+            amount: remainingAfterSwap,
+            note: "",
+            // Distinct from the FREQUENT_AUTO eager key
+            // (`freq:{id}:v1`) so a creation-time idempotency cache hit
+            // doesn't suppress this post-swap mint. Timestamp keeps
+            // multiple swaps on the same reservation independent.
+            idempotencyKey: `freq:tablechange:${reservationId}:${now}`,
+          });
+          const link = square?.paymentLink ?? {};
+          const linkUrl = String(link?.url ?? "").trim();
+          const linkId = String(link?.id ?? "").trim();
+          if (linkUrl && linkId) {
+            await setReservationPaymentLinkWindow({
+              eventDate,
+              reservationId,
+              paymentLinkId: linkId,
+              paymentLinkUrl: linkUrl,
+              actor: user,
+            });
+            // Refresh from DDB so the response mirrors the post-stamp
+            // row exactly (paymentLinkStatus / paymentLinkExpiresAt /
+            // paymentDeadlineAt are all set by setReservation
+            // PaymentLinkWindow; building them by hand is fragile).
+            try {
+              const refreshed = await getReservationById(eventDate, reservationId);
+              if (refreshed) updatedReservation = refreshed;
+            } catch {
+              // Refresh is cosmetic — the FE can still re-fetch on its
+              // own. Don't fail the swap on a read.
+            }
+          }
+        } catch (linkErr) {
+          console.warn("table_change_auto_regen_failed", {
+            reservationId,
+            eventDate,
+            message: String(linkErr?.message ?? linkErr ?? ""),
+          });
+        }
+      }
+    }
 
     return {
       reservation: updatedReservation,

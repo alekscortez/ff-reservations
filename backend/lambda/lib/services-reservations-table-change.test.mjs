@@ -92,6 +92,8 @@ function defaultShared(overrides = {}) {
       sendPassSmsCalls.push({ reservation, passResult, actor });
       return null;
     },
+    // Default: not frequent. Auto-regen tests override this to async () => true.
+    shouldUseFrequentPaymentLinkTtl: async () => false,
   };
   return {
     historyCalls,
@@ -103,14 +105,29 @@ function defaultShared(overrides = {}) {
 
 function defaultPaymentRecording(overrides = {}) {
   const markInactiveCalls = [];
+  const setLinkWindowCalls = [];
   return {
     markInactiveCalls,
+    setLinkWindowCalls,
     paymentRecording: {
       markReservationPaymentLinkInactive: async (args) => {
         markInactiveCalls.push(args);
+        if (typeof overrides.markReservationPaymentLinkInactive === "function") {
+          return overrides.markReservationPaymentLinkInactive(args);
+        }
         return null;
       },
-      ...overrides,
+      // Always record. Auto-regen tests pass a custom return via overrides
+      // (e.g. to simulate the post-stamp row); the recording itself stays in
+      // the harness so the test surface (`setLinkWindowCalls`) is stable
+      // regardless of which path overrides the response.
+      setReservationPaymentLinkWindow: async (args) => {
+        setLinkWindowCalls.push(args);
+        if (typeof overrides.setReservationPaymentLinkWindow === "function") {
+          return overrides.setReservationPaymentLinkWindow(args);
+        }
+        return null;
+      },
     },
   };
 }
@@ -122,6 +139,7 @@ function buildService(overrides = {}) {
   const deactivateCalls = [];
   const refundCalls = [];
   const revokePassCalls = [];
+  const createSquareLinkCalls = [];
 
   const deps = {
     ddb,
@@ -177,6 +195,16 @@ function buildService(overrides = {}) {
         revokePassCalls.push({ reservationId, revokedBy });
         return { revoked: 1 };
       }),
+    // Threaded for the post-swap auto-regen path (frequent reservations
+    // only). Undefined by default so the existing tests that don't opt
+    // in keep the manual-regen behavior. Auto-regen tests pass a
+    // function via overrides.createSquarePaymentLink.
+    createSquarePaymentLink: overrides.createSquarePaymentLink
+      ? async (args) => {
+          createSquareLinkCalls.push(args);
+          return overrides.createSquarePaymentLink(args);
+        }
+      : undefined,
   };
 
   const svc = createReservationsTableChangeService(
@@ -192,9 +220,11 @@ function buildService(overrides = {}) {
     ensurePassCalls: sharedHarness.ensurePassCalls,
     sendPassSmsCalls: sharedHarness.sendPassSmsCalls,
     markInactiveCalls: prHarness.markInactiveCalls,
+    setLinkWindowCalls: prHarness.setLinkWindowCalls,
     deactivateCalls,
     refundCalls,
     revokePassCalls,
+    createSquareLinkCalls,
   };
 }
 
@@ -1673,5 +1703,167 @@ describe("changeReservationTables — payment-link deactivation", () => {
     );
     assert.equal(out.reservation.tableIds[0], "T2");
     assert.equal(markInactiveCalls[0].status, "DEACTIVATION_FAILED");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auto-regen of Square payment link after a swap (FREQUENT reservations).
+// Mirrors the eager link gen on FREQUENT_AUTO creation so a frequent
+// guest's shareable link doesn't go dark across a table swap.
+// ---------------------------------------------------------------------------
+
+describe("changeReservationTables — auto-regen Square link (frequent)", () => {
+  it("happy path: PAID frequent reservation swaps T1->T2 deferred, fresh link minted with remaining amount", async () => {
+    let stamped = null;
+    const { svc, createSquareLinkCalls, setLinkWindowCalls } = buildService({
+      shared: {
+        getReservationById: async () => {
+          if (stamped) return stamped;
+          return reservationItem({
+            paymentLinkId: "PL_old",
+            paymentLinkStatus: "ACTIVE",
+          });
+        },
+        shouldUseFrequentPaymentLinkTtl: async () => true,
+      },
+      paymentRecording: {
+        setReservationPaymentLinkWindow: async (args) => {
+          // Simulate the DDB post-stamp row. The auto-regen block refetches
+          // via getReservationById after this call, so seed `stamped`.
+          stamped = {
+            ...reservationItem(),
+            tableIds: ["T2"],
+            tableId: "T2",
+            amountDue: 200,
+            depositAmount: 100,
+            paymentStatus: "PARTIAL",
+            paymentLinkProvider: "square",
+            paymentLinkId: args.paymentLinkId,
+            paymentLinkUrl: args.paymentLinkUrl,
+            paymentLinkStatus: "ACTIVE",
+          };
+          return stamped;
+        },
+      },
+      createSquarePaymentLink: async () => ({
+        paymentLink: { id: "PL_new", url: "https://sq.link/new" },
+      }),
+    });
+    const out = await svc.changeReservationTables(
+      basePayload({ deferredPaymentMethod: "square" }),
+      "staff@x"
+    );
+    assert.equal(createSquareLinkCalls.length, 1, "Square link gen called");
+    assert.equal(createSquareLinkCalls[0].amount, 100, "amount = remaining");
+    assert.deepEqual(createSquareLinkCalls[0].tableIds, ["T2"]);
+    assert.match(
+      createSquareLinkCalls[0].idempotencyKey,
+      /^freq:tablechange:r1:\d+$/,
+      "deterministic-ish idempotency key namespaced for swap"
+    );
+    assert.equal(setLinkWindowCalls.length, 1);
+    assert.equal(setLinkWindowCalls[0].paymentLinkId, "PL_new");
+    // Response mirrors the post-stamp DDB row (refetch path)
+    assert.equal(out.reservation.paymentLinkUrl, "https://sq.link/new");
+    assert.equal(out.reservation.paymentLinkStatus, "ACTIVE");
+  });
+
+  it("non-frequent reservation: auto-regen does NOT fire", async () => {
+    const { svc, createSquareLinkCalls } = buildService({
+      shared: {
+        getReservationById: async () =>
+          reservationItem({
+            paymentLinkId: "PL_old",
+            paymentLinkStatus: "ACTIVE",
+          }),
+        shouldUseFrequentPaymentLinkTtl: async () => false,
+      },
+      createSquarePaymentLink: async () => ({
+        paymentLink: { id: "PL_new", url: "https://sq.link/new" },
+      }),
+    });
+    await svc.changeReservationTables(
+      basePayload({ deferredPaymentMethod: "square" }),
+      "staff@x"
+    );
+    assert.equal(createSquareLinkCalls.length, 0);
+  });
+
+  it("delta > 0 with bundled cash (status returns to PAID): does NOT fire (remaining=0)", async () => {
+    const { svc, createSquareLinkCalls } = buildService({
+      shared: {
+        getReservationById: async () => reservationItem(),
+        shouldUseFrequentPaymentLinkTtl: async () => true,
+      },
+      createSquarePaymentLink: async () => ({
+        paymentLink: { id: "PL_new", url: "https://sq.link/new" },
+      }),
+    });
+    const out = await svc.changeReservationTables(
+      basePayload({
+        payment: { method: "cash", amount: 100, receiptNumber: "5" },
+      }),
+      "staff@x"
+    );
+    assert.equal(out.reservation.paymentStatus, "PAID");
+    assert.equal(createSquareLinkCalls.length, 0);
+  });
+
+  it("Square 5xx during auto-regen: swap still succeeds (best-effort)", async () => {
+    const { svc, createSquareLinkCalls, setLinkWindowCalls } = buildService({
+      shared: {
+        getReservationById: async () => reservationItem(),
+        shouldUseFrequentPaymentLinkTtl: async () => true,
+      },
+      createSquarePaymentLink: async () => {
+        throw new Error("Square 502");
+      },
+    });
+    const out = await svc.changeReservationTables(
+      basePayload({ deferredPaymentMethod: "square" }),
+      "staff@x"
+    );
+    assert.equal(createSquareLinkCalls.length, 1);
+    assert.equal(setLinkWindowCalls.length, 0, "no stamp on Square failure");
+    // Swap itself succeeded
+    assert.equal(out.reservation.paymentStatus, "PARTIAL");
+    assert.equal(out.reservation.tableIds[0], "T2");
+  });
+
+  it("createSquarePaymentLink dep not wired: no auto-regen, no error", async () => {
+    const { svc, createSquareLinkCalls } = buildService({
+      shared: {
+        getReservationById: async () => reservationItem(),
+        shouldUseFrequentPaymentLinkTtl: async () => true,
+      },
+      // createSquarePaymentLink intentionally omitted from overrides ->
+      // buildService passes `undefined` -> auto-regen branch short-circuits.
+    });
+    const out = await svc.changeReservationTables(
+      basePayload({ deferredPaymentMethod: "square" }),
+      "staff@x"
+    );
+    assert.equal(createSquareLinkCalls.length, 0);
+    assert.equal(out.reservation.paymentStatus, "PARTIAL");
+  });
+
+  it("frequent predicate throws: treated as non-frequent (manual-regen path)", async () => {
+    const { svc, createSquareLinkCalls } = buildService({
+      shared: {
+        getReservationById: async () => reservationItem(),
+        shouldUseFrequentPaymentLinkTtl: async () => {
+          throw new Error("CRM lookup failed");
+        },
+      },
+      createSquarePaymentLink: async () => ({
+        paymentLink: { id: "PL_new", url: "https://sq.link/new" },
+      }),
+    });
+    const out = await svc.changeReservationTables(
+      basePayload({ deferredPaymentMethod: "square" }),
+      "staff@x"
+    );
+    assert.equal(createSquareLinkCalls.length, 0);
+    assert.equal(out.reservation.paymentStatus, "PARTIAL");
   });
 });
