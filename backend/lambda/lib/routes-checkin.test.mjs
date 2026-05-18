@@ -310,8 +310,8 @@ describe("POST /reservations/{id}/check-in-pass (issue)", () => {
     assert.equal(calls.issueCheckInPassForReservation.length, 0);
   });
 
-  it("400 when reservation paymentStatus is not PAID (PARTIAL/PENDING/COURTESY all rejected)", async () => {
-    for (const paymentStatus of ["PARTIAL", "PENDING", "COURTESY", ""]) {
+  it("400 when reservation paymentStatus is PENDING/PARTIAL/empty (PAID + COURTESY still pass)", async () => {
+    for (const paymentStatus of ["PARTIAL", "PENDING", ""]) {
       const { ctx, calls } = makeCtx({
         method: "POST",
         path: "/reservations/r1/check-in-pass",
@@ -320,7 +320,7 @@ describe("POST /reservations/{id}/check-in-pass (issue)", () => {
       });
       const res = await handleCheckInRoute(ctx);
       assert.equal(res.statusCode, 400);
-      assert.match(res.body.message, /PAID/);
+      assert.match(res.body.message, /paid or marked courtesy/i);
       assert.equal(calls.issueCheckInPassForReservation.length, 0);
     }
   });
@@ -342,6 +342,29 @@ describe("POST /reservations/{id}/check-in-pass (issue)", () => {
     assert.equal(args.reservation.status, "CONFIRMED");
     assert.equal(args.issuedBy, "staff@x");
     assert.equal(args.reissue, false);
+  });
+
+  it("COURTESY reservations can be issued a check-in pass", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "POST",
+      path: "/reservations/r1/check-in-pass",
+      body: { eventDate: "2026-05-09" },
+      reservation: { status: "CONFIRMED", paymentStatus: "COURTESY" },
+      issueResult: {
+        issued: true,
+        reused: false,
+        pass: { passId: "pass-courtesy" },
+      },
+    });
+    const res = await handleCheckInRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.issued, true);
+    assert.equal(res.body.pass.passId, "pass-courtesy");
+    assert.equal(calls.issueCheckInPassForReservation.length, 1);
+    assert.equal(
+      calls.issueCheckInPassForReservation[0].reservation.paymentStatus,
+      "COURTESY"
+    );
   });
 
   it("reissue=true when body.reissue truthy", async () => {
@@ -394,7 +417,7 @@ describe("GET /reservations/{id}/check-in-pass (fetch)", () => {
     assert.match(res.body.message, /YYYY-MM-DD/);
   });
 
-  it("400 when reservation isn't CONFIRMED + PAID", async () => {
+  it("400 when reservation isn't CONFIRMED + (PAID or COURTESY)", async () => {
     const { ctx } = makeCtx({
       method: "GET",
       path: "/reservations/r1/check-in-pass",
@@ -403,7 +426,20 @@ describe("GET /reservations/{id}/check-in-pass (fetch)", () => {
     });
     const res = await handleCheckInRoute(ctx);
     assert.equal(res.statusCode, 400);
-    assert.match(res.body.message, /PAID/);
+    assert.match(res.body.message, /paid or marked courtesy/i);
+  });
+
+  it("GET allows COURTESY reservations", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/reservations/r1/check-in-pass",
+      event: { queryStringParameters: { eventDate: "2026-05-09" } },
+      reservation: { status: "CONFIRMED", paymentStatus: "COURTESY" },
+      activePass: { passId: "active-courtesy", token: "tok-c" },
+    });
+    const res = await handleCheckInRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.pass.passId, "active-courtesy");
   });
 
   it("happy path: returns active + latest pass (active includeToken=true, latest includeToken=false)", async () => {

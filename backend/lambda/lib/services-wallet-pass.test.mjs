@@ -450,6 +450,60 @@ describe("createWalletPassService — generatePkpassForReservation", () => {
     assert.equal(instance.barcodes.message, "ffr-checkin:tok-abc-123");
   });
 
+  it("DEPOSIT field renders 'Courtesy' for paymentStatus=COURTESY", async () => {
+    const { FakePKPass } = makePkPassStub();
+    let instance = null;
+    const wrappedLoader = async () =>
+      class extends FakePKPass {
+        constructor(b, c, o) {
+          super(b, c, o);
+          instance = this;
+        }
+      };
+    const svc = createWalletPassService({
+      secretClient: makeSecretClient(validSecret()),
+      env: baseEnv(),
+      httpError,
+      assets: makeAssets(),
+      loadPkPass: wrappedLoader,
+    });
+    await svc.generatePkpassForReservation({
+      reservation: makeReservation({
+        paymentStatus: "COURTESY",
+        depositAmount: 0,
+        paymentTotal: 0,
+      }),
+      checkInPass: { token: "tok-abc-123" },
+    });
+    const deposit = instance.secondaryFields.find((f) => f.key === "deposit");
+    assert.equal(deposit.value, "Courtesy");
+  });
+
+  it("DEPOSIT field renders dollar amount for paymentStatus=PAID (regression)", async () => {
+    const { FakePKPass } = makePkPassStub();
+    let instance = null;
+    const wrappedLoader = async () =>
+      class extends FakePKPass {
+        constructor(b, c, o) {
+          super(b, c, o);
+          instance = this;
+        }
+      };
+    const svc = createWalletPassService({
+      secretClient: makeSecretClient(validSecret()),
+      env: baseEnv(),
+      httpError,
+      assets: makeAssets(),
+      loadPkPass: wrappedLoader,
+    });
+    await svc.generatePkpassForReservation({
+      reservation: makeReservation({ paymentStatus: "PAID", paymentTotal: 50 }),
+      checkInPass: { token: "tok-abc-123" },
+    });
+    const deposit = instance.secondaryFields.find((f) => f.key === "deposit");
+    assert.equal(deposit.value, "$50.00");
+  });
+
   it("altText: falls back to reservationId when confirmationCode is empty/missing", async () => {
     const { FakePKPass } = makePkPassStub();
     let instance = null;

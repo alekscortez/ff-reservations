@@ -319,6 +319,28 @@ describe('ReservationDetailModal', () => {
     expectChangeTablesDisabled(makeReservation({ status: 'CANCELLED' }));
   });
 
+  function passTabDisabledNotice(reservation: ReservationItem): string {
+    const f = createHost({ reservation });
+    tabButton(f, 'Pass')!.click();
+    f.detectChanges();
+    return (f.nativeElement.textContent ?? '') as string;
+  }
+
+  it('Pass tab: COURTESY reservations can manage the check-in pass (Reissue enabled, disabled-notice hidden)', () => {
+    const text = passTabDisabledNotice(
+      makeReservation({ paymentStatus: 'COURTESY', amountDue: 0, depositAmount: 0 }),
+    );
+    expect(text).not.toContain('Pass is available only for confirmed reservations');
+    // PAID and COURTESY are both pass-eligible; the disabled notice must not show.
+  });
+
+  it('Pass tab: PENDING reservations show the disabled-notice (regression)', () => {
+    const text = passTabDisabledNotice(makeReservation({ paymentStatus: 'PENDING' }));
+    expect(text).toContain(
+      'Pass is available only for confirmed reservations that are paid or marked courtesy.',
+    );
+  });
+
   it('history tab renders rows when history has items', () => {
     const f = createHost({
       history: [

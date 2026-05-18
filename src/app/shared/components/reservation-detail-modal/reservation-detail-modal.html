@@ -258,7 +258,7 @@
       </div>
 
       <p class="mt-2 text-xs text-brand-500" *ngIf="!canManageCheckInPass(reservation)">
-        Pass is available only for confirmed and fully paid reservations.
+        Pass is available only for confirmed reservations that are paid or marked courtesy.
       </p>
       <p class="mt-2 text-xs text-brand-500" *ngIf="canManageCheckInPass(reservation) && !canReissueCheckInPass(reservation)">
         Reservation is already checked in. Reissue is disabled.

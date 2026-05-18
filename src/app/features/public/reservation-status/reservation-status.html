@@ -119,6 +119,16 @@
       <h2 class="text-2xl font-semibold text-success-900">
         You're in. See you at Famoso Fuego.
       </h2>
+      <!-- Courtesy reservations are comps — no payment owed. We surface a
+           single-sentence note so the customer doesn't wonder why the
+           receipt shows $0; door-side scanning is otherwise identical to
+           a paid reservation. -->
+      <p
+        *ngIf="r.paymentStatus === 'COURTESY'"
+        class="text-sm text-success-800"
+      >
+        Courtesy reservation — no payment required.
+      </p>
     </header>
     <dl class="grid gap-1 text-sm text-success-900">
       <div class="flex justify-between">

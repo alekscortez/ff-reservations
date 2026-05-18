@@ -1,3 +1,5 @@
+import { isPassEligiblePaymentStatus } from "./services-reservations-shared.mjs";
+
 export async function handleCheckInRoute(ctx) {
   const {
     method,
@@ -55,8 +57,12 @@ export async function handleCheckInRoute(ctx) {
     if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
       return json(400, { message: "Only confirmed reservations can receive check-in pass" }, cors);
     }
-    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") {
-      return json(400, { message: "Reservation must be PAID before check-in pass can be issued" }, cors);
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
+      return json(
+        400,
+        { message: "Reservation must be paid or marked courtesy before check-in pass can be issued" },
+        cors
+      );
     }
 
     const user = await getUserLabel(event);
@@ -81,8 +87,12 @@ export async function handleCheckInRoute(ctx) {
     if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
       return json(400, { message: "Only confirmed reservations can receive check-in pass" }, cors);
     }
-    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") {
-      return json(400, { message: "Reservation must be PAID before check-in pass can be issued" }, cors);
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
+      return json(
+        400,
+        { message: "Reservation must be paid or marked courtesy before check-in pass can be issued" },
+        cors
+      );
     }
 
     const pass = await getActiveCheckInPassForReservation(reservationId, { includeToken: true });

@@ -15,6 +15,7 @@ import {
   sanitizeHistoryValue,
   toHistorySk,
 } from "./services-checkin-passes-pure.mjs";
+import { isPassEligiblePaymentStatus } from "./services-reservations-shared.mjs";
 
 const DEFAULT_PASS_TTL_DAYS = 2;
 
@@ -355,8 +356,11 @@ export function createCheckInPassesService({
     if (status !== "CONFIRMED") {
       throw httpError(400, "Only confirmed reservations can receive a check-in pass");
     }
-    if (paymentStatus !== "PAID") {
-      throw httpError(400, "Reservation must be paid in full before issuing check-in pass");
+    if (!isPassEligiblePaymentStatus(paymentStatus)) {
+      throw httpError(
+        400,
+        "Reservation must be paid or marked courtesy before issuing check-in pass"
+      );
     }
 
     const now = nowEpoch();

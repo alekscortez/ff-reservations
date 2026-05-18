@@ -46,6 +46,16 @@ export const HOLD_EXPIRY_GRACE_SECONDS = 5;
 // the SMS body and the wallet pass for layout regressions.
 export const MAX_TABLES_PER_RESERVATION = 10;
 
+// Payment statuses that allow a check-in pass to be issued. Single source
+// of truth used by tryEnsureCheckInPass (auto-issue at creation),
+// issuePassForReservation (staff manual issue), routes-checkin, and the
+// public /wallet-pass + /p/{slug}?to=pass routes. COURTESY is operationally
+// indistinguishable from PAID at the door — confirmed seat, $0 owed.
+export function isPassEligiblePaymentStatus(paymentStatus) {
+  const ps = String(paymentStatus ?? "").toUpperCase();
+  return ps === "PAID" || ps === "COURTESY";
+}
+
 // Multi-table normalizers. Accept either the legacy scalar (`tableId`,
 // `holdId`) or the array form (`tableIds`, `holdIds`) and produce a
 // trimmed, non-empty string array. Callers that want both fields can
@@ -276,7 +286,7 @@ export function createReservationsShared({
     if (typeof ensureCheckInPassForReservation !== "function") return null;
     if (!reservation) return null;
     if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") return null;
-    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") return null;
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) return null;
     // `reissue:true` forces a fresh pass id + token, revoking the old one.
     // Use this when the displayed pass content changed (table swap, customer
     // name correction, etc.) so the QR + wallet pass no longer show stale

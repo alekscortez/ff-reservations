@@ -16,6 +16,7 @@ import {
   createReservationsShared,
   formatTablesLabel,
   getReservationTableIds,
+  isPassEligiblePaymentStatus,
   normalizeIdList,
 } from "./services-reservations-shared.mjs";
 
@@ -438,10 +439,14 @@ describe("tryEnsureCheckInPass", () => {
     assert.equal(got, null);
   });
 
-  it("returns null for non-PAID reservations", async () => {
+  it("returns null for ineligible paymentStatus (PENDING/PARTIAL) and cancelled rows", async () => {
     const s = buildShared({ ensureCheckInPassForReservation: async () => ({ issued: true }) });
     assert.equal(
       await s.tryEnsureCheckInPass({ status: "CONFIRMED", paymentStatus: "PENDING" }, "u"),
+      null
+    );
+    assert.equal(
+      await s.tryEnsureCheckInPass({ status: "CONFIRMED", paymentStatus: "PARTIAL" }, "u"),
       null
     );
     assert.equal(
@@ -461,6 +466,23 @@ describe("tryEnsureCheckInPass", () => {
     assert.deepEqual(got, { issued: true, pass: { passId: "p1" } });
   });
 
+  it("invokes the dep for CONFIRMED + COURTESY (comp reservations are pass-eligible)", async () => {
+    const calls = [];
+    const s = buildShared({
+      ensureCheckInPassForReservation: async (args) => {
+        calls.push(args);
+        return { issued: true, pass: { passId: "p-courtesy" } };
+      },
+    });
+    const got = await s.tryEnsureCheckInPass(
+      { status: "CONFIRMED", paymentStatus: "COURTESY", reservationId: "r1" },
+      "u"
+    );
+    assert.deepEqual(got, { issued: true, pass: { passId: "p-courtesy" } });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].reservation.paymentStatus, "COURTESY");
+  });
+
   it("returns null on dep error (does not throw)", async () => {
     const s = buildShared({
       ensureCheckInPassForReservation: async () => {
@@ -472,6 +494,25 @@ describe("tryEnsureCheckInPass", () => {
       "u"
     );
     assert.equal(got, null);
+  });
+});
+
+describe("isPassEligiblePaymentStatus", () => {
+  it("returns true for PAID and COURTESY (case-insensitive)", () => {
+    assert.equal(isPassEligiblePaymentStatus("PAID"), true);
+    assert.equal(isPassEligiblePaymentStatus("paid"), true);
+    assert.equal(isPassEligiblePaymentStatus("COURTESY"), true);
+    assert.equal(isPassEligiblePaymentStatus("Courtesy"), true);
+  });
+
+  it("returns false for PENDING/PARTIAL/REFUNDED and unknown values", () => {
+    assert.equal(isPassEligiblePaymentStatus("PENDING"), false);
+    assert.equal(isPassEligiblePaymentStatus("PARTIAL"), false);
+    assert.equal(isPassEligiblePaymentStatus("REFUNDED"), false);
+    assert.equal(isPassEligiblePaymentStatus("FREE"), false);
+    assert.equal(isPassEligiblePaymentStatus(""), false);
+    assert.equal(isPassEligiblePaymentStatus(null), false);
+    assert.equal(isPassEligiblePaymentStatus(undefined), false);
   });
 });
 

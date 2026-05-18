@@ -18,7 +18,10 @@ import {
   type PaymentLinkSmsState,
   type ReservationHistoryViewItem,
 } from '../../models/reservation-detail.model';
-import type { ReservationItem } from '../../models/reservation.model';
+import {
+  isPassEligiblePaymentStatus,
+  type ReservationItem,
+} from '../../models/reservation.model';
 
 export type ReservationDetailTab = 'overview' | 'links' | 'pass' | 'history';
 
@@ -109,7 +112,7 @@ export class ReservationDetailModal {
   }
 
   canManageCheckInPass(item: ReservationItem): boolean {
-    return item.status === 'CONFIRMED' && item.paymentStatus === 'PAID';
+    return item.status === 'CONFIRMED' && isPassEligiblePaymentStatus(item.paymentStatus);
   }
 
   canReissueCheckInPass(item: ReservationItem): boolean {

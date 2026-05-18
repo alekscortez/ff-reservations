@@ -1,5 +1,16 @@
 export type ReservationStatus = 'CONFIRMED' | 'CANCELLED';
 export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'COURTESY' | 'REFUNDED';
+
+// Payment statuses that allow a check-in pass to be issued. Mirrors
+// isPassEligiblePaymentStatus in backend/lambda/lib/services-reservations-shared.mjs.
+// COURTESY is operationally indistinguishable from PAID at the door — confirmed
+// seat, $0 owed — so it gets the same Wallet pass + share-link affordances.
+export function isPassEligiblePaymentStatus(
+  paymentStatus: PaymentStatus | string | null | undefined
+): boolean {
+  const ps = String(paymentStatus ?? '').toUpperCase();
+  return ps === 'PAID' || ps === 'COURTESY';
+}
 export type PaymentMethod = 'cash' | 'square' | 'cashapp' | 'credit';
 export type PaymentSource =
   | 'manual'

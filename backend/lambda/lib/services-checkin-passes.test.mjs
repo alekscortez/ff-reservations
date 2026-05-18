@@ -261,3 +261,53 @@ describe("resolvePassTtlDays precedence", () => {
     assert.equal(out.pass.expiresAt, expiryEpochForDays(2));
   });
 });
+
+describe("issuePassForReservation payment-status gating", () => {
+  it("issues a pass for paymentStatus=COURTESY (comp reservations are eligible)", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: { CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass" },
+    });
+    const out = await svc.issuePassForReservation({
+      reservation: { ...buildPaidReservation(), paymentStatus: "COURTESY" },
+      issuedBy: "system:test",
+    });
+    assert.equal(out.issued, true);
+    assert.match(out.pass.url, /^https:\/\/env\.example\.com\/check-in\/pass\?token=/);
+  });
+
+  it("rejects paymentStatus=PENDING with 400 'paid or marked courtesy'", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: { CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass" },
+    });
+    await assert.rejects(
+      () =>
+        svc.issuePassForReservation({
+          reservation: { ...buildPaidReservation(), paymentStatus: "PENDING" },
+          issuedBy: "system:test",
+        }),
+      (err) => {
+        return (
+          err.status === 400 &&
+          /paid or marked courtesy/i.test(String(err.message ?? ""))
+        );
+      }
+    );
+  });
+
+  it("rejects paymentStatus=PARTIAL with 400", async () => {
+    const svc = createCheckInPassesService({
+      ...baseDeps,
+      env: { CHECKIN_PASS_BASE_URL: "https://env.example.com/check-in/pass" },
+    });
+    await assert.rejects(
+      () =>
+        svc.issuePassForReservation({
+          reservation: { ...buildPaidReservation(), paymentStatus: "PARTIAL" },
+          issuedBy: "system:test",
+        }),
+      (err) => err.status === 400
+    );
+  });
+});

@@ -34,7 +34,10 @@ import {
 import { CheckInPass, CheckInService } from '../../../core/http/check-in.service';
 import { TablesService } from '../../../core/http/tables.service';
 import { TableForEvent } from '../../../shared/models/table.model';
-import { ReservationItem } from '../../../shared/models/reservation.model';
+import {
+  ReservationItem,
+  isPassEligiblePaymentStatus,
+} from '../../../shared/models/reservation.model';
 import {
   CheckInPassState,
   GeneratedCheckInPass,
@@ -946,7 +949,7 @@ export class Reservations implements OnInit, OnDestroy {
   }
 
   canManageCheckInPass(item: ReservationItem): boolean {
-    return item.status === 'CONFIRMED' && item.paymentStatus === 'PAID';
+    return item.status === 'CONFIRMED' && isPassEligiblePaymentStatus(item.paymentStatus);
   }
 
   canReissueCheckInPass(item: ReservationItem): boolean {

@@ -126,6 +126,16 @@ export function createWalletPassService({
     const tableValue = passTableIds.length > 0 ? passTableIds.join(", ") : "—";
     const depositAmount = Number(reservation?.depositAmount ?? 0);
     const paid = Number(reservation?.paymentTotal ?? reservation?.paid ?? depositAmount);
+    const isCourtesy =
+      String(reservation?.paymentStatus ?? "").toUpperCase() === "COURTESY";
+    // Comp reservations show "Courtesy" in place of the dollar amount so
+    // staff at the door see at a glance that the guest owes nothing and
+    // the customer's pass face doesn't display a misleading "$0.00".
+    const depositValue = isCourtesy
+      ? "Courtesy"
+      : Number.isFinite(paid) && paid > 0
+      ? `$${paid.toFixed(2)}`
+      : "—";
     return {
       headerFields: [
         {
@@ -152,7 +162,7 @@ export function createWalletPassService({
         {
           key: "deposit",
           label: "DEPOSIT",
-          value: Number.isFinite(paid) && paid > 0 ? `$${paid.toFixed(2)}` : "—",
+          value: depositValue,
           textAlignment: "PKTextAlignmentRight",
         },
       ],

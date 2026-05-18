@@ -22,6 +22,7 @@ import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import {
   getReservationTableIds,
   formatTablesLabel,
+  isPassEligiblePaymentStatus,
   MAX_TABLES_PER_RESERVATION,
 } from "./services-reservations-shared.mjs";
 import { eventToPresenceStage } from "./services-presence.mjs";
@@ -1114,11 +1115,11 @@ export async function handlePublicBookingsRoute(ctx) {
         cors
       );
     }
-    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") {
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
       return json(
         400,
         {
-          message: "Reservation must be paid in full before adding to Apple Wallet",
+          message: "Reservation must be paid or marked courtesy before adding to Apple Wallet",
           code: "RESERVATION_NOT_PAID",
         },
         cors
@@ -1653,9 +1654,7 @@ export async function handlePublicBookingsRoute(ctx) {
           looked.eventDate,
           looked.reservationId
         );
-        const paymentStatus = String(reservation?.paymentStatus ?? "")
-          .toUpperCase();
-        if (paymentStatus === "PAID" || paymentStatus === "COURTESY") {
+        if (isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
           let pass =
             typeof getActivePassForReservation === "function"
               ? await getActivePassForReservation(looked.reservationId, {

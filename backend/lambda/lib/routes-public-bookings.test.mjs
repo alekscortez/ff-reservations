@@ -720,6 +720,25 @@ describe("POST /public/reservations/{id}/wallet-pass?t={token}", () => {
     assert.equal(out.body.contentType, "application/vnd.apple.pkpass");
     assert.equal(out.body.pkpassBase64, "AAAA");
   });
+
+  it("COURTESY reservations can download a Wallet pass", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      walletCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "2026-05-16" },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          customerToken: "tok",
+          status: "CONFIRMED",
+          paymentStatus: "COURTESY",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.contentType, "application/vnd.apple.pkpass");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────
