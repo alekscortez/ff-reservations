@@ -15,6 +15,7 @@ export async function handleClientsRoute(ctx) {
     getFrequentClientById,
     updateFrequentClient,
     deleteFrequentClient,
+    listFrequentClientActiveLinks,
     listCrmClients,
     updateCrmClient,
     deleteCrmClient,
@@ -36,6 +37,19 @@ export async function handleClientsRoute(ctx) {
     const user = await getUserLabel(event);
     const item = await createFrequentClient(body, user);
     return json(201, { item }, cors);
+  }
+
+  const frequentActiveLinksMatch = path.match(
+    /^\/frequent-clients\/([^/]+)\/active-links$/
+  );
+  if (frequentActiveLinksMatch && method === "GET") {
+    requireStaffOrAdmin(event);
+    if (typeof listFrequentClientActiveLinks !== "function") {
+      return json(500, { message: "Active-links lookup is not configured" }, cors);
+    }
+    const clientId = frequentActiveLinksMatch[1];
+    const items = await listFrequentClientActiveLinks(clientId);
+    return json(200, { items }, cors);
   }
 
   const frequentMatch = path.match(/^\/frequent-clients\/([^/]+)$/);

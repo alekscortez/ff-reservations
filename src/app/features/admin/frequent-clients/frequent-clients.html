@@ -218,6 +218,7 @@
                 </button>
                 <ng-template #rowMenu>
                   <div hlmMenu>
+                    <button hlmMenuItem type="button" (click)="openLinks(c)">Payment links</button>
                     <button hlmMenuItem type="button" (click)="startEdit(c)">Edit</button>
                     <hlm-menu-separator />
                     <button hlmMenuItem variant="destructive" type="button" (click)="delete(c)">Delete</button>
@@ -250,6 +251,7 @@
             </button>
             <ng-template #mobileMenu>
               <div hlmMenu>
+                <button hlmMenuItem type="button" (click)="openLinks(c)">Payment links</button>
                 <button hlmMenuItem type="button" (click)="startEdit(c)">Edit</button>
                 <hlm-menu-separator />
                 <button hlmMenuItem variant="destructive" type="button" (click)="delete(c)">Delete</button>
@@ -488,3 +490,180 @@
     (cancel)="cancelDelete()"
   />
 </ng-container>
+
+<hlm-dialog
+  *ngIf="linksTarget() as target"
+  (close)="closeLinks()"
+  panelClass="max-w-2xl"
+  [ariaLabel]="'Payment links for ' + target.name"
+>
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <h3 class="text-lg font-semibold text-brand-900">Payment links — {{ target.name }}</h3>
+      <p class="mt-1 text-sm text-brand-600">
+        Share or extend deadlines on this guest's upcoming bookings.
+      </p>
+    </div>
+    <button
+      type="button"
+      hlmBtn variant="outline" size="icon-sm" class="rounded-full"
+      (click)="closeLinks()"
+      aria-label="Close payment links panel"
+    >
+      <ng-icon name="lucideX" size="14" />
+    </button>
+  </div>
+
+  <p *ngIf="linksLoading()" class="mt-4 text-sm text-brand-500">Loading…</p>
+
+  <hlm-alert *ngIf="linksError()" variant="destructive" class="mt-4">
+    {{ linksError() }}
+  </hlm-alert>
+
+  <p
+    *ngIf="!linksLoading() && activeLinks().length === 0 && !linksError()"
+    class="mt-4 rounded-xl border border-brand-200 bg-brand-50/60 p-4 text-sm text-brand-600"
+  >
+    No upcoming bookings yet. As soon as an event is created, a reservation will appear here with a payment link ready to share.
+  </p>
+
+  <div class="mt-4 grid gap-3" *ngIf="activeLinks().length > 0">
+    <article
+      *ngFor="let link of activeLinks(); trackBy: trackByLinkId"
+      class="rounded-2xl border border-brand-200 bg-white p-4 shadow-sm"
+    >
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-brand-900">
+            {{ link.eventDate }}<span *ngIf="link.eventName"> · {{ link.eventName }}</span>
+          </div>
+          <div class="text-xs text-brand-500">
+            {{ tableLabelFor(link) }}
+            <span *ngIf="link.confirmationCode"> · FF-{{ link.confirmationCode }}</span>
+          </div>
+        </div>
+        <div class="text-right text-xs text-brand-500">
+          <div>
+            Due: <span class="font-semibold text-brand-900">${{ link.amountDue.toFixed(2) }}</span>
+          </div>
+          <div *ngIf="link.depositAmount > 0">
+            Paid: <span class="font-semibold text-success-700">${{ link.depositAmount.toFixed(2) }}</span>
+          </div>
+          <div class="mt-1 uppercase tracking-[0.12em]">{{ link.paymentStatus }}</div>
+        </div>
+      </div>
+
+      <div *ngIf="link.paymentLinkUrl" class="mt-3 grid gap-2 text-xs text-brand-500">
+        <label class="grid gap-1">
+          Payment link
+          <input hlmInput readonly [value]="link.paymentLinkUrl" />
+        </label>
+        <div *ngIf="link.paymentDeadlineAt" class="text-brand-600">
+          Expires
+          <span class="font-medium text-brand-800">{{ link.paymentDeadlineAt | date:'MMM d, h:mm a' }}</span>
+          <span *ngIf="link.paymentDeadlineTz"> ({{ link.paymentDeadlineTz }})</span>
+        </div>
+      </div>
+
+      <div *ngIf="!link.paymentLinkUrl" class="mt-3 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-800">
+        No active link yet. Click "Generate link" to mint one.
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          *ngIf="link.paymentLinkUrl"
+          type="button"
+          hlmBtn variant="outline" size="sm"
+          [disabled]="isLinkRowMutating(link.reservationId)"
+          (click)="copyLink(link)"
+        >
+          <ng-icon name="lucideCopy" size="14" class="mr-1" />
+          {{ copyFeedbackId() === link.reservationId ? 'Copied' : 'Copy' }}
+        </button>
+        <button
+          *ngIf="link.paymentLinkUrl"
+          type="button"
+          hlmBtn variant="outline" size="sm"
+          (click)="shareWhatsApp(link)"
+        >
+          <ng-icon name="lucideMessageCircle" size="14" class="mr-1" />
+          WhatsApp
+        </button>
+        <button
+          *ngIf="link.paymentLinkUrl"
+          type="button"
+          hlmBtn variant="outline" size="sm"
+          [disabled]="isLinkRowMutating(link.reservationId)"
+          (click)="toggleExtend(link.reservationId, link.paymentDeadlineAt)"
+        >
+          Extend deadline
+        </button>
+        <button
+          type="button"
+          hlmBtn
+          [variant]="link.paymentLinkUrl ? 'outline' : 'default'"
+          size="sm"
+          [disabled]="isLinkRowMutating(link.reservationId)"
+          (click)="regenerateLink(link)"
+        >
+          <ng-icon name="lucideRefreshCw" size="14" class="mr-1" />
+          {{ link.paymentLinkUrl ? 'Regenerate' : 'Generate link' }}
+        </button>
+        <span *ngIf="isLinkRowMutating(link.reservationId)" class="text-xs text-brand-500">Saving…</span>
+      </div>
+
+      <div
+        *ngIf="expandedExtendId() === link.reservationId"
+        class="mt-3 rounded-xl border border-brand-200 bg-brand-50/40 p-3"
+      >
+        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-brand-500">Push the deadline</p>
+        <p class="mt-1 text-xs text-brand-600">
+          The reservation stays held until this time. The Square link stays live until then.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            hlmBtn variant="default" size="sm"
+            [disabled]="isLinkRowMutating(link.reservationId)"
+            (click)="extendDeadline(link, 'event-night')"
+          >
+            Event night · 10:00 PM
+          </button>
+          <button
+            type="button"
+            hlmBtn variant="default" size="sm"
+            [disabled]="isLinkRowMutating(link.reservationId)"
+            (click)="extendDeadline(link, 'plus-24h')"
+          >
+            +24 hours
+          </button>
+        </div>
+        <label class="mt-3 grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
+          Custom (date + time)
+          <input
+            type="datetime-local"
+            hlmInput
+            [formControl]="customDeadline"
+          />
+        </label>
+        <div class="mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            hlmBtn variant="outline" size="sm"
+            (click)="expandedExtendId.set(null)"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            hlmBtn size="sm"
+            [disabled]="isLinkRowMutating(link.reservationId) || !customDeadline.value"
+            (click)="extendDeadline(link, 'custom')"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </article>
+  </div>
+</hlm-dialog>

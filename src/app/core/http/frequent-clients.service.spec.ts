@@ -74,4 +74,32 @@ describe('FrequentClientsService', () => {
     await firstValueFrom(svc.delete('c1'));
     expect(calls[0]).toEqual({ method: 'DELETE', path: '/frequent-clients/c1' });
   });
+
+  it('listActiveLinks: GET /frequent-clients/:id/active-links; unwraps items', async () => {
+    const { svc, calls } = setup({
+      'GET /frequent-clients/c1/active-links': {
+        items: [
+          {
+            reservationId: 'r1',
+            eventDate: '2026-06-07',
+            paymentLinkUrl: 'https://sq.link/x',
+            tableIds: ['T7'],
+          },
+        ],
+      },
+    });
+    const res = await firstValueFrom(svc.listActiveLinks('c1'));
+    expect(calls[0]).toEqual({
+      method: 'GET',
+      path: '/frequent-clients/c1/active-links',
+      params: undefined,
+    });
+    expect(res.length).toBe(1);
+    expect(res[0].reservationId).toBe('r1');
+  });
+
+  it('listActiveLinks: defaults missing items to []', async () => {
+    const { svc } = setup({ 'GET /frequent-clients/c1/active-links': {} });
+    expect(await firstValueFrom(svc.listActiveLinks('c1'))).toEqual([]);
+  });
 });

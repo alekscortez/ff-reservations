@@ -41,6 +41,7 @@ function makeCtx(overrides = {}) {
     sendPaymentLinkSms: [],
     cancelReservation: [],
     changeReservationTables: [],
+    extendReservationPaymentDeadline: [],
     getRuntimeSettingsSubset: [],
     getEventByDate: [],
     startSquareStandHandoff: [],
@@ -166,6 +167,18 @@ function makeCtx(overrides = {}) {
                 newTablePrices: [],
                 payment: null,
                 overpayment: null,
+              }
+            );
+          },
+      extendReservationPaymentDeadline: overrides.extendReservationPaymentDeadlineDisabled
+        ? undefined
+        : async (args) => {
+            calls.extendReservationPaymentDeadline.push(args);
+            return (
+              overrides.extendDeadlineResult ?? {
+                reservationId: args?.reservationId ?? null,
+                eventDate: args?.eventDate ?? null,
+                paymentDeadlineAt: args?.paymentDeadlineAt ?? null,
               }
             );
           },
@@ -860,6 +873,76 @@ describe("POST /reservations/{id}/payment/square-stand/cancel", () => {
     assert.equal(calls.cancelSquareStandHandoff[0].handoffId, "h_fake");
     assert.equal(calls.cancelSquareStandHandoff[0].reason, "staff_changed_mind");
     assert.equal(calls.cancelSquareStandHandoff[0].actor, "host@x");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /reservations/{id}/payment-deadline
+// ---------------------------------------------------------------------------
+
+describe("PUT /reservations/{id}/payment-deadline", () => {
+  it("400 on bad JSON", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/payment-deadline",
+      body: null,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("400 when eventDate / paymentDeadlineAt missing", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/payment-deadline",
+      body: { eventDate: "2026-05-09" },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /paymentDeadlineAt/);
+  });
+
+  it("500 when service is not configured", async () => {
+    const { ctx } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/payment-deadline",
+      body: {
+        eventDate: "2026-05-09",
+        paymentDeadlineAt: "3000-01-01T18:00:00",
+        paymentDeadlineTz: "America/Chicago",
+      },
+      extendReservationPaymentDeadlineDisabled: true,
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 500);
+  });
+
+  it("dispatches with id + body → 200 with item envelope", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "PUT",
+      path: "/reservations/r1/payment-deadline",
+      body: {
+        eventDate: "2026-05-09",
+        paymentDeadlineAt: "3000-01-01T18:00:00",
+        paymentDeadlineTz: "America/Chicago",
+      },
+      userLabel: "staff@x",
+      extendDeadlineResult: {
+        reservationId: "r1",
+        paymentDeadlineAt: "3000-01-01T18:00:00",
+      },
+    });
+    const res = await handleReservationsAndHoldsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.requireStaffOrAdmin.length, 1);
+    assert.deepEqual(calls.extendReservationPaymentDeadline[0], {
+      eventDate: "2026-05-09",
+      reservationId: "r1",
+      paymentDeadlineAt: "3000-01-01T18:00:00",
+      paymentDeadlineTz: "America/Chicago",
+      actor: "staff@x",
+    });
+    assert.equal(res.body.item.reservationId, "r1");
   });
 });
 

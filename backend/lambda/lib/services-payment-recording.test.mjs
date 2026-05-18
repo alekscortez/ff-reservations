@@ -367,6 +367,217 @@ describe("markReservationPaymentLinkInactive", () => {
 });
 
 // ---------------------------------------------------------------------------
+// extendReservationPaymentDeadline
+// ---------------------------------------------------------------------------
+
+describe("extendReservationPaymentDeadline validation", () => {
+  it("400 on bad eventDate", async () => {
+    const { svc } = buildPaymentRecording();
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "garbage",
+          reservationId: "r1",
+          paymentDeadlineAt: "2026-05-09T18:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 400 && /YYYY-MM-DD/.test(err.message)
+    );
+  });
+
+  it("400 on bad paymentDeadlineAt format", async () => {
+    const { svc } = buildPaymentRecording();
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "r1",
+          paymentDeadlineAt: "2026-05-09",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 400 && /HH:mm:ss/.test(err.message)
+    );
+  });
+
+  it("404 when reservation does not exist", async () => {
+    const { svc } = buildPaymentRecording({
+      shared: { getReservationById: async () => null },
+    });
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "missing",
+          paymentDeadlineAt: "3000-01-01T18:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 404
+    );
+  });
+
+  it("400 when reservation is CANCELLED", async () => {
+    const { svc } = buildPaymentRecording({
+      shared: {
+        getReservationById: async () => ({ status: "CANCELLED", paymentStatus: "PENDING" }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "r1",
+          paymentDeadlineAt: "3000-01-01T18:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 400 && /confirmed/i.test(err.message)
+    );
+  });
+
+  it("400 when paymentStatus is PAID", async () => {
+    const { svc } = buildPaymentRecording({
+      shared: {
+        getReservationById: async () => ({ status: "CONFIRMED", paymentStatus: "PAID" }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "r1",
+          paymentDeadlineAt: "3000-01-01T18:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("400 when paymentDeadlineAt is in the past relative to nowInTimeZoneLocalIso", async () => {
+    const { svc } = buildPaymentRecording({
+      shared: {
+        getReservationById: async () => ({
+          status: "CONFIRMED",
+          paymentStatus: "PENDING",
+        }),
+        // pretend local-now is 2026-05-09T12:00:00 (the default helper)
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "r1",
+          paymentDeadlineAt: "2026-05-09T11:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 400 && /future/i.test(err.message)
+    );
+  });
+});
+
+describe("extendReservationPaymentDeadline happy path", () => {
+  it("issues UpdateCommand with CONFIRMED+PENDING|PARTIAL guard and appends history", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildPaymentRecording({
+      ddb,
+      shared: {
+        getReservationById: async () => ({
+          status: "CONFIRMED",
+          paymentStatus: "PENDING",
+          tableId: "T9",
+          customerName: "Ana",
+          paymentDeadlineAt: "2026-05-09T00:00:00",
+          paymentDeadlineTz: "America/Chicago",
+          paymentLinkStatus: "INACTIVE",
+        }),
+      },
+    });
+    await svc.extendReservationPaymentDeadline({
+      eventDate: "2026-05-09",
+      reservationId: "r1",
+      paymentDeadlineAt: "3000-01-01T18:00:00",
+      paymentDeadlineTz: "America/Chicago",
+      actor: "staff@x",
+    });
+    const update = ddb.calls.find((c) => c.name === "UpdateCommand");
+    assert.ok(update, "UpdateCommand sent");
+    assert.equal(update.input.Key.PK, "EVENTDATE#2026-05-09");
+    assert.equal(update.input.Key.SK, "RES#r1");
+    assert.match(
+      update.input.ConditionExpression,
+      /#status = :confirmed AND \(#paymentStatus = :pending OR #paymentStatus = :partial\)/
+    );
+    assert.equal(
+      update.input.ExpressionAttributeValues[":deadlineAt"],
+      "3000-01-01T18:00:00"
+    );
+    // Link was INACTIVE → must NOT bump paymentLinkExpiresAt
+    assert.equal(
+      update.input.ExpressionAttributeValues[":linkExpiresAt"],
+      undefined
+    );
+
+    assert.equal(historyCalls.length, 1);
+    assert.equal(historyCalls[0].eventType, "PAYMENT_DEADLINE_EXTENDED");
+    assert.equal(historyCalls[0].details.previousDeadlineAt, "2026-05-09T00:00:00");
+    assert.equal(historyCalls[0].details.nextDeadlineAt, "3000-01-01T18:00:00");
+    assert.equal(historyCalls[0].details.linkAlsoExtended, false);
+  });
+
+  it("when paymentLinkStatus=ACTIVE + paymentLinkUrl present, also bumps paymentLinkExpiresAt", async () => {
+    const ddb = makeFakeDdb();
+    const { svc, historyCalls } = buildPaymentRecording({
+      ddb,
+      shared: {
+        getReservationById: async () => ({
+          status: "CONFIRMED",
+          paymentStatus: "PARTIAL",
+          paymentLinkStatus: "ACTIVE",
+          paymentLinkUrl: "https://sq.link/abc",
+        }),
+      },
+    });
+    await svc.extendReservationPaymentDeadline({
+      eventDate: "2026-05-09",
+      reservationId: "r1",
+      paymentDeadlineAt: "3000-01-01T18:00:00",
+      paymentDeadlineTz: "America/Chicago",
+      actor: "staff@x",
+    });
+    const update = ddb.calls.find((c) => c.name === "UpdateCommand");
+    assert.match(
+      update.input.UpdateExpression,
+      /#paymentLinkExpiresAt = :deadlineAt/
+    );
+    assert.equal(historyCalls[0].details.linkAlsoExtended, true);
+  });
+
+  it("CCFE → 409", async () => {
+    const ccfe = new Error("state changed");
+    ccfe.name = "ConditionalCheckFailedException";
+    const ddb = makeFakeDdb({ throwOnCommand: { UpdateCommand: ccfe } });
+    const { svc } = buildPaymentRecording({
+      ddb,
+      shared: {
+        getReservationById: async () => ({
+          status: "CONFIRMED",
+          paymentStatus: "PENDING",
+        }),
+      },
+    });
+    await assert.rejects(
+      () =>
+        svc.extendReservationPaymentDeadline({
+          eventDate: "2026-05-09",
+          reservationId: "r1",
+          paymentDeadlineAt: "3000-01-01T18:00:00",
+          paymentDeadlineTz: "America/Chicago",
+        }),
+      (err) => err?.statusCode === 409
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // addReservationPayment — input validation
 // ---------------------------------------------------------------------------
 

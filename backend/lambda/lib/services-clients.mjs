@@ -31,6 +31,36 @@ export function createClientsService({
     RES_TABLE,
   } = tableNames;
 
+  // Late-bound deps. squarePaymentsService + reservationsHoldsService +
+  // eventsService are all created AFTER clientsService in index.mjs (the
+  // dependency graph is: clientsService → eventsService → squarePayments
+  // → reservationsHolds, and reservationsHolds + squarePayments need to
+  // exist before we can gen payment links). index.mjs calls
+  // attachReservationLinkDeps(...) once all four services exist; until
+  // then these stay null and createFrequentReservationsForEvent silently
+  // skips the eager-link-gen step (the reservations still get created;
+  // staff falls back to lazy gen via Take Payment → Square).
+  let _createSquarePaymentLink = null;
+  let _setReservationPaymentLinkWindow = null;
+  let _listEvents = null;
+  let _listReservations = null;
+
+  function attachReservationLinkDeps({
+    createSquarePaymentLink,
+    setReservationPaymentLinkWindow,
+    listEvents,
+    listReservations,
+  } = {}) {
+    if (typeof createSquarePaymentLink === "function") {
+      _createSquarePaymentLink = createSquarePaymentLink;
+    }
+    if (typeof setReservationPaymentLinkWindow === "function") {
+      _setReservationPaymentLinkWindow = setReservationPaymentLinkWindow;
+    }
+    if (typeof listEvents === "function") _listEvents = listEvents;
+    if (typeof listReservations === "function") _listReservations = listReservations;
+  }
+
   function normalizePhoneForWrite(rawPhone, countryHint = "US") {
     const normalizedCountry = normalizePhoneCountry(countryHint);
     const phoneE164 = normalizePhoneE164(rawPhone, normalizedCountry);
@@ -540,6 +570,7 @@ export function createClientsService({
           detectPhoneCountryFromE164(frequentPhone) ??
           normalizePhoneCountry(c.phoneCountry ?? "US");
 
+        let txOk = false;
         try {
           await ddb.send(
             new TransactWriteCommand({
@@ -595,6 +626,7 @@ export function createClientsService({
               ],
             })
           );
+          txOk = true;
         } catch (err) {
           if (
             err?.name === "TransactionCanceledException" ||
@@ -603,6 +635,60 @@ export function createClientsService({
             continue;
           }
           throw err;
+        }
+
+        // Eager Square payment-link generation for the new reservation.
+        // Skips if Square deps aren't wired (tests, dev), if the booking
+        // is fully paid / courtesy, or if amountDue rounds to zero. A
+        // Square failure for one client never blocks the loop — the
+        // reservation stays put with no link, and staff can lazily
+        // regenerate from the frequent-clients panel or Take Payment.
+        const remaining = Math.max(0, Number(amountDue) - Number(amountPaid));
+        const needsLink =
+          txOk &&
+          remaining > 0 &&
+          paymentStatus !== "PAID" &&
+          paymentStatus !== "COURTESY" &&
+          typeof _createSquarePaymentLink === "function" &&
+          typeof _setReservationPaymentLinkWindow === "function";
+        if (needsLink) {
+          try {
+            const square = await _createSquarePaymentLink({
+              reservationId,
+              eventDate: eventRecord.eventDate,
+              tableId,
+              tableIds: [tableId],
+              customerName: c.name ?? "Frequent Client",
+              phone: frequentPhone || null,
+              amount: remaining,
+              note: "",
+              // Deterministic key so re-runs of createFrequentReservations
+              // ForEvent collapse to the same Square link (Square's own
+              // idempotency dedup). v1 leaves a forward-compatible bump
+              // path if we ever need to invalidate the eager set.
+              idempotencyKey: `freq:${reservationId}:v1`,
+            });
+            const link = square?.paymentLink ?? {};
+            const linkUrl = String(link?.url ?? "").trim();
+            const linkId = String(link?.id ?? "").trim();
+            if (linkUrl && linkId) {
+              await _setReservationPaymentLinkWindow({
+                eventDate: eventRecord.eventDate,
+                reservationId,
+                paymentLinkId: linkId,
+                paymentLinkUrl: linkUrl,
+                actor: user,
+              });
+            }
+          } catch (err) {
+            console.warn("frequent_link_eager_gen_failed", {
+              reservationId,
+              eventDate: eventRecord.eventDate,
+              tableId,
+              clientId: String(c.clientId ?? "").trim() || null,
+              message: String(err?.message ?? err ?? ""),
+            });
+          }
         }
       }
     }
@@ -888,6 +974,66 @@ export function createClientsService({
     return items;
   }
 
+  // Returns this frequent client's reservation rows on ACTIVE upcoming
+  // events (i.e. FREQUENT_AUTO rows whose `frequentClientId` matches the
+  // given clientId AND whose event date is today-or-later by business
+  // date). Used by the /admin/frequent-clients UI to surface payment
+  // links for sharing. Cron release is NOT triggered (suppressRelease
+  // pattern from financials) — staff is reading, not mutating.
+  async function listFrequentClientActiveLinks(clientId) {
+    const normalizedClientId = String(clientId ?? "").trim();
+    if (!normalizedClientId) throw httpError(400, "clientId is required");
+    if (typeof _listEvents !== "function" || typeof _listReservations !== "function") {
+      // Deps not wired (early init, tests without the setter call). Returning
+      // empty is correct: there are no reservations we can surface anyway,
+      // and falling through with a 500 would mask the real cause.
+      return [];
+    }
+    const events = await _listEvents();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const activeUpcoming = (events ?? [])
+      .filter((e) => String(e?.status ?? "").toUpperCase() === "ACTIVE")
+      .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(String(e?.eventDate ?? "")))
+      .filter((e) => String(e.eventDate) >= todayIso)
+      .map((e) => ({ eventDate: String(e.eventDate), eventName: e.eventName ?? null }))
+      .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+
+    const out = [];
+    for (const ev of activeUpcoming) {
+      const reservations = await _listReservations(ev.eventDate);
+      for (const r of reservations ?? []) {
+        if (String(r?.frequentClientId ?? "").trim() !== normalizedClientId) continue;
+        if (String(r?.status ?? "").toUpperCase() !== "CONFIRMED") continue;
+        const tableIds =
+          Array.isArray(r?.tableIds) && r.tableIds.length
+            ? r.tableIds.map((v) => String(v ?? "").trim()).filter(Boolean)
+            : [String(r?.tableId ?? "").trim()].filter(Boolean);
+        out.push({
+          eventDate: ev.eventDate,
+          eventName: ev.eventName,
+          reservationId: String(r?.reservationId ?? "").trim(),
+          tableIds,
+          customerName: String(r?.customerName ?? "").trim() || null,
+          phone: String(r?.phone ?? "").trim() || null,
+          phoneCountry: String(r?.phoneCountry ?? "").trim() || null,
+          confirmationCode: String(r?.confirmationCode ?? "").trim() || null,
+          publicSlug: String(r?.publicSlug ?? "").trim() || null,
+          amountDue: Number(r?.amountDue ?? 0),
+          depositAmount: Number(r?.depositAmount ?? 0),
+          tablePrice: Number(r?.tablePrice ?? 0),
+          paymentStatus: String(r?.paymentStatus ?? "").toUpperCase() || null,
+          paymentDeadlineAt: String(r?.paymentDeadlineAt ?? "").trim() || null,
+          paymentDeadlineTz: String(r?.paymentDeadlineTz ?? "").trim() || null,
+          paymentLinkUrl: String(r?.paymentLinkUrl ?? "").trim() || null,
+          paymentLinkStatus:
+            String(r?.paymentLinkStatus ?? "").toUpperCase() || null,
+          paymentLinkExpiresAt: String(r?.paymentLinkExpiresAt ?? "").trim() || null,
+        });
+      }
+    }
+    return out;
+  }
+
   async function isFrequentReservationByPhoneAndTable({
     phone,
     phoneCountry = "US",
@@ -936,5 +1082,7 @@ export function createClientsService({
     deleteCrmClient,
     listRescheduleCreditsByPhone,
     isFrequentReservationByPhoneAndTable,
+    listFrequentClientActiveLinks,
+    attachReservationLinkDeps,
   };
 }

@@ -36,6 +36,7 @@ export async function handleReservationsAndHoldsRoute(ctx) {
     sendPaymentLinkSms,
     cancelReservation,
     changeReservationTables,
+    extendReservationPaymentDeadline,
     getRuntimeSettingsSubset,
     getEventByDate,
     listEvents,
@@ -1155,6 +1156,43 @@ export async function handleReservationsAndHoldsRoute(ctx) {
       user
     );
     return json(200, out, cors);
+  }
+
+  // PUT /reservations/{id}/payment-deadline — push the deadline (and the
+  // active link's advisory expiry, if any) into the future on a CONFIRMED
+  // + PENDING|PARTIAL row. Staff use this to backfill existing events
+  // when a frequent client needs more time to pay than the original
+  // deadline allows. PUT (not PATCH) because the API GW HTTP API CORS
+  // allowlist doesn't include PATCH — same constraint as /tables, /cancel.
+  const extendDeadlineMatch = path.match(
+    /^\/reservations\/([^/]+)\/payment-deadline$/
+  );
+  if (extendDeadlineMatch && method === "PUT") {
+    requireStaffOrAdmin(event);
+    if (typeof extendReservationPaymentDeadline !== "function") {
+      return json(500, { message: "Deadline extension is not configured" }, cors);
+    }
+    const reservationId = extendDeadlineMatch[1];
+    const body = getBody(event);
+    if (!body) return json(400, { message: "Invalid JSON body" }, cors);
+    const eventDate = String(body?.eventDate ?? "").trim();
+    const paymentDeadlineAt = String(body?.paymentDeadlineAt ?? "").trim();
+    const paymentDeadlineTz = String(body?.paymentDeadlineTz ?? "").trim();
+    if (!eventDate) {
+      return json(400, { message: "eventDate is required" }, cors);
+    }
+    if (!paymentDeadlineAt) {
+      return json(400, { message: "paymentDeadlineAt is required" }, cors);
+    }
+    const user = await getUserLabel(event);
+    const updated = await extendReservationPaymentDeadline({
+      eventDate,
+      reservationId,
+      paymentDeadlineAt,
+      paymentDeadlineTz,
+      actor: user,
+    });
+    return json(200, { item: updated }, cors);
   }
 
   const cancelMatch = path.match(/^\/reservations\/([^/]+)\/cancel$/);

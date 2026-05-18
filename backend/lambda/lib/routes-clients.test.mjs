@@ -19,6 +19,7 @@ function makeCtx(overrides = {}) {
     getFrequentClientById: [],
     updateFrequentClient: [],
     deleteFrequentClient: [],
+    listFrequentClientActiveLinks: [],
     listCrmClients: [],
     updateCrmClient: [],
     deleteCrmClient: [],
@@ -66,6 +67,10 @@ function makeCtx(overrides = {}) {
       },
       deleteFrequentClient: async (id) => {
         calls.deleteFrequentClient.push(id);
+      },
+      listFrequentClientActiveLinks: async (id) => {
+        calls.listFrequentClientActiveLinks.push(id);
+        return overrides.activeLinks ?? [];
       },
       listCrmClients: async () => overrides.crmClients ?? [],
       updateCrmClient: async (phone, body, user) => {
@@ -219,6 +224,44 @@ describe("DELETE /frequent-clients/{id} (admin)", () => {
     const res = await handleClientsRoute(ctx);
     assert.equal(res.statusCode, 204);
     assert.equal(calls.deleteFrequentClient[0], "fc1");
+  });
+});
+
+describe("GET /frequent-clients/{id}/active-links (staff/admin)", () => {
+  it("requireStaffOrAdmin + returns items envelope", async () => {
+    const { ctx, calls } = makeCtx({
+      method: "GET",
+      path: "/frequent-clients/fc1/active-links",
+      activeLinks: [
+        {
+          reservationId: "r1",
+          eventDate: "2026-06-07",
+          paymentLinkUrl: "https://sq.link/abc",
+        },
+      ],
+    });
+    const res = await handleClientsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.requireStaffOrAdmin.length, 1);
+    assert.equal(calls.listFrequentClientActiveLinks[0], "fc1");
+    assert.deepEqual(res.body.items, [
+      {
+        reservationId: "r1",
+        eventDate: "2026-06-07",
+        paymentLinkUrl: "https://sq.link/abc",
+      },
+    ]);
+  });
+
+  it("returns empty list when service returns no rows", async () => {
+    const { ctx } = makeCtx({
+      method: "GET",
+      path: "/frequent-clients/fc1/active-links",
+      activeLinks: [],
+    });
+    const res = await handleClientsRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.items, []);
   });
 });
 

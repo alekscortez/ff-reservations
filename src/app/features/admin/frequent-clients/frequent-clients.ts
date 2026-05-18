@@ -12,7 +12,14 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NgIcon, provideIcons } from '@ng-icons/core';
-import { lucideChevronDown, lucideEllipsis, lucideX } from '@ng-icons/lucide';
+import {
+  lucideChevronDown,
+  lucideCopy,
+  lucideEllipsis,
+  lucideMessageCircle,
+  lucideRefreshCw,
+  lucideX,
+} from '@ng-icons/lucide';
 import {
   type ColumnDef,
   type PaginationState,
@@ -24,7 +31,11 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
 } from '@tanstack/angular-table';
-import { FrequentClientsService } from '../../../core/http/frequent-clients.service';
+import {
+  FrequentClientsService,
+  FrequentClientActiveLink,
+} from '../../../core/http/frequent-clients.service';
+import { ReservationsService } from '../../../core/http/reservations.service';
 import { TablesService } from '../../../core/http/tables.service';
 import {
   FrequentClient,
@@ -93,13 +104,23 @@ const PAGE_SIZE = 25;
     HlmTh,
     HlmTr,
   ],
-  providers: [provideIcons({ lucideChevronDown, lucideEllipsis, lucideX })],
+  providers: [
+    provideIcons({
+      lucideChevronDown,
+      lucideCopy,
+      lucideEllipsis,
+      lucideMessageCircle,
+      lucideRefreshCw,
+      lucideX,
+    }),
+  ],
   templateUrl: './frequent-clients.html',
   styleUrl: './frequent-clients.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FrequentClients implements OnInit {
   private clientsApi = inject(FrequentClientsService);
+  private reservationsApi = inject(ReservationsService);
   private tablesApi = inject(TablesService);
   private settingsApi = inject(SettingsService);
   private destroyRef = inject(DestroyRef);
@@ -126,6 +147,24 @@ export class FrequentClients implements OnInit {
   readonly createPhoneCountry = signal<'US' | 'MX'>('US');
   readonly editPhoneCountry = signal<'US' | 'MX'>('US');
   readonly deleteTarget = signal<FrequentClient | null>(null);
+
+  // Payment-links panel state — separate dialog opened from the row menu.
+  // Loads on open, refetches after each successful mutation (extend
+  // deadline / regenerate link) so the staff sees fresh data without
+  // closing + reopening.
+  readonly linksTarget = signal<FrequentClient | null>(null);
+  readonly linksLoading = signal(false);
+  readonly linksError = signal<string | null>(null);
+  readonly activeLinks = signal<FrequentClientActiveLink[]>([]);
+  // Reservation IDs currently mid-mutation. Disables both buttons on the
+  // row + shows a "saving…" hint so staff doesn't double-click.
+  readonly mutatingReservationIds = signal<Set<string>>(new Set());
+  readonly expandedExtendId = signal<string | null>(null);
+  // Holds the custom datetime input per-row when the staff chooses
+  // "Custom". One control because only one row's Custom panel is open
+  // at a time.
+  customDeadline = new FormControl('', { nonNullable: true });
+  readonly copyFeedbackId = signal<string | null>(null);
 
   form = new FormGroup({
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -562,6 +601,240 @@ export class FrequentClients implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  // ---- Payment-links panel ---------------------------------------------------
+
+  openLinks(item: FrequentClient): void {
+    this.linksTarget.set(item);
+    this.expandedExtendId.set(null);
+    this.copyFeedbackId.set(null);
+    this.loadActiveLinks(item.clientId);
+  }
+
+  closeLinks(): void {
+    this.linksTarget.set(null);
+    this.expandedExtendId.set(null);
+    this.activeLinks.set([]);
+    this.linksError.set(null);
+  }
+
+  private loadActiveLinks(clientId: string): void {
+    this.linksLoading.set(true);
+    this.linksError.set(null);
+    this.clientsApi.listActiveLinks(clientId).subscribe({
+      next: (items) => {
+        this.activeLinks.set(items);
+        this.linksLoading.set(false);
+      },
+      error: (err) => {
+        this.linksError.set(
+          err?.error?.message || err?.message || 'Failed to load payment links'
+        );
+        this.linksLoading.set(false);
+      },
+    });
+  }
+
+  isLinkRowMutating(reservationId: string): boolean {
+    return this.mutatingReservationIds().has(reservationId);
+  }
+
+  private setRowMutating(reservationId: string, mutating: boolean): void {
+    this.mutatingReservationIds.update((current) => {
+      const next = new Set(current);
+      if (mutating) next.add(reservationId);
+      else next.delete(reservationId);
+      return next;
+    });
+  }
+
+  toggleExtend(reservationId: string, currentDeadlineAt: string | null): void {
+    if (this.expandedExtendId() === reservationId) {
+      this.expandedExtendId.set(null);
+      return;
+    }
+    this.expandedExtendId.set(reservationId);
+    // Seed the custom input with the current deadline so staff can nudge
+    // it instead of re-typing the whole thing.
+    this.customDeadline.setValue(
+      String(currentDeadlineAt ?? '').slice(0, 16) || '',
+      { emitEvent: false }
+    );
+  }
+
+  async copyLink(link: FrequentClientActiveLink): Promise<void> {
+    const url = String(link?.paymentLinkUrl ?? '').trim();
+    if (!url) return;
+    try {
+      await navigator.clipboard?.writeText?.(url);
+    } catch {
+      // Clipboard refused (some browsers gate behind permissions / focus).
+      // Fall back to the legacy execCommand path — works inside ng modals.
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    this.copyFeedbackId.set(link.reservationId);
+    setTimeout(() => {
+      if (this.copyFeedbackId() === link.reservationId) {
+        this.copyFeedbackId.set(null);
+      }
+    }, 1500);
+  }
+
+  shareWhatsApp(link: FrequentClientActiveLink): void {
+    const url = String(link?.paymentLinkUrl ?? '').trim();
+    if (!url) return;
+    const code = String(link?.confirmationCode ?? '').trim();
+    const name = String(link?.customerName ?? '').trim();
+    const tableLine = link.tableIds.length
+      ? (link.tableIds.length > 1 ? `Tables ${link.tableIds.join(', ')}` : `Table ${link.tableIds[0]}`)
+      : '';
+    const message = [
+      name ? `Hola ${name},` : 'Hola,',
+      `Aquí está tu enlace de pago para Famoso Fuego${code ? ` (Reserva #FF-${code})` : ''}:`,
+      tableLine ? `• ${tableLine}` : '',
+      `• Fecha: ${link.eventDate}`,
+      '',
+      url,
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
+    const phone = String(link?.phone ?? '').replace(/\D/g, '');
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank', 'noopener');
+  }
+
+  private wallClockInTz(date: Date, tz: string): string {
+    // Format `date` as YYYY-MM-DDTHH:mm:ss in `tz`. Returns "" if Intl
+    // rejects the tz (caller falls back to America/Chicago).
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      const parts: Record<string, string> = {};
+      for (const p of fmt.formatToParts(date)) parts[p.type] = p.value;
+      if (!parts['year']) return '';
+      const hr = parts['hour'] === '24' ? '00' : parts['hour'];
+      return `${parts['year']}-${parts['month']}-${parts['day']}T${hr}:${parts['minute']}:${parts['second']}`;
+    } catch {
+      return '';
+    }
+  }
+
+  private deadlineForPreset(
+    link: FrequentClientActiveLink,
+    preset: 'event-night' | 'plus-24h' | 'custom'
+  ): { paymentDeadlineAt: string; paymentDeadlineTz: string } | null {
+    const tz = String(link?.paymentDeadlineTz ?? '').trim() || 'America/Chicago';
+    if (preset === 'event-night') {
+      return { paymentDeadlineAt: `${link.eventDate}T22:00:00`, paymentDeadlineTz: tz };
+    }
+    if (preset === 'plus-24h') {
+      const target = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const iso = this.wallClockInTz(target, tz) || this.wallClockInTz(target, 'America/Chicago');
+      if (!iso) return null;
+      return { paymentDeadlineAt: iso, paymentDeadlineTz: tz };
+    }
+    // custom: take HTML5 datetime-local "YYYY-MM-DDTHH:mm" and add :00 seconds
+    const raw = String(this.customDeadline.value ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) return null;
+    return { paymentDeadlineAt: `${raw}:00`, paymentDeadlineTz: tz };
+  }
+
+  extendDeadline(
+    link: FrequentClientActiveLink,
+    preset: 'event-night' | 'plus-24h' | 'custom'
+  ): void {
+    const body = this.deadlineForPreset(link, preset);
+    if (!body) {
+      this.linksError.set('Pick a valid date and time before saving');
+      return;
+    }
+    const reservationId = link.reservationId;
+    this.linksError.set(null);
+    this.setRowMutating(reservationId, true);
+    this.reservationsApi
+      .extendPaymentDeadline({
+        reservationId,
+        eventDate: link.eventDate,
+        paymentDeadlineAt: body.paymentDeadlineAt,
+        paymentDeadlineTz: body.paymentDeadlineTz,
+      })
+      .subscribe({
+        next: () => {
+          this.expandedExtendId.set(null);
+          const targetId = this.linksTarget()?.clientId;
+          if (targetId) this.loadActiveLinks(targetId);
+          this.setRowMutating(reservationId, false);
+        },
+        error: (err) => {
+          this.linksError.set(
+            err?.error?.message || err?.message || 'Failed to extend deadline'
+          );
+          this.setRowMutating(reservationId, false);
+        },
+      });
+  }
+
+  regenerateLink(link: FrequentClientActiveLink): void {
+    const reservationId = link.reservationId;
+    const remaining = Math.max(0, Number(link.amountDue) - Number(link.depositAmount));
+    if (remaining <= 0) {
+      this.linksError.set('Nothing to charge — reservation is fully paid');
+      return;
+    }
+    this.linksError.set(null);
+    this.setRowMutating(reservationId, true);
+    this.reservationsApi
+      .createSquarePaymentLink({
+        reservationId,
+        eventDate: link.eventDate,
+        amount: remaining,
+        note: '',
+        idempotencyKey: `freq:regen:${reservationId}:${Date.now()}`,
+      })
+      .subscribe({
+        next: () => {
+          const targetId = this.linksTarget()?.clientId;
+          if (targetId) this.loadActiveLinks(targetId);
+          this.setRowMutating(reservationId, false);
+        },
+        error: (err) => {
+          this.linksError.set(
+            err?.error?.message || err?.message || 'Failed to generate link'
+          );
+          this.setRowMutating(reservationId, false);
+        },
+      });
+  }
+
+  tableLabelFor(link: FrequentClientActiveLink): string {
+    if (!link?.tableIds?.length) return '';
+    if (link.tableIds.length === 1) return `Table ${link.tableIds[0]}`;
+    return `Tables ${link.tableIds.join(', ')}`;
+  }
+
+  trackByLinkId(_: number, item: FrequentClientActiveLink): string {
+    return item.reservationId;
   }
 
   toggleCreateForm(): void {

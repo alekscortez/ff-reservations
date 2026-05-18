@@ -310,6 +310,29 @@ export class ReservationsService {
     });
   }
 
+  // Push paymentDeadlineAt (and the active Square link's expiry, if any)
+  // into the future on a CONFIRMED + PENDING|PARTIAL reservation. Used by
+  // the /admin/frequent-clients panel to backfill existing events when a
+  // frequent client needs more time to pay. paymentDeadlineAt MUST be
+  // `YYYY-MM-DDTHH:mm:ss`; paymentDeadlineTz MUST be an IANA name.
+  extendPaymentDeadline(payload: {
+    reservationId: string;
+    eventDate: string;
+    paymentDeadlineAt: string;
+    paymentDeadlineTz: string;
+  }) {
+    return this.api
+      .put<{ item: ReservationItem }>(
+        `/reservations/${payload.reservationId}/payment-deadline`,
+        {
+          eventDate: payload.eventDate,
+          paymentDeadlineAt: payload.paymentDeadlineAt,
+          paymentDeadlineTz: payload.paymentDeadlineTz,
+        }
+      )
+      .pipe(map((res) => res.item));
+  }
+
   addPayment(payload: AddPaymentPayload) {
     return this.api.put<{ item: ReservationItem }>(
       `/reservations/${payload.reservationId}/payment`,

@@ -88,6 +88,32 @@ describe('ReservationsService', () => {
     expect((calls[1].body as any).resolutionType).toBe('REFUND');
   });
 
+  it('extendPaymentDeadline: PUT /reservations/:id/payment-deadline; unwraps item', async () => {
+    const { svc, calls } = setup({
+      'PUT /reservations/r1/payment-deadline': {
+        item: { reservationId: 'r1', paymentDeadlineAt: '3000-01-01T18:00:00' },
+      },
+    });
+    const res = await firstValueFrom(
+      svc.extendPaymentDeadline({
+        reservationId: 'r1',
+        eventDate: '2026-05-09',
+        paymentDeadlineAt: '3000-01-01T18:00:00',
+        paymentDeadlineTz: 'America/Chicago',
+      })
+    );
+    expect(calls[0]).toEqual({
+      method: 'PUT',
+      path: '/reservations/r1/payment-deadline',
+      body: {
+        eventDate: '2026-05-09',
+        paymentDeadlineAt: '3000-01-01T18:00:00',
+        paymentDeadlineTz: 'America/Chicago',
+      },
+    });
+    expect((res as any).reservationId).toBe('r1');
+  });
+
   it('addPayment: PUT /reservations/:id/payment with empty-string defaults', async () => {
     const { svc, calls } = setup();
     await firstValueFrom(

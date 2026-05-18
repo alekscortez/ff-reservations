@@ -105,7 +105,7 @@
             <span *ngIf="controlError('paymentLinkTtlMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>
           <label class="grid gap-1 text-xs uppercase tracking-[0.12em] text-brand-500">
-            Frequent-client payment link expires after (minutes)
+            Frequent client link backstop (minutes)
             <input
               type="number"
               min="10"
@@ -114,7 +114,7 @@
               hlmInput size="lg"
             />
             <span class="text-[11px] normal-case tracking-normal text-brand-500">
-              Longer window for known clients. Typical: 1440 (24 h).
+              For frequent clients, each reservation's <strong>payment deadline</strong> is what actually controls how long the link lives — set that per-client on the Frequent Clients page, or push it from the "Payment links" panel. This minute count is a fallback used only when no deadline is set.
             </span>
             <span *ngIf="controlError('frequentPaymentLinkTtlMinutes') as err" class="text-[11px] normal-case tracking-normal text-danger-700">{{ err }}</span>
           </label>

@@ -765,9 +765,152 @@ export function createPaymentRecordingService(
     };
   }
 
+  // Push paymentDeadlineAt (and, when a Square link is currently ACTIVE,
+  // paymentLinkExpiresAt) into the future on a CONFIRMED + PENDING|PARTIAL
+  // reservation. Mirrors setReservationPaymentLinkWindow's ConditionExpression
+  // so we never extend a PAID/COURTESY/CANCELLED row. The Square hosted page
+  // doesn't know about our deadline — it stays live regardless — so the
+  // practical effect is: the overdue-release cron stops cancelling this row,
+  // which in turn stops it from DELETE-ing the Square link via
+  // markReservationPaymentLinkInactive. The frequent-client UI uses this to
+  // backfill existing events without re-creating reservations.
+  async function extendReservationPaymentDeadline({
+    eventDate,
+    reservationId,
+    paymentDeadlineAt,
+    paymentDeadlineTz,
+    actor,
+  }) {
+    requiredEnv("RES_TABLE", RES_TABLE);
+    const normalizedEventDate = String(eventDate ?? "").trim();
+    const normalizedReservationId = String(reservationId ?? "").trim();
+    const normalizedDeadlineAt = String(paymentDeadlineAt ?? "").trim();
+    const normalizedDeadlineTz =
+      String(paymentDeadlineTz ?? "").trim() || DEFAULT_DEADLINE_TZ;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedEventDate)) {
+      throw httpError(400, "eventDate must be YYYY-MM-DD");
+    }
+    if (!normalizedReservationId) throw httpError(400, "reservationId is required");
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalizedDeadlineAt)) {
+      throw httpError(400, "paymentDeadlineAt must be YYYY-MM-DDTHH:mm:ss");
+    }
+
+    const current = await getReservationById(normalizedEventDate, normalizedReservationId);
+    if (!current) throw httpError(404, "Reservation not found");
+    const status = String(current?.status ?? "").toUpperCase();
+    const paymentStatus = String(current?.paymentStatus ?? "").toUpperCase();
+    if (status !== "CONFIRMED") {
+      throw httpError(400, "Only confirmed reservations can have their deadline extended");
+    }
+    if (paymentStatus !== "PENDING" && paymentStatus !== "PARTIAL") {
+      throw httpError(
+        400,
+        "Only pending or partial reservations can have their deadline extended"
+      );
+    }
+
+    // Don't accept a deadline that's already in the past in the chosen tz —
+    // the cron would cancel the reservation on the very next sweep. We do
+    // accept "just past" submissions made through optimistic UI by adding a
+    // small grace: any time that's within the next 60s is rejected.
+    const localNow = nowInTimeZoneLocalIso(normalizedDeadlineTz);
+    if (localNow && normalizedDeadlineAt <= localNow) {
+      throw httpError(400, "paymentDeadlineAt must be in the future");
+    }
+
+    const now = nowEpoch();
+    const user = String(actor ?? "").trim() || "system";
+    const linkActive =
+      String(current?.paymentLinkStatus ?? "").toUpperCase() === "ACTIVE" &&
+      Boolean(String(current?.paymentLinkUrl ?? "").trim());
+
+    const expressionAttributeNames = {
+      "#status": "status",
+      "#paymentStatus": "paymentStatus",
+      "#paymentDeadlineAt": "paymentDeadlineAt",
+      "#paymentDeadlineTz": "paymentDeadlineTz",
+      "#updatedAt": "updatedAt",
+      "#updatedBy": "updatedBy",
+    };
+    const expressionAttributeValues = {
+      ":confirmed": "CONFIRMED",
+      ":pending": "PENDING",
+      ":partial": "PARTIAL",
+      ":deadlineAt": normalizedDeadlineAt,
+      ":deadlineTz": normalizedDeadlineTz,
+      ":now": now,
+      ":by": user,
+    };
+    const setClauses = [
+      "#paymentDeadlineAt = :deadlineAt",
+      "#paymentDeadlineTz = :deadlineTz",
+      "#updatedAt = :now",
+      "#updatedBy = :by",
+    ];
+    if (linkActive) {
+      expressionAttributeNames["#paymentLinkExpiresAt"] = "paymentLinkExpiresAt";
+      expressionAttributeNames["#paymentLinkUpdatedAt"] = "paymentLinkUpdatedAt";
+      expressionAttributeNames["#paymentLinkUpdatedBy"] = "paymentLinkUpdatedBy";
+      setClauses.push("#paymentLinkExpiresAt = :deadlineAt");
+      setClauses.push("#paymentLinkUpdatedAt = :now");
+      setClauses.push("#paymentLinkUpdatedBy = :by");
+    }
+
+    const updateExpression = `SET ${setClauses.join(", ")}`;
+    let updated;
+    try {
+      const res = await ddb.send(
+        new UpdateCommand({
+          TableName: RES_TABLE,
+          Key: {
+            PK: `EVENTDATE#${normalizedEventDate}`,
+            SK: `RES#${normalizedReservationId}`,
+          },
+          ConditionExpression:
+            "#status = :confirmed AND (#paymentStatus = :pending OR #paymentStatus = :partial)",
+          UpdateExpression: updateExpression,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ReturnValues: "ALL_NEW",
+        })
+      );
+      updated = res.Attributes ?? null;
+    } catch (err) {
+      if (err?.name === "ConditionalCheckFailedException") {
+        throw httpError(
+          409,
+          "Reservation state changed — refresh and try again"
+        );
+      }
+      throw err;
+    }
+
+    await appendReservationHistory({
+      eventDate: normalizedEventDate,
+      reservationId: normalizedReservationId,
+      eventType: "PAYMENT_DEADLINE_EXTENDED",
+      actor: user,
+      source: "staff",
+      tableId: String(updated?.tableId ?? current?.tableId ?? "").trim() || null,
+      customerName:
+        String(updated?.customerName ?? current?.customerName ?? "").trim() || null,
+      details: {
+        previousDeadlineAt: String(current?.paymentDeadlineAt ?? "").trim() || null,
+        previousDeadlineTz: String(current?.paymentDeadlineTz ?? "").trim() || null,
+        nextDeadlineAt: normalizedDeadlineAt,
+        nextDeadlineTz: normalizedDeadlineTz,
+        linkAlsoExtended: linkActive,
+      },
+      at: now,
+    });
+
+    return updated;
+  }
+
   return {
     addReservationPayment,
     setReservationPaymentLinkWindow,
     markReservationPaymentLinkInactive,
+    extendReservationPaymentDeadline,
   };
 }

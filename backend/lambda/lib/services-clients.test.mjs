@@ -1127,3 +1127,308 @@ describe("searchCrmClients", () => {
     assert.deepEqual(out, []);
   });
 });
+
+// ---------------------------------------------------------------------------
+// attachReservationLinkDeps + eager link gen inside
+// createFrequentReservationsForEvent. The setter-pattern dodges the
+// circular-init issue documented in services-clients.mjs: deps are wired
+// late from index.mjs once squarePayments + reservationsHolds exist.
+// ---------------------------------------------------------------------------
+
+describe("createFrequentReservationsForEvent eager Square link gen", () => {
+  function buildHarness({ ddb, clientsResponse, squareResult, squareError } = {}) {
+    const linkCalls = [];
+    const windowCalls = [];
+    const seedDdb =
+      ddb ??
+      makeFakeDdb({
+        queryResponses: [{ Items: clientsResponse ?? [] }],
+      });
+    const { svc } = buildService({ ddb: seedDdb });
+    svc.attachReservationLinkDeps({
+      createSquarePaymentLink: async (args) => {
+        linkCalls.push(args);
+        if (squareError) throw squareError;
+        return squareResult ?? {
+          paymentLink: { id: "PL_eager_1", url: "https://sq.link/eager" },
+        };
+      },
+      setReservationPaymentLinkWindow: async (args) => {
+        windowCalls.push(args);
+        return null;
+      },
+    });
+    return { svc, linkCalls, windowCalls, ddb: seedDdb };
+  }
+
+  it("fires createSquarePaymentLink + setReservationPaymentLinkWindow for a PENDING client with amountDue > 0", async () => {
+    const ddb = makeFakeDdb({
+      queryResponses: [
+        {
+          Items: [
+            {
+              clientId: "fc1",
+              status: "ACTIVE",
+              name: "Ana",
+              phone: "+12025550111",
+              phoneCountry: "US",
+              tableSettings: [
+                {
+                  tableId: "T7",
+                  paymentStatus: "PENDING",
+                  amountDue: 200,
+                  amountPaid: 0,
+                  paymentDeadlineTime: "00:00",
+                  paymentDeadlineTz: "America/Chicago",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { svc, linkCalls, windowCalls } = buildHarness({ ddb });
+    await svc.createFrequentReservationsForEvent(
+      {
+        eventDate: "2026-06-07",
+        tablePrices: { T7: 200 },
+        disabledClients: [],
+      },
+      "admin@x"
+    );
+    assert.equal(linkCalls.length, 1, "Square link gen called");
+    assert.equal(linkCalls[0].amount, 200);
+    assert.equal(linkCalls[0].eventDate, "2026-06-07");
+    assert.match(
+      linkCalls[0].idempotencyKey,
+      /^freq:[a-zA-Z0-9-]+:v1$/,
+      "deterministic idempotency key"
+    );
+    assert.equal(windowCalls.length, 1);
+    assert.equal(windowCalls[0].paymentLinkId, "PL_eager_1");
+    assert.equal(windowCalls[0].paymentLinkUrl, "https://sq.link/eager");
+  });
+
+  it("skips link gen when paymentStatus=PAID", async () => {
+    const ddb = makeFakeDdb({
+      queryResponses: [
+        {
+          Items: [
+            {
+              clientId: "fc1",
+              status: "ACTIVE",
+              name: "Ana",
+              phone: "+12025550111",
+              tableSettings: [
+                {
+                  tableId: "T7",
+                  paymentStatus: "PAID",
+                  amountDue: 200,
+                  amountPaid: 200,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { svc, linkCalls } = buildHarness({ ddb });
+    await svc.createFrequentReservationsForEvent(
+      { eventDate: "2026-06-07", tablePrices: { T7: 200 } },
+      "admin@x"
+    );
+    assert.equal(linkCalls.length, 0, "no Square call for PAID rows");
+  });
+
+  it("skips link gen when paymentStatus=COURTESY", async () => {
+    const ddb = makeFakeDdb({
+      queryResponses: [
+        {
+          Items: [
+            {
+              clientId: "fc1",
+              status: "ACTIVE",
+              name: "Ana",
+              phone: "+12025550111",
+              tableSettings: [
+                {
+                  tableId: "T7",
+                  paymentStatus: "COURTESY",
+                  amountDue: 200,
+                  amountPaid: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { svc, linkCalls } = buildHarness({ ddb });
+    await svc.createFrequentReservationsForEvent(
+      { eventDate: "2026-06-07", tablePrices: { T7: 200 } },
+      "admin@x"
+    );
+    assert.equal(linkCalls.length, 0, "no Square call for COURTESY rows");
+  });
+
+  it("does NOT throw if Square link generation fails — reservation stays put", async () => {
+    const ddb = makeFakeDdb({
+      queryResponses: [
+        {
+          Items: [
+            {
+              clientId: "fc1",
+              status: "ACTIVE",
+              name: "Ana",
+              phone: "+12025550111",
+              tableSettings: [
+                { tableId: "T7", paymentStatus: "PENDING", amountDue: 200 },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { svc, windowCalls } = buildHarness({
+      ddb,
+      squareError: new Error("Square 502"),
+    });
+    await assert.doesNotReject(() =>
+      svc.createFrequentReservationsForEvent(
+        { eventDate: "2026-06-07", tablePrices: { T7: 200 } },
+        "admin@x"
+      )
+    );
+    assert.equal(windowCalls.length, 0, "window not stamped on Square failure");
+  });
+
+  it("silently skips link gen when deps were never attached (tests / dev)", async () => {
+    const ddb = makeFakeDdb({
+      queryResponses: [
+        {
+          Items: [
+            {
+              clientId: "fc1",
+              status: "ACTIVE",
+              name: "Ana",
+              phone: "+12025550111",
+              tableSettings: [
+                { tableId: "T7", paymentStatus: "PENDING", amountDue: 200 },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { svc } = buildService({ ddb });
+    // NOTE: attachReservationLinkDeps() not called.
+    await assert.doesNotReject(() =>
+      svc.createFrequentReservationsForEvent(
+        { eventDate: "2026-06-07", tablePrices: { T7: 200 } },
+        "admin@x"
+      )
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listFrequentClientActiveLinks
+// ---------------------------------------------------------------------------
+
+describe("listFrequentClientActiveLinks", () => {
+  it("400 when clientId missing", async () => {
+    const { svc } = buildService();
+    await assert.rejects(
+      () => svc.listFrequentClientActiveLinks(""),
+      (err) => err?.statusCode === 400
+    );
+  });
+
+  it("returns [] when deps not wired (silent fallback)", async () => {
+    const { svc } = buildService();
+    const out = await svc.listFrequentClientActiveLinks("fc1");
+    assert.deepEqual(out, []);
+  });
+
+  it("fans out across upcoming ACTIVE events, filters by frequentClientId, drops past events + non-CONFIRMED rows", async () => {
+    const { svc } = buildService();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const pastDate = "2020-01-01";
+    const futureDate = "3000-01-01";
+    svc.attachReservationLinkDeps({
+      listEvents: async () => [
+        // ACTIVE upcoming — should appear
+        { eventDate: futureDate, status: "ACTIVE", eventName: "Future Night" },
+        // ACTIVE but past — should be filtered out
+        { eventDate: pastDate, status: "ACTIVE", eventName: "Past Night" },
+        // INACTIVE upcoming — should be filtered out
+        {
+          eventDate: futureDate,
+          status: "INACTIVE",
+          eventName: "Disabled Night",
+        },
+        // Today is borderline — include
+        { eventDate: todayIso, status: "ACTIVE", eventName: "Tonight" },
+      ],
+      listReservations: async (date) => {
+        if (date === futureDate) {
+          return [
+            // Match
+            {
+              reservationId: "r-future-match",
+              eventDate: futureDate,
+              frequentClientId: "fc1",
+              status: "CONFIRMED",
+              tableIds: ["T7", "T8"],
+              customerName: "Ana",
+              amountDue: 200,
+              paymentLinkUrl: "https://sq.link/future",
+              paymentLinkStatus: "ACTIVE",
+            },
+            // Different client — drop
+            {
+              reservationId: "r-future-other",
+              eventDate: futureDate,
+              frequentClientId: "fc2",
+              status: "CONFIRMED",
+            },
+            // Same client but CANCELLED — drop
+            {
+              reservationId: "r-future-cancelled",
+              eventDate: futureDate,
+              frequentClientId: "fc1",
+              status: "CANCELLED",
+            },
+          ];
+        }
+        if (date === todayIso) {
+          return [
+            {
+              reservationId: "r-today-match",
+              eventDate: todayIso,
+              frequentClientId: "fc1",
+              status: "CONFIRMED",
+              tableId: "T7", // legacy scalar
+              amountDue: 100,
+            },
+          ];
+        }
+        return [];
+      },
+    });
+    const out = await svc.listFrequentClientActiveLinks("fc1");
+    assert.equal(out.length, 2);
+    const ids = out.map((r) => r.reservationId).sort();
+    assert.deepEqual(ids, ["r-future-match", "r-today-match"]);
+    const future = out.find((r) => r.reservationId === "r-future-match");
+    assert.deepEqual(future.tableIds, ["T7", "T8"]);
+    assert.equal(future.paymentLinkUrl, "https://sq.link/future");
+    assert.equal(future.paymentLinkStatus, "ACTIVE");
+    const today = out.find((r) => r.reservationId === "r-today-match");
+    assert.deepEqual(
+      today.tableIds,
+      ["T7"],
+      "falls back to scalar tableId when tableIds[] is absent"
+    );
+  });
+});

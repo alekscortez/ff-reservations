@@ -66,6 +66,8 @@ export function createReservationsHoldsService(deps) {
     addReservationPayment: paymentRecording.addReservationPayment,
     setReservationPaymentLinkWindow:
       paymentRecording.setReservationPaymentLinkWindow,
+    extendReservationPaymentDeadline:
+      paymentRecording.extendReservationPaymentDeadline,
     // history writes (kept on the public surface for direct external use
     // from routes-reservations-holds.mjs)
     appendReservationHistory: shared.appendReservationHistory,

@@ -636,6 +636,21 @@ const reservationsHoldsService = createReservationsHoldsService({
   pushNotifications: pushNotificationsService,
 });
 
+// Late-bind the Square + reservations deps onto clientsService now that
+// reservationsHoldsService exists. createFrequentReservationsForEvent can
+// now eagerly mint a Square payment link for each FREQUENT_AUTO row, and
+// listFrequentClientActiveLinks can fan out across upcoming events for
+// the /admin/frequent-clients UI. Setter pattern dodges the circular
+// init: clientsService → eventsService → squarePayments → reservations
+// would otherwise force a refactor of the whole graph for one feature.
+clientsService.attachReservationLinkDeps({
+  createSquarePaymentLink: squarePaymentsService.createPaymentLink,
+  setReservationPaymentLinkWindow:
+    reservationsHoldsService.setReservationPaymentLinkWindow,
+  listEvents: eventsService.listEvents,
+  listReservations: reservationsHoldsService.listReservations,
+});
+
 // Square Stand handoff (URL-scheme bridge for the iPad host stand).
 // Routes wired in routes-reservations-holds.mjs. State lives in HOLDS_TABLE
 // under PK="STANDPAY".
@@ -933,6 +948,7 @@ export const handler = async (event) => {
       getFrequentClientById: clientsService.getFrequentClientById,
       updateFrequentClient: clientsService.updateFrequentClient,
       deleteFrequentClient: clientsService.deleteFrequentClient,
+      listFrequentClientActiveLinks: clientsService.listFrequentClientActiveLinks,
       listCrmClients: clientsService.listCrmClients,
       updateCrmClient: clientsService.updateCrmClient,
       deleteCrmClient: clientsService.deleteCrmClient,
@@ -999,6 +1015,8 @@ export const handler = async (event) => {
       sendPaymentLinkSms: smsNotificationsService.sendPaymentLinkSms,
       cancelReservation: reservationsHoldsService.cancelReservation,
       changeReservationTables: reservationsHoldsService.changeReservationTables,
+      extendReservationPaymentDeadline:
+        reservationsHoldsService.extendReservationPaymentDeadline,
       getRuntimeSettingsSubset: async () =>
         settingsService.runtimeSettingsSubset(await settingsService.getAppSettings()),
       getEventByDate: eventsService.getEventByDate,
