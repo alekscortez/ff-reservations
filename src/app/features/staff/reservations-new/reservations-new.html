@@ -758,7 +758,10 @@
         </span>
       </header>
 
-      <div class="flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:overflow-hidden">
+      <div
+        class="flex-1 overflow-y-auto lg:grid lg:overflow-hidden"
+        [ngClass]="addAnotherTablePending ? 'lg:grid-cols-1' : 'lg:grid-cols-[minmax(0,1fr)_360px]'"
+      >
         <div class="p-4 md:p-6 lg:overflow-y-auto">
           <div class="grid gap-4">
         <hlm-alert variant="warning" *ngIf="holdExpired">
@@ -1228,7 +1231,10 @@
 
           </div>
         </div>
-        <aside class="hidden border-l border-brand-100 bg-brand-50/30 p-4 lg:block lg:overflow-y-auto md:p-6">
+        <aside
+          *ngIf="!addAnotherTablePending"
+          class="hidden border-l border-brand-100 bg-brand-50/30 p-4 lg:block lg:overflow-y-auto md:p-6"
+        >
           <hlm-numpad
             mode="phone"
             caption="→ Phone"
