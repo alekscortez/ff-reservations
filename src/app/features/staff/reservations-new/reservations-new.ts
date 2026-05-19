@@ -80,6 +80,7 @@ import {
   writeClipboard,
 } from './reservations-new-confirm';
 import {
+  formatPhoneAsYouType,
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToE164,
@@ -98,11 +99,12 @@ import { HlmDialog, HlmConfirmDialog } from '../../../shared/ui/dialog';
 import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNativeSelect } from '../../../shared/ui/native-select';
+import { HlmNumpad } from '../../../shared/ui/numpad';
 import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, SquareStandHandoff, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, SquareStandHandoff, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmNumpad, HlmToggle],
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',
@@ -320,6 +322,28 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   private readonly _phoneCountry = signal<'US' | 'MX'>('US');
   get phoneCountry(): 'US' | 'MX' { return this._phoneCountry(); }
   set phoneCountry(value: 'US' | 'MX') { this._phoneCountry.set(value); }
+  // Signal mirror of the phone FormControl's raw value, NOT debounced — the
+  // existing debounced subscription on line ~546 drives the CRM search but
+  // would lag the numpad's [value] binding. Surface a live signal so
+  // phoneNationalDigits() recomputes instantly on each keystroke / numpad
+  // tap.
+  private readonly _phoneFormValue = toSignal(
+    this.form.controls.phone.valueChanges,
+    { initialValue: this.form.controls.phone.value },
+  );
+  // Raw 0-10 digit string the host-stand numpad operates on. Derives from
+  // whatever the FormControl holds (E.164 from CRM autofill, formatted
+  // mask from numpad entry, or free-typed) by routing through
+  // formatPhoneAsYouType + stripping non-digits. Drives both the numpad's
+  // [value] (which sees only digits) and the 10-digit cap check in
+  // phone mode.
+  protected readonly phoneNationalDigits = computed(() =>
+    formatPhoneAsYouType(this._phoneFormValue() ?? '', this._phoneCountry()).replace(
+      /\D/g,
+      '',
+    ),
+  );
+  @ViewChild('customerNameInput') protected customerNameInput?: ElementRef<HTMLInputElement>;
   pastFilterDate = new FormControl('', { nonNullable: true });
   pastFilterName = new FormControl('', { nonNullable: true });
 
@@ -574,8 +598,14 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
           this.clientLoading = false;
           if (exact) {
             this.form.controls.customerName.setValue(exact.name || '');
-            this.form.controls.phone.setValue(exact.phone || entered);
+            // Order matters: detect country first so the mask renders in the
+            // right format. Otherwise an MX number from CRM autofill would
+            // get formatted with US parens until phoneCountry catches up on
+            // the next CD pass.
             this.phoneCountry = inferPhoneCountryFromE164(exact.phone) ?? this.phoneCountry;
+            this.form.controls.phone.setValue(
+              formatPhoneAsYouType(exact.phone || entered, this.phoneCountry),
+            );
             this.clientMatches = [];
             this.noClientMatch = false;
           }
@@ -1709,9 +1739,11 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
 
   selectClient(client: CrmClient): void {
     if (!client) return;
-    this.form.controls.phone.setValue(client.phone || '');
     this.form.controls.customerName.setValue(client.name || '');
     this.phoneCountry = inferPhoneCountryFromE164(client.phone) ?? this.phoneCountry;
+    this.form.controls.phone.setValue(
+      formatPhoneAsYouType(client.phone || '', this.phoneCountry),
+    );
     this.clientMatches = [];
     this.noClientMatch = false;
     this.exactMatchPhone = normalizePhone(client.phone);
@@ -1722,8 +1754,35 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     const normalized = normalizePhoneCountry(value);
     if (this.phoneCountry === normalized) return;
     this.phoneCountry = normalized;
+    // Re-render the existing form value through the new country's mask so
+    // the visible input flips formats (e.g. "(956) 123-4567" → "956 123
+    // 4567") immediately instead of waiting for the next keystroke.
+    const current = this.form.controls.phone.value;
+    if (current) {
+      this.form.controls.phone.setValue(formatPhoneAsYouType(current, normalized));
+    }
     this.refreshClientCreditsForCurrentPhone(true);
     this.saveActiveHoldSessionIfNeeded();
+  }
+
+  // Numpad emits the next raw-digits string (previous digits + tapped digit,
+  // or previous digits minus the last on backspace). Re-format through the
+  // mask and store the formatted display in the FormControl so
+  // formControlName renders it back into the visible <input> as "(956)
+  // 123-4567". BE submission's normalizePhoneToE164 strips formatting
+  // again at submit time.
+  onNumpadPhoneChange(rawDigits: string): void {
+    const next = formatPhoneAsYouType(rawDigits, this.phoneCountry);
+    if (next === this.form.controls.phone.value) return;
+    this.form.controls.phone.setValue(next);
+  }
+
+  // ✓ on the numpad signals "phone entry complete" — advance focus to the
+  // Customer Name field which raises the OS keyboard for free-form text.
+  // If the name field isn't rendered (e.g. createdReservation panel is
+  // active) the call is a silent no-op.
+  onNumpadDone(): void {
+    this.customerNameInput?.nativeElement.focus();
   }
 
   clientCreditsTotalRemaining(): number {
