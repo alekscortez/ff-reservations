@@ -301,6 +301,21 @@ describe('ReservationsNew', () => {
       expect(component.showReservationModal).toBe(true);
     });
 
+    it('cashStatusNeedsDeadline gates the deadline UI on PENDING/PARTIAL only', () => {
+      // PAID and COURTESY: no money owed → no deadline needed
+      component.form.controls.paymentStatus.setValue('PAID');
+      expect(component.cashStatusNeedsDeadline()).toBe(false);
+      component.form.controls.paymentStatus.setValue('COURTESY');
+      expect(component.cashStatusNeedsDeadline()).toBe(false);
+
+      // PENDING and PARTIAL: money still owed → deadline required so the
+      // cron sweep can release stale unpaid holds
+      component.form.controls.paymentStatus.setValue('PENDING');
+      expect(component.cashStatusNeedsDeadline()).toBe(true);
+      component.form.controls.paymentStatus.setValue('PARTIAL');
+      expect(component.cashStatusNeedsDeadline()).toBe(true);
+    });
+
     it('Phase 2: selectedTableIds computed mirrors selectedTables for the in-modal map highlight', () => {
       const tableA = { id: 'A1', price: 100, section: 'A', status: 'HOLD' } as any;
       const tableB = { id: 'B2', price: 150, section: 'B', status: 'HOLD' } as any;

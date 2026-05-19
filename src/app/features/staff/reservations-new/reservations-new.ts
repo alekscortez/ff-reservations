@@ -2045,6 +2045,19 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     return this.form.controls.paymentMethod.value === 'cash';
   }
 
+  // PAID and COURTESY don't need a payment deadline — the customer either
+  // already paid or owes nothing. PENDING and PARTIAL DO need one because
+  // money is still owed and the cron sweep releases stale unpaid holds.
+  // Used by the template to hide both the "Set payment deadline" checkbox
+  // and the date/time inputs entirely when the status removes their reason
+  // to exist. Without this gate, staff could manually check the box on a
+  // PAID booking, fill in date/time, and have those values silently
+  // discarded at submit time (confirmReservation() needsDeadline check).
+  cashStatusNeedsDeadline(): boolean {
+    const status = this.form.controls.paymentStatus.value;
+    return status === 'PENDING' || status === 'PARTIAL';
+  }
+
   isSquareMethod(): boolean {
     return this.form.controls.paymentMethod.value === 'square';
   }

@@ -1043,7 +1043,7 @@
             </div>
 
             <div class="grid gap-2 md:col-span-2">
-              <label class="flex items-center gap-2 text-sm text-brand-700" *ngIf="!isUsingClientCredit() && isCashMethod()">
+              <label class="flex items-center gap-2 text-sm text-brand-700" *ngIf="!isUsingClientCredit() && isCashMethod() && cashStatusNeedsDeadline()">
                 <input
                   type="checkbox"
                   class="h-4 w-4"
