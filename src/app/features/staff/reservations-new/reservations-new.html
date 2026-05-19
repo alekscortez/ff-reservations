@@ -819,7 +819,7 @@
           <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-brand-700">
             Tables in this booking
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <span
               *ngFor="let t of selectedTables; trackBy: trackByTableId"
               class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-sm text-brand-800"
@@ -836,17 +836,17 @@
                 <ng-icon name="lucideX" size="12" />
               </button>
             </span>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-full border border-dashed border-brand-300 px-3 py-1 text-sm font-medium text-brand-700 hover:border-brand-500 disabled:opacity-50"
+              (click)="beginAddAnotherTable()"
+              [disabled]="loading || !holdId || selectedTables.length >= maxTablesPerBooking"
+            >
+              + Add another table
+            </button>
           </div>
-          <button
-            type="button"
-            class="mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-brand-300 px-3 py-1.5 text-sm font-medium text-brand-700 hover:border-brand-500 disabled:opacity-50"
-            (click)="beginAddAnotherTable()"
-            [disabled]="loading || !holdId || selectedTables.length >= maxTablesPerBooking"
-          >
-            + Add another table
-          </button>
           <p
-            class="mt-1 text-xs text-red-600"
+            class="mt-2 text-xs text-red-600"
             *ngIf="addAnotherTableError"
           >
             {{ addAnotherTableError }}
