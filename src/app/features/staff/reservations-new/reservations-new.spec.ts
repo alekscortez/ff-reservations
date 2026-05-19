@@ -206,6 +206,89 @@ describe('ReservationsNew', () => {
     });
   });
 
+  describe('+ Add another table flow — dead-end + orphan-hold guards', () => {
+    function seedHeldBooking() {
+      const tableA = { id: 'A1', price: 100, section: 'A', status: 'AVAILABLE' } as any;
+      component.eventDate = '2026-05-09';
+      component.tables = [tableA];
+      component.selectedTables = [tableA];
+      component.holdEntries = [
+        { tableId: 'A1', holdId: 'h-a1', holdExpiresAt: 1700000600, holdCreatedByMe: true },
+      ];
+      component.selectedTable = tableA;
+      component.selectedTableId = 'A1';
+      component.holdId = 'h-a1';
+      component.holdExpiresAt = 1700000600;
+      component.holdCreatedByMe = true;
+    }
+
+    it('cancelAddAnotherTable reopens the modal when a hold is still alive', () => {
+      seedHeldBooking();
+      component.addAnotherTablePending = true;
+      component.showReservationModal = false;
+
+      component.cancelAddAnotherTable();
+
+      // Hold state untouched, modal restored so staff isn't stranded.
+      expect(component.addAnotherTablePending).toBe(false);
+      expect(component.showReservationModal).toBe(true);
+      expect(component.holdId).toBe('h-a1');
+      expect(component.selectedTables).toHaveLength(1);
+    });
+
+    it('cancelAddAnotherTable does NOT reopen the modal when no hold exists', () => {
+      component.eventDate = '2026-05-09';
+      component.selectedTables = [];
+      component.holdEntries = [];
+      component.holdId = null;
+      component.addAnotherTablePending = true;
+      component.showReservationModal = false;
+
+      component.cancelAddAnotherTable();
+
+      expect(component.addAnotherTablePending).toBe(false);
+      expect(component.showReservationModal).toBe(false);
+    });
+
+    it('selectTable on a table we already hold reopens the modal without clearing state (no orphan)', () => {
+      // Reproduce the pre-fix bug: staff cancels + Add another table, then
+      // taps the table they're already holding. The old code path fell
+      // through and cleared local hold state while leaving the server
+      // hold alive — orphan until the cron sweep.
+      seedHeldBooking();
+      component.showReservationModal = false;
+
+      const tableA = component.selectedTables[0];
+      component.selectTable(tableA);
+
+      // Hold + booking state must be untouched.
+      expect(component.holdId).toBe('h-a1');
+      expect(component.selectedTables.map((t) => t.id)).toEqual(['A1']);
+      expect(component.selectedTable?.id).toBe('A1');
+      // Modal reopens so staff can continue.
+      expect(component.showReservationModal).toBe(true);
+      // No error surfaced — the tapped table is the one they're already
+      // booking, not a confused different-table tap.
+      expect(component.addAnotherTableError).toBeNull();
+    });
+
+    it('selectTable on a DIFFERENT table while holding reopens modal WITH the soft error', () => {
+      seedHeldBooking();
+      component.showReservationModal = false;
+      const tableB = { id: 'B2', price: 150, section: 'B', status: 'AVAILABLE' } as any;
+
+      component.selectTable(tableB);
+
+      // Hold state preserved; the staff is steered back to the modal.
+      expect(component.holdId).toBe('h-a1');
+      expect(component.selectedTables.map((t) => t.id)).toEqual(['A1']);
+      expect(component.showReservationModal).toBe(true);
+      // Soft copy — no self-referential "+ Add another table" pointer.
+      expect(component.addAnotherTableError).toContain('hold');
+      expect(component.addAnotherTableError).not.toContain('Add another table');
+    });
+  });
+
   describe('releaseHold empty-entries cleanup (B3)', () => {
     it('clears local hold flags + closes modal when no entries to release', () => {
       component.eventDate = '2026-05-09';

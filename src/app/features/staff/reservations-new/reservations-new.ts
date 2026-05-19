@@ -848,18 +848,22 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
     // Guard: if we own a live hold (or a multi-table booking in progress),
-    // surface the modal with an explanation instead of silently clobbering
-    // the local hold map. Without this, addAnotherTable-fail + subsequent
-    // map-click would orphan the existing server-side holds until the cron
-    // sweep — staff would see them as PENDING_PAYMENT until release.
+    // ANY map tap should reopen the modal instead of silently clobbering
+    // the local hold map. Without this, a tap on a different table would
+    // orphan the existing server-side holds until the cron sweep; a tap
+    // on a table we already hold would clear local state but leave the
+    // server hold orphaned in the same way. The error message only fires
+    // on the different-table case so staff isn't scolded for tapping the
+    // table they're already booking.
     if (
       this.holdId &&
       this.holdCreatedByMe &&
-      this.selectedTables.length > 0 &&
-      !this.selectedTables.some((existing) => existing.id === t.id)
+      this.selectedTables.length > 0
     ) {
-      this.addAnotherTableError =
-        'Release the current booking or click "+ Add another table" before picking a different table.';
+      if (!this.selectedTables.some((existing) => existing.id === t.id)) {
+        this.addAnotherTableError =
+          'You already have a hold. Continue the current booking or release it first.';
+      }
       this.showReservationModal = true;
       return;
     }
@@ -904,6 +908,16 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
   cancelAddAnotherTable(): void {
     this.addAnotherTablePending = false;
     this.addAnotherTableError = null;
+    // Restore the modal if a hold + booking still exist so staff returns
+    // to the form they were editing. Without this, the user is stranded
+    // with a live server hold and no surface to confirm the booking —
+    // the only "recovery" is to tap a different table which surfaces a
+    // scolding error, or to tap the held table which used to orphan the
+    // hold (now also guarded in selectTable).
+    if (this.holdId && this.selectedTables.length > 0) {
+      this.showReservationModal = true;
+      this.saveActiveHoldSessionIfNeeded();
+    }
   }
 
   // Creates a hold for an additional table and appends it to the
