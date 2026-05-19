@@ -1057,17 +1057,27 @@
                 {{ form.controls.remainingMethod.value === 'cash' ? 'Cash' : 'Square link' }}
                 after credit is applied.
               </p>
-              <div class="grid gap-3 md:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
-                <label class="grid gap-1 text-xs text-brand-600">
+              <div class="grid gap-3 sm:grid-cols-2" *ngIf="paymentDeadlineEnabled || (!isUsingClientCredit() && !isCashMethod()) || creditNeedsDeadline()">
+                <label class="grid min-w-0 gap-1 text-xs text-brand-600">
                   Deadline Date
-                  <input type="date" hlmInput [formControl]="paymentDeadlineDate" />
+                  <input
+                    type="date"
+                    hlmInput
+                    class="min-w-0"
+                    [formControl]="paymentDeadlineDate"
+                  />
                 </label>
-                <label class="grid gap-1 text-xs text-brand-600">
-                  Deadline Time (America/Chicago)
-                  <input type="time" hlmInput [formControl]="paymentDeadlineTime" />
+                <label class="grid min-w-0 gap-1 text-xs text-brand-600">
+                  Deadline Time
+                  <input
+                    type="time"
+                    hlmInput
+                    class="min-w-0"
+                    [formControl]="paymentDeadlineTime"
+                  />
                 </label>
-                <p class="text-xs text-brand-500 md:col-span-2">
-                  Default for pending/partial is next day at 12:00 AM (America/Chicago).
+                <p class="text-xs text-brand-500 sm:col-span-2">
+                  Time is America/Chicago (CT). Default for pending/partial is next day at 12:00 AM.
                 </p>
               </div>
             </div>
