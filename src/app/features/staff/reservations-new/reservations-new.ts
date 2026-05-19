@@ -423,18 +423,15 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     )
   );
 
-  // Phase 2 in-modal "Pick another table" view: filters _tables to
-  // AVAILABLE status AND excludes tables already in the current booking
-  // (no point offering a tile that would just no-op). Sorted by id for
-  // predictable scanning during a rush. Re-reads automatically when the
-  // map polls + when staff adds/removes a table.
-  readonly pickerAvailableTables = computed<TableForEvent[]>(() => {
-    const all = this._tables();
-    const selectedIds = new Set(this._selectedTables().map((t) => t.id));
-    return all
-      .filter((t) => t.status === 'AVAILABLE' && !selectedIds.has(t.id))
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  });
+  // Memoized id list of tables already in the booking — fed to the
+  // in-modal picker's <app-table-map> so those tiles render as
+  // already-held and tapping them is a no-op (selectTable's
+  // addAnotherTablePending branch short-circuits same-id taps).
+  // Without this computed the template would .map() every CD cycle
+  // and churn TableMap's ngOnChanges.
+  readonly selectedTableIds = computed<string[]>(() =>
+    this._selectedTables().map((t) => t.id),
+  );
   private readonly _creatingPaymentLink = signal(false);
   get creatingPaymentLink(): boolean { return this._creatingPaymentLink(); }
   set creatingPaymentLink(value: boolean) { this._creatingPaymentLink.set(value); }

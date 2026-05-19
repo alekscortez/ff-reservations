@@ -301,21 +301,18 @@ describe('ReservationsNew', () => {
       expect(component.showReservationModal).toBe(true);
     });
 
-    it('Phase 2: pickerAvailableTables filters AVAILABLE and excludes already-selected', () => {
-      const tableA = { id: 'A1', price: 100, section: 'A', status: 'AVAILABLE' } as any;
-      const tableB = { id: 'B2', price: 150, section: 'B', status: 'AVAILABLE' } as any;
-      const tableC = { id: 'C3', price: 200, section: 'C', status: 'HOLD' } as any;
-      const tableD = { id: 'D4', price: 250, section: 'D', status: 'RESERVED' } as any;
-      const tableE = { id: 'E5', price: 300, section: 'E', status: 'AVAILABLE' } as any;
-      component.tables = [tableA, tableB, tableC, tableD, tableE];
-      // Staff is already holding A1, so A1 must NOT appear in the picker
-      // (would just no-op on tap).
+    it('Phase 2: selectedTableIds computed mirrors selectedTables for the in-modal map highlight', () => {
+      const tableA = { id: 'A1', price: 100, section: 'A', status: 'HOLD' } as any;
+      const tableB = { id: 'B2', price: 150, section: 'B', status: 'HOLD' } as any;
+      component.selectedTables = [tableA, tableB];
+
+      expect(component.selectedTableIds()).toEqual(['A1', 'B2']);
+
+      // Reacts when selectedTables changes (covers addAnotherTable success
+      // path + removeSelectedTable). The map's selectedTableIds input is
+      // what drives the "already in this booking" visual.
       component.selectedTables = [tableA];
-
-      const picker = component.pickerAvailableTables();
-
-      // Only B2 + E5: A1 excluded by selectedTables, C3 + D4 by status.
-      expect(picker.map((t) => t.id)).toEqual(['B2', 'E5']);
+      expect(component.selectedTableIds()).toEqual(['A1']);
     });
   });
 

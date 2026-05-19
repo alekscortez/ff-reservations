@@ -777,7 +777,7 @@
                 Pick another table
               </h4>
               <p class="mt-1 text-sm text-brand-600">
-                Tap any free table to add it to this booking
+                Tap any free (green) table on the map to add it to this booking
                 ({{ selectedTables.length }} of {{ maxTablesPerBooking }} so far).
               </p>
             </div>
@@ -790,36 +790,14 @@
             </button>
           </header>
 
-          <p
-            *ngIf="pickerAvailableTables().length === 0"
-            class="rounded-lg border border-dashed border-brand-200 p-6 text-center text-sm text-brand-500"
-            aria-live="polite"
-          >
-            No tables are available right now.
-          </p>
-
-          <div
-            *ngIf="pickerAvailableTables().length > 0"
-            class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4"
-            role="list"
-          >
-            <button
-              *ngFor="let t of pickerAvailableTables(); trackBy: trackByTableId"
-              type="button"
-              role="listitem"
-              class="rounded-xl border border-brand-200 bg-white p-3 text-left shadow-sm transition active:scale-95 hover:border-brand-900 disabled:opacity-60"
-              (click)="selectTable(t)"
-              [disabled]="loading"
-              [attr.aria-label]="'Add table ' + t.id + ' for $' + t.price"
-            >
-              <div class="grid grid-cols-[1fr_auto] items-start gap-1 text-brand-900">
-                <span class="text-lg font-semibold">{{ t.id }}</span>
-                <span class="text-base font-semibold">${{ t.price }}</span>
-              </div>
-              <div class="mt-1 text-[11px] uppercase tracking-[0.2em] text-brand-500">
-                Section {{ t.section }}
-              </div>
-            </button>
+          <div class="picker-map-shell">
+            <app-table-map
+              class="picker-map-widget"
+              [tables]="tables"
+              [sectionColors]="tableSectionColors"
+              [selectedTableIds]="selectedTableIds()"
+              (tableSelect)="selectTable($event)"
+            ></app-table-map>
           </div>
 
           <p
