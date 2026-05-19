@@ -100,11 +100,12 @@ import { HlmButton } from '../../../shared/ui/button';
 import { HlmInput } from '../../../shared/ui/input';
 import { HlmNativeSelect } from '../../../shared/ui/native-select';
 import { HlmNumpad } from '../../../shared/ui/numpad';
+import { HlmPhoneCountryPrefix } from '../../../shared/ui/phone-country-prefix';
 import { HlmToggle } from '../../../shared/ui/toggle';
 
 @Component({
   selector: 'app-reservations-new',
-  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, SquareStandHandoff, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmNumpad, HlmToggle],
+  imports: [CommonModule, ReactiveFormsModule, NgIcon, PhoneDisplayPipe, TableMap, CashAppQrPad, SquareStandHandoff, HlmAlert, HlmDialog, HlmConfirmDialog, HlmButton, HlmInput, HlmNativeSelect, HlmNumpad, HlmPhoneCountryPrefix, HlmToggle],
   providers: [provideIcons({ lucideX })],
   templateUrl: './reservations-new.html',
   styleUrl: './reservations-new.scss',

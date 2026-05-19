@@ -858,34 +858,22 @@
             <div class="grid gap-4 md:col-span-2 md:grid-cols-[1.2fr_1fr]">
               <label class="grid gap-2 text-xs text-brand-600">
                 Phone
-                <div class="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    hlmToggle variant="outline" class="h-11"
-                    [active]="phoneCountry === 'US'"
-                    (click)="onPhoneCountryChanged('US')"
-                    aria-label="US country code"
-                  >
-                    🇺🇸 +1
-                  </button>
-                  <button
-                    type="button"
-                    hlmToggle variant="outline" class="h-11"
-                    [active]="phoneCountry === 'MX'"
-                    (click)="onPhoneCountryChanged('MX')"
-                    aria-label="Mexico country code"
-                  >
-                    🇲🇽 +52
-                  </button>
+                <div class="flex h-14 items-stretch overflow-hidden rounded-lg border border-input bg-background transition-colors focus-within:border-ring">
+                  <hlm-phone-country-prefix
+                    [country]="phoneCountry"
+                    (countryChange)="onPhoneCountryChanged($event)"
+                  />
+                  <div class="w-px self-stretch bg-input" aria-hidden="true"></div>
+                  <input
+                    type="tel"
+                    hlmInput size="xl"
+                    class="rounded-none border-0 bg-transparent focus:border-transparent"
+                    formControlName="phone"
+                    inputmode="tel"
+                    autocomplete="tel-national"
+                    placeholder="Tap the keypad →"
+                  />
                 </div>
-                <input
-                  type="tel"
-                  hlmInput size="xl"
-                  formControlName="phone"
-                  inputmode="tel"
-                  autocomplete="tel-national"
-                  placeholder="Tap the keypad →"
-                />
               </label>
 
               <label class="grid gap-2 text-xs text-brand-600">
