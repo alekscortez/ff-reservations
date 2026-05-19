@@ -422,6 +422,19 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
       this.filterSectionSignal() ?? 'ALL'
     )
   );
+
+  // Phase 2 in-modal "Pick another table" view: filters _tables to
+  // AVAILABLE status AND excludes tables already in the current booking
+  // (no point offering a tile that would just no-op). Sorted by id for
+  // predictable scanning during a rush. Re-reads automatically when the
+  // map polls + when staff adds/removes a table.
+  readonly pickerAvailableTables = computed<TableForEvent[]>(() => {
+    const all = this._tables();
+    const selectedIds = new Set(this._selectedTables().map((t) => t.id));
+    return all
+      .filter((t) => t.status === 'AVAILABLE' && !selectedIds.has(t.id))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  });
   private readonly _creatingPaymentLink = signal(false);
   get creatingPaymentLink(): boolean { return this._creatingPaymentLink(); }
   set creatingPaymentLink(value: boolean) { this._creatingPaymentLink.set(value); }
@@ -888,9 +901,11 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     this.applyPaymentDefaultsForCurrentMethod();
   }
 
-  // "Add another table" toggle in the modal. Sets a one-shot pending
-  // flag — the staff's next AVAILABLE-table click on the map appends
-  // instead of replacing.
+  // "Add another table" toggle in the modal. Flips the form column to
+  // the in-modal picker (template branches on addAnotherTablePending).
+  // Phase 2: modal STAYS OPEN — the picker renders right there. Phase 1
+  // closed the modal to expose the map underneath, which stranded staff
+  // if they hit Cancel; the picker eliminates that dance entirely.
   beginAddAnotherTable(): void {
     if (!this.holdId || !this.eventDate) return;
     if (this.selectedTables.length >= this.maxTablesPerBooking) {
@@ -899,22 +914,19 @@ export class ReservationsNew implements OnInit, OnDestroy, AfterViewInit {
     }
     this.addAnotherTableError = null;
     this.addAnotherTablePending = true;
-    // Closing the modal makes the map reachable; staff picks the next
-    // table from the same view they used to pick the primary.
-    this.showReservationModal = false;
     this.saveActiveHoldSessionIfNeeded();
   }
 
   cancelAddAnotherTable(): void {
     this.addAnotherTablePending = false;
     this.addAnotherTableError = null;
-    // Restore the modal if a hold + booking still exist so staff returns
-    // to the form they were editing. Without this, the user is stranded
-    // with a live server hold and no surface to confirm the booking —
-    // the only "recovery" is to tap a different table which surfaces a
-    // scolding error, or to tap the held table which used to orphan the
-    // hold (now also guarded in selectTable).
-    if (this.holdId && this.selectedTables.length > 0) {
+    // Phase 2 keeps the modal open during picker mode, so a simple
+    // toggle-off here flips back to the form view. The defensive
+    // reopen below survives an old saved-session where the legacy
+    // Phase 1 path had set showReservationModal=false; without it
+    // staff who quit + restored mid-flow would land in the same
+    // dead-end the Phase 1 patch fixed.
+    if (!this.showReservationModal && this.holdId && this.selectedTables.length > 0) {
       this.showReservationModal = true;
       this.saveActiveHoldSessionIfNeeded();
     }

@@ -287,6 +287,36 @@ describe('ReservationsNew', () => {
       expect(component.addAnotherTableError).toContain('hold');
       expect(component.addAnotherTableError).not.toContain('Add another table');
     });
+
+    it('Phase 2: beginAddAnotherTable keeps the modal open (in-modal picker)', () => {
+      // Pre-Phase 2 the modal closed to expose the map underneath. Phase 2
+      // renders the picker inside the modal's form column instead — modal
+      // stays open and Cancel returns to the form without restart.
+      seedHeldBooking();
+      component.showReservationModal = true;
+
+      component.beginAddAnotherTable();
+
+      expect(component.addAnotherTablePending).toBe(true);
+      expect(component.showReservationModal).toBe(true);
+    });
+
+    it('Phase 2: pickerAvailableTables filters AVAILABLE and excludes already-selected', () => {
+      const tableA = { id: 'A1', price: 100, section: 'A', status: 'AVAILABLE' } as any;
+      const tableB = { id: 'B2', price: 150, section: 'B', status: 'AVAILABLE' } as any;
+      const tableC = { id: 'C3', price: 200, section: 'C', status: 'HOLD' } as any;
+      const tableD = { id: 'D4', price: 250, section: 'D', status: 'RESERVED' } as any;
+      const tableE = { id: 'E5', price: 300, section: 'E', status: 'AVAILABLE' } as any;
+      component.tables = [tableA, tableB, tableC, tableD, tableE];
+      // Staff is already holding A1, so A1 must NOT appear in the picker
+      // (would just no-op on tap).
+      component.selectedTables = [tableA];
+
+      const picker = component.pickerAvailableTables();
+
+      // Only B2 + E5: A1 excluded by selectedTables, C3 + D4 by status.
+      expect(picker.map((t) => t.id)).toEqual(['B2', 'E5']);
+    });
   });
 
   describe('releaseHold empty-entries cleanup (B3)', () => {
