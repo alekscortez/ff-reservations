@@ -105,3 +105,23 @@ app-root,
     line-height: 1.25;
   }
 }
+
+/* Normalize native date / time / datetime-local inputs.
+ *
+ * Without this, iOS Safari renders date/time inputs with its own
+ * intrinsic height (~52px) AND centers the value text inside the
+ * box — they end up taller and visually inconsistent next to the
+ * sibling text inputs that use hlmInput's h-10 / h-11 / h-14
+ * variants (see screenshots from the 2026-05-19 deadline-overflow
+ * report). Stripping -webkit-appearance + forcing left text-align
+ * makes them render like a plain text input; the OS-native date/time
+ * picker still opens on tap because that behavior is independent of
+ * the appearance property.
+ */
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'] {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
