@@ -191,24 +191,53 @@
         class="text-xs text-danger-700"
       >{{ err }}</p>
 
-      <!-- View check-in pass — primary CTA on Android (no Apple Wallet
-           option), outline secondary on Apple devices. Routes through the
-           short URL with ?to=pass so the share-friendly version is what
-           customers get if they screenshot or copy the address. -->
+      <!-- Google's official "Add to Google Wallet" badge — Android-only.
+           Per Google brand guidelines: unmodified asset, min 48dp height,
+           localized variant (en-US default, es-mx for es-* browsers).
+           Backend signs a JWT and returns the pay.google.com save URL;
+           we open it in a new tab so the customer's Wallet app handles
+           the install. -->
+      <button
+        *ngIf="isAndroid()"
+        type="button"
+        class="inline-flex w-fit p-1 transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50 disabled:cursor-not-allowed"
+        (click)="addToGoogleWallet()"
+        [disabled]="googleWalletLoading()"
+        [attr.aria-label]="googleWalletBadgeLabel()"
+      >
+        <img
+          [src]="googleWalletBadgeSrc()"
+          [alt]="googleWalletBadgeLabel()"
+          class="h-12 w-auto"
+          draggable="false"
+        />
+      </button>
+      <p
+        *ngIf="isAndroid() && googleWalletLoading()"
+        class="text-xs text-success-700"
+      >Preparing your pass…</p>
+      <p
+        *ngIf="isAndroid() && googleWalletError() as err"
+        class="text-xs text-danger-700"
+      >{{ err }}</p>
+
+      <!-- View check-in pass — outline secondary on every device. Always
+           available regardless of wallet flow so the customer has a
+           fallback if their wallet app refuses the install. Routes through
+           the short URL with ?to=pass so the share-friendly version is
+           what customers get if they screenshot or copy the address. -->
       <a
         *ngIf="r.shortUrl"
         [href]="r.shortUrl + '?to=pass'"
         hlmBtn
-        [variant]="isAndroid() ? 'default' : 'outline'"
+        variant="outline"
         size="lg"
         target="_blank"
         rel="noopener"
       >View check-in pass</a>
 
       <p class="text-xs text-success-700">
-        {{ isAndroid()
-          ? "Tap above to open your check-in pass with the QR code. Save this link — it's your reservation receipt."
-          : "Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt." }}
+        Show your Wallet pass at the door for check-in. Save this link — it's your reservation receipt.
       </p>
     </div>
 

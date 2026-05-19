@@ -80,6 +80,12 @@ export interface PublicWalletPassResponse {
   byteLength: number;
 }
 
+export interface PublicGoogleWalletResponse {
+  saveUrl: string;
+  classId: string;
+  objectId: string;
+}
+
 export type FindByPhoneResponse =
   | { found: false }
   | {
@@ -179,6 +185,22 @@ export class PublicBookingsService {
   ) {
     return this.api.post<PublicWalletPassResponse>(
       `/public/reservations/${encodeURIComponent(reservationId)}/wallet-pass`,
+      { eventDate },
+      { t: customerToken }
+    );
+  }
+
+  // Token-gated Google Wallet save URL. The backend signs a JWT and
+  // returns the `https://pay.google.com/gp/v/save/{jwt}` URL the FE
+  // hands to the customer. 501 when the service isn't configured —
+  // the badge surface falls back to the plain check-in pass page.
+  generateGoogleWalletSaveUrl(
+    reservationId: string,
+    customerToken: string,
+    eventDate: string
+  ) {
+    return this.api.post<PublicGoogleWalletResponse>(
+      `/public/reservations/${encodeURIComponent(reservationId)}/google-wallet-pass`,
       { eventDate },
       { t: customerToken }
     );

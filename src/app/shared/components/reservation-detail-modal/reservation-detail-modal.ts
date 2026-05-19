@@ -73,6 +73,13 @@ export class ReservationDetailModal {
   @Input() checkInPassError: string | null = null;
   @Input() checkInPassNotice: string | null = null;
   @Input() checkInPassLoading = false;
+  // Parent toggles based on whether the BE has Google Wallet configured
+  // (the FE never calls /google-wallet-pass when this is false). Hides
+  // the "Google Wallet link" button in the Pass tab.
+  @Input() googleWalletAvailable = false;
+  @Input() googleWalletLoading = false;
+  @Input() googleWalletError: string | null = null;
+  @Input() googleWalletNotice: string | null = null;
   @Input() history: ReservationHistoryViewItem[] | null = null;
   @Input() historyLoading = false;
   @Input() historyError: string | null = null;
@@ -92,6 +99,7 @@ export class ReservationDetailModal {
   @Output() openSmsPass = new EventEmitter<void>();
   @Output() openWhatsAppPass = new EventEmitter<void>();
   @Output() sharePass = new EventEmitter<void>();
+  @Output() generateGoogleWalletLink = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
 
   readonly tab = signal<ReservationDetailTab>('overview');

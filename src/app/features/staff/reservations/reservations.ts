@@ -321,6 +321,14 @@ export class Reservations implements OnInit, OnDestroy {
   readonly checkInPassNotice = signal<string | null>(null);
   readonly checkInPassByReservationId = signal<Record<string, GeneratedCheckInPass>>({});
   readonly checkInPassStateByReservationId = signal<Record<string, CheckInPassState>>({});
+  // Google Wallet save-URL state. Parent owns the call so this state
+  // can outlive the modal (in case the user closes + reopens). Flip
+  // googleWalletAvailable on the first 501 to suppress the button
+  // until the next page load.
+  readonly googleWalletAvailable = signal(true);
+  readonly googleWalletLoadingId = signal<string | null>(null);
+  readonly googleWalletError = signal<string | null>(null);
+  readonly googleWalletNotice = signal<string | null>(null);
   readonly historyLoadingId = signal<string | null>(null);
   readonly historyError = signal<string | null>(null);
   readonly historyByReservationId = signal<Record<string, ReservationHistoryViewItem[]>>({});
@@ -1056,6 +1064,51 @@ export class Reservations implements OnInit, OnDestroy {
         ok ? 'Check-in pass link copied.' : 'Copy failed. Please copy manually.',
       );
     });
+  }
+
+  // Generate a Google Wallet save URL and copy it to the clipboard so
+  // staff can SMS/WhatsApp/AirDrop it. 501 from BE flips
+  // googleWalletAvailable off so the button disappears for the rest
+  // of the session — saves repeated misclicks.
+  generateGoogleWalletLink(item: ReservationItem): void {
+    if (this.googleWalletLoadingId()) return;
+    this.googleWalletError.set(null);
+    this.googleWalletNotice.set(null);
+    this.googleWalletLoadingId.set(item.reservationId);
+    this.checkInApi
+      .generateGoogleWalletSaveUrl(item.reservationId, item.eventDate)
+      .subscribe({
+        next: (res) => {
+          this.googleWalletLoadingId.set(null);
+          if (!res?.saveUrl) {
+            this.googleWalletError.set('No Google Wallet link was returned.');
+            return;
+          }
+          this.writeClipboard(res.saveUrl).then((ok) => {
+            this.googleWalletNotice.set(
+              ok
+                ? 'Google Wallet link copied. Send it to the customer.'
+                : `Google Wallet link: ${res.saveUrl}`,
+            );
+          });
+        },
+        error: (err) => {
+          this.googleWalletLoadingId.set(null);
+          const status = Number(err?.status ?? 0);
+          if (status === 501) {
+            this.googleWalletAvailable.set(false);
+            this.googleWalletNotice.set(
+              'Google Wallet is not configured yet — coming soon.',
+            );
+            return;
+          }
+          this.googleWalletError.set(
+            err?.error?.message ||
+              err?.message ||
+              'Failed to generate Google Wallet link',
+          );
+        },
+      });
   }
 
   openSmsShareCheckInPass(item: ReservationItem): void {

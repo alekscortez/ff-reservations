@@ -156,6 +156,7 @@ function buildReservations(overrides = {}) {
   const refundCalls = [];
   const expiredSmsCalls = [];
   const revokePassesCalls = [];
+  const revokeGoogleWalletCalls = [];
 
   const deps = {
     ddb,
@@ -222,6 +223,15 @@ function buildReservations(overrides = {}) {
           revokePassesCalls.push({ reservationId, user });
           return { revoked: [] };
         },
+    revokeGoogleWalletObjectForReservation: Object.hasOwn(
+      overrides,
+      "revokeGoogleWalletObjectForReservation"
+    )
+      ? overrides.revokeGoogleWalletObjectForReservation
+      : async (reservationId) => {
+          revokeGoogleWalletCalls.push({ reservationId });
+          return { revoked: false, reason: "disabled" };
+        },
   };
 
   const svc = createReservationsService(deps, sharedHarness.shared, prHarness.paymentRecording);
@@ -237,6 +247,7 @@ function buildReservations(overrides = {}) {
     refundCalls: refundCalls.length === 0 ? deps.refundSquarePayment : refundCalls,
     expiredSmsCalls,
     revokePassesCalls,
+    revokeGoogleWalletCalls,
   };
 }
 
@@ -943,6 +954,56 @@ describe("cancelReservation revokes active check-in passes", () => {
     assert.equal(revokePassesCalls.length, 1);
     assert.equal(revokePassesCalls[0].reservationId, "r1");
     assert.equal(revokePassesCalls[0].user, "staff@x");
+  });
+
+  it("CANCEL_NO_REFUND path also calls revokeGoogleWalletObjectForReservation", async () => {
+    const { svc, revokeGoogleWalletCalls } = buildReservations({
+      shared: {
+        getReservationById: async () => reservationItem(),
+      },
+    });
+    await svc.cancelReservation(
+      TODAY_LOCAL_DATE,
+      "r1",
+      "T1",
+      "staff@x",
+      "Customer cancelled"
+    );
+    assert.equal(revokeGoogleWalletCalls.length, 1);
+    assert.equal(revokeGoogleWalletCalls[0].reservationId, "r1");
+  });
+
+  it("Google Wallet revoke failure soft-fails with warn log (does NOT block cancel)", async () => {
+    const origWarn = console.warn;
+    const warnLogs = [];
+    console.warn = (...args) => warnLogs.push(args);
+    try {
+      const { svc, historyCalls } = buildReservations({
+        shared: {
+          getReservationById: async () => reservationItem(),
+        },
+        revokeGoogleWalletObjectForReservation: async () => {
+          throw new Error("Google API 503");
+        },
+      });
+      await svc.cancelReservation(
+        TODAY_LOCAL_DATE,
+        "r1",
+        "T1",
+        "staff@x",
+        "Customer cancelled"
+      );
+      const cancelEvent = historyCalls.find(
+        (h) => h.eventType === "RESERVATION_CANCELLED"
+      );
+      assert.ok(cancelEvent, "RESERVATION_CANCELLED history written");
+      const had = warnLogs.some(
+        (args) => String(args?.[0] ?? "") === "google_wallet_revoke_on_cancel_failed"
+      );
+      assert.ok(had, "expected google_wallet_revoke_on_cancel_failed warn");
+    } finally {
+      console.warn = origWarn;
+    }
   });
 
   it("REFUND path calls revokeActivePassesForReservation", async () => {

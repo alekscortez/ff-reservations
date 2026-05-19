@@ -299,8 +299,26 @@
           <button type="button" hlmBtn variant="outline" size="sm" (click)="openSmsPass.emit()">SMS</button>
           <button type="button" hlmBtn variant="outline" size="sm" (click)="openWhatsAppPass.emit()">WhatsApp</button>
           <button type="button" hlmBtn variant="outline" size="sm" (click)="sharePass.emit()">Share</button>
+          <!-- Google Wallet save URL — useful for Android customers who
+               can't open the Apple .pkpass. Emits up to the parent so
+               the dashboard / reservations page can call the BE and
+               copy/open the resulting URL. Hidden when the BE service
+               isn't configured (parent gates via googleWalletAvailable). -->
+          <button
+            *ngIf="googleWalletAvailable"
+            type="button"
+            hlmBtn
+            variant="outline"
+            size="sm"
+            [disabled]="googleWalletLoading"
+            (click)="generateGoogleWalletLink.emit()"
+          >
+            {{ googleWalletLoading ? 'Generating…' : 'Google Wallet link' }}
+          </button>
         </div>
         <p class="break-all text-xs text-brand-500">{{ checkInPassShareMessage(reservation, pass.url) }}</p>
+        <p class="break-all text-xs text-danger-700" *ngIf="googleWalletError">{{ googleWalletError }}</p>
+        <p class="break-all text-xs text-success-700" *ngIf="googleWalletNotice">{{ googleWalletNotice }}</p>
       </div>
     </article>
   </div>

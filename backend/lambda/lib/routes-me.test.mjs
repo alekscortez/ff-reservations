@@ -164,6 +164,8 @@ function makeFullCtx(overrides = {}) {
     issuePassForReservation: [],
     generateWalletPass: [],
     walletPassEnabled: [],
+    generateGoogleWalletSaveUrl: [],
+    googleWalletEnabled: [],
     createSquarePayment: [],
     createSquarePaymentLink: [],
     setReservationPaymentLinkWindow: [],
@@ -302,6 +304,24 @@ function makeFullCtx(overrides = {}) {
         return overrides.walletPassEnabled === undefined
           ? true
           : Boolean(overrides.walletPassEnabled);
+      },
+      generateGoogleWalletSaveUrl: async (args) => {
+        calls.generateGoogleWalletSaveUrl.push(args);
+        if (overrides.generateGoogleWalletSaveUrlThrows)
+          throw overrides.generateGoogleWalletSaveUrlThrows;
+        return (
+          overrides.generateGoogleWalletSaveUrlResult ?? {
+            saveUrl: "https://pay.google.com/gp/v/save/fake-jwt",
+            classId: `3388.ff-event-${args?.reservation?.eventDate ?? "unknown"}`,
+            objectId: `3388.res-${args?.reservation?.reservationId ?? "unknown"}`,
+          }
+        );
+      },
+      googleWalletEnabled: () => {
+        calls.googleWalletEnabled.push(true);
+        return overrides.googleWalletEnabled === undefined
+          ? true
+          : Boolean(overrides.googleWalletEnabled);
       },
       createSquarePayment: async (args) => {
         calls.createSquarePayment.push(args);
@@ -1024,6 +1044,21 @@ describe("POST /me/reservations/{id}/wallet-pass", () => {
     assert.equal(res.body.code, "RESERVATION_NOT_PAID");
   });
 
+  it("COURTESY reservations can download an Apple Wallet pass (helper-eligibility regression)", async () => {
+    // Regression for the line-654 bug where /me wallet-pass rejected
+    // COURTESY because it inlined `paymentStatus !== "PAID"` instead of
+    // using isPassEligiblePaymentStatus.
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, paymentStatus: "COURTESY" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.generateWalletPass.length, 1);
+  });
+
   it("auto-issues check-in pass when none exists, then generates wallet pass", async () => {
     const { ctx, calls } = makeFullCtx({
       method: "POST",
@@ -1075,6 +1110,133 @@ describe("POST /me/reservations/{id}/wallet-pass", () => {
     assert.equal(res.statusCode, 404);
     assert.equal(res.body.code, "PASS_NOT_READY");
     assert.equal(calls.generateWalletPass.length, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /me/reservations/{id}/google-wallet-pass
+// ---------------------------------------------------------------------------
+
+describe("POST /me/reservations/{id}/google-wallet-pass", () => {
+  const paidReservation = {
+    reservationId: "r1",
+    customerCognitoSub: SUB,
+    customerName: "Aleks",
+    eventDate: "2026-06-01",
+    tableId: "T7",
+    status: "CONFIRMED",
+    paymentStatus: "PAID",
+  };
+
+  it("400 on bad eventDate", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "nope" } },
+      reservation: paidReservation,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("403 when reservation is not the caller's", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, customerCognitoSub: "other-sub" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 403);
+  });
+
+  it("501 GOOGLE_WALLET_NOT_CONFIGURED when service disabled", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      googleWalletEnabled: false,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 501);
+    assert.equal(res.body.code, "GOOGLE_WALLET_NOT_CONFIGURED");
+    assert.equal(calls.generateGoogleWalletSaveUrl.length, 0);
+  });
+
+  it("400 when reservation is not CONFIRMED", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, status: "CANCELLED" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+  });
+
+  it("400 RESERVATION_NOT_PAID for PENDING", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, paymentStatus: "PENDING" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.code, "RESERVATION_NOT_PAID");
+  });
+
+  it("happy path: PAID returns saveUrl + classId + objectId", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      activePass: {
+        passId: "p1",
+        token: "live-tok",
+        reservationId: "r1",
+      },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(
+      res.body.saveUrl,
+      "https://pay.google.com/gp/v/save/fake-jwt"
+    );
+    assert.equal(calls.generateGoogleWalletSaveUrl.length, 1);
+    assert.equal(
+      calls.generateGoogleWalletSaveUrl[0].checkInPass.token,
+      "live-tok"
+    );
+  });
+
+  it("COURTESY reservations can save to Google Wallet", async () => {
+    const { ctx } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: { ...paidReservation, paymentStatus: "COURTESY" },
+      activePass: { passId: "p1", token: "tok", reservationId: "r1" },
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.saveUrl.startsWith("https://pay.google.com/"));
+  });
+
+  it("auto-issues check-in pass when none exists", async () => {
+    const { ctx, calls } = makeFullCtx({
+      method: "POST",
+      path: "/me/reservations/r1/google-wallet-pass",
+      event: { body: { eventDate: "2026-06-01" } },
+      reservation: paidReservation,
+      activePass: null,
+    });
+    const res = await handleMeRoute(ctx);
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.issuePassForReservation.length, 1);
+    assert.equal(calls.generateGoogleWalletSaveUrl.length, 1);
   });
 });
 

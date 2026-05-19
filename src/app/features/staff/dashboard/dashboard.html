@@ -305,6 +305,10 @@
     [checkInPassError]="checkInPassError()"
     [checkInPassNotice]="checkInPassNotice()"
     [checkInPassLoading]="checkInPassLoadingId() === detail.reservationId"
+    [googleWalletAvailable]="googleWalletAvailable()"
+    [googleWalletLoading]="googleWalletLoadingId() === detail.reservationId"
+    [googleWalletError]="googleWalletError()"
+    [googleWalletNotice]="googleWalletNotice()"
     [history]="getHistory(detail)"
     [historyLoading]="historyLoadingId() === detail.reservationId"
     [historyError]="historyError()"
@@ -322,6 +326,7 @@
     (openSmsPass)="openSmsShareCheckInPass(detail)"
     (openWhatsAppPass)="openWhatsAppShareCheckInPass(detail)"
     (sharePass)="shareCheckInPassLink(detail)"
+    (generateGoogleWalletLink)="generateGoogleWalletLink(detail)"
     (changeTables)="openChangeTables(detail)"
   />
 </ng-container>

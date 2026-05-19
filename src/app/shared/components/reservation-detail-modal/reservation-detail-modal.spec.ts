@@ -44,12 +44,17 @@ function makeReservation(overrides: Partial<ReservationItem> = {}): ReservationI
       [history]="history"
       [historyLoading]="historyLoading"
       [canCancel]="canCancel"
+      [googleWalletAvailable]="googleWalletAvailable"
+      [googleWalletLoading]="googleWalletLoading"
+      [googleWalletError]="googleWalletError"
+      [googleWalletNotice]="googleWalletNotice"
       (close)="onClose()"
       (takePayment)="onTakePayment()"
       (generateSquareLink)="onGenerateSquare()"
       (sendSms)="onSendSms()"
       (copyLink)="onCopyLink()"
       (reissuePass)="onReissuePass()"
+      (generateGoogleWalletLink)="onGenerateGoogleWalletLink()"
       (cancel)="onCancel()"
       (changeTables)="onChangeTables()"
     />
@@ -66,6 +71,10 @@ class Host {
   history: ReservationHistoryViewItem[] | null = null;
   historyLoading = false;
   canCancel = true;
+  googleWalletAvailable = false;
+  googleWalletLoading = false;
+  googleWalletError: string | null = null;
+  googleWalletNotice: string | null = null;
 
   closeCount = 0;
   takePaymentCount = 0;
@@ -73,6 +82,7 @@ class Host {
   sendSmsCount = 0;
   copyLinkCount = 0;
   reissuePassCount = 0;
+  generateGoogleWalletLinkCount = 0;
   cancelCount = 0;
   changeTablesCount = 0;
 
@@ -82,6 +92,7 @@ class Host {
   onSendSms() { this.sendSmsCount += 1; }
   onCopyLink() { this.copyLinkCount += 1; }
   onReissuePass() { this.reissuePassCount += 1; }
+  onGenerateGoogleWalletLink() { this.generateGoogleWalletLinkCount += 1; }
   onCancel() { this.cancelCount += 1; }
   onChangeTables() { this.changeTablesCount += 1; }
 }
@@ -365,6 +376,69 @@ describe('ReservationDetailModal', () => {
     expect(text).toMatch(/Issued\s/);
     expect(text).toMatch(/Expires\s/);
     expect(text).toContain('staff@x');
+  });
+
+  it('Pass tab: Google Wallet button is hidden when googleWalletAvailable=false', () => {
+    const f = createHost({
+      reservation: makeReservation({ paymentStatus: 'PAID' }),
+      checkInPass: {
+        passId: 'pass-1',
+        url: 'https://example.com/p/abc',
+        token: 't'.repeat(64),
+        qrPayload: 'ffr-checkin:tok',
+        createdAtMs: Date.now(),
+      },
+      googleWalletAvailable: false,
+    });
+    tabButton(f, 'Pass')!.click();
+    f.detectChanges();
+    const text = (f.nativeElement.textContent ?? '') as string;
+    expect(text).not.toContain('Google Wallet link');
+  });
+
+  it('Pass tab: clicking Google Wallet link emits generateGoogleWalletLink', () => {
+    const f = createHost({
+      reservation: makeReservation({ paymentStatus: 'PAID' }),
+      checkInPass: {
+        passId: 'pass-1',
+        url: 'https://example.com/p/abc',
+        token: 't'.repeat(64),
+        qrPayload: 'ffr-checkin:tok',
+        createdAtMs: Date.now(),
+      },
+      googleWalletAvailable: true,
+    });
+    tabButton(f, 'Pass')!.click();
+    f.detectChanges();
+    const buttons = Array.from(
+      f.nativeElement.querySelectorAll('reservation-detail-modal button'),
+    ) as HTMLButtonElement[];
+    const gw = buttons.find((b) => /Google Wallet/i.test(b.textContent ?? ''));
+    expect(gw).toBeTruthy();
+    gw!.click();
+    f.detectChanges();
+    expect(f.componentInstance.generateGoogleWalletLinkCount).toBe(1);
+  });
+
+  it('Pass tab: shows googleWalletError + googleWalletNotice when provided', () => {
+    const f = createHost({
+      reservation: makeReservation({ paymentStatus: 'PAID' }),
+      checkInPass: {
+        passId: 'pass-1',
+        url: 'https://example.com/p/abc',
+        token: 't'.repeat(64),
+        qrPayload: 'ffr-checkin:tok',
+        createdAtMs: Date.now(),
+      },
+      googleWalletAvailable: true,
+      googleWalletError: 'Google API 503',
+      googleWalletNotice: 'Link copied!',
+    });
+    tabButton(f, 'Pass')!.click();
+    f.detectChanges();
+    const text = (f.nativeElement.textContent ?? '') as string;
+    expect(text).toContain('Google API 503');
+    expect(text).toContain('Link copied!');
   });
 
   it('history tab renders rows when history has items', () => {

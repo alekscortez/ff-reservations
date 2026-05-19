@@ -65,6 +65,8 @@ export class ReservationStatus implements OnInit, OnDestroy {
   readonly errorMessage = signal<string | null>(null);
   readonly walletDownloading = signal(false);
   readonly walletError = signal<string | null>(null);
+  readonly googleWalletLoading = signal(false);
+  readonly googleWalletError = signal<string | null>(null);
   readonly customerContact = signal<PublicCustomerContact | null>(null);
   // Seconds remaining on the payment hold. Driven by a 1Hz interval that
   // reads reservation().paymentDeadlineAt and computes the diff. Null
@@ -104,11 +106,29 @@ export class ReservationStatus implements OnInit, OnDestroy {
       : 'Add to Apple Wallet'
   );
 
-  // Android customers can't use Apple Wallet — hide the badge and
-  // promote the "View check-in pass" link as the primary CTA instead.
-  // (Google Wallet integration is on the backlog post-Saturday.) UA
-  // sniffing is fine here: the only thing it gates is which CTA looks
-  // primary; pressing the View pass button works on every browser.
+  // Google's official "Add to Google Wallet" badge — locale-aware on
+  // the same en vs es-mx split as Apple's. Shown only when isAndroid()
+  // is true. The badge is the unmodified Google-provided SVG (brand
+  // guidelines forbid recoloring or scaling below 48dp).
+  readonly googleWalletBadgeSrc = computed(() => {
+    const lang = (typeof navigator !== 'undefined' ? navigator.language : '')
+      .toLowerCase();
+    return lang.startsWith('es')
+      ? '/assets/wallet/add-to-google-wallet-es-mx.svg'
+      : '/assets/wallet/add-to-google-wallet-en.svg';
+  });
+
+  readonly googleWalletBadgeLabel = computed(() =>
+    this.googleWalletBadgeSrc().includes('es-mx')
+      ? 'Añadir a Google Wallet'
+      : 'Add to Google Wallet'
+  );
+
+  // Android customers get the "Add to Google Wallet" badge (real
+  // wallet install via a server-signed JWT) instead of the Apple
+  // .pkpass surface. Both platforms also see "View check-in pass" as
+  // a universal fallback in case the wallet install is refused (demo-
+  // mode issuer + non-test account, or no internet).
   readonly isAndroid = computed(() => {
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
     return /Android/i.test(ua);
@@ -312,6 +332,54 @@ export class ReservationStatus implements OnInit, OnDestroy {
             );
           } else {
             this.walletError.set('Could not generate Wallet pass right now.');
+          }
+        },
+      });
+  }
+
+  // Android sibling: fetch the server-signed save URL and open Google
+  // Wallet via window.location.href so the OS hands off to the Wallet
+  // app (or opens the web fallback if no Wallet app is installed).
+  // pop-up blockers don't apply since this is the same tab.
+  addToGoogleWallet(): void {
+    if (this.googleWalletLoading()) return;
+    this.googleWalletLoading.set(true);
+    this.googleWalletError.set(null);
+    this.telemetry.fire('r_google_wallet_clicked', {
+      eventDate: this.eventDate,
+      reservationId: this.reservationId,
+    });
+    this.bookings
+      .generateGoogleWalletSaveUrl(
+        this.reservationId,
+        this.customerToken,
+        this.eventDate
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res) => {
+          this.googleWalletLoading.set(false);
+          if (res?.saveUrl && typeof window !== 'undefined') {
+            window.location.href = res.saveUrl;
+          } else {
+            this.googleWalletError.set('Could not generate Wallet pass right now.');
+          }
+        },
+        error: (err: unknown) => {
+          this.googleWalletLoading.set(false);
+          if (err instanceof HttpErrorResponse) {
+            const body = err.error as { message?: string; code?: string } | null;
+            if (body?.code === 'GOOGLE_WALLET_NOT_CONFIGURED') {
+              this.googleWalletError.set(
+                'Google Wallet is not available yet. Use the View check-in pass link below.'
+              );
+              return;
+            }
+            this.googleWalletError.set(
+              String(body?.message ?? 'Could not generate Wallet pass right now.')
+            );
+          } else {
+            this.googleWalletError.set('Could not generate Wallet pass right now.');
           }
         },
       });

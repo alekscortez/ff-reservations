@@ -79,6 +79,15 @@ export function createReservationsTableChangeService(
     // reservation without a link; staff regenerates via the Payment
     // Links panel or Take Payment modal.
     createSquarePaymentLink,
+    // Optional. When wired, the table-change flow PATCHes the saved
+    // Google Wallet object so Android customers see the new tables /
+    // deposit reflected in their Wallet card, then sends an addMessage
+    // so the system notification fires. Soft-fail like the Apple
+    // pass-reissue path — table-change should not roll back on a
+    // wallet hiccup.
+    revokeGoogleWalletObjectForReservation,
+    patchGoogleWalletObjectForReservation,
+    notifyGoogleWalletObjectForReservation,
   },
   shared,
   paymentRecording
@@ -1150,6 +1159,60 @@ export function createReservationsTableChangeService(
           message: String(passErr?.message ?? passErr ?? ""),
         });
       }
+    }
+
+    // Google Wallet sibling. Two branches mirror Apple:
+    //   nextStatus === PAID: PATCH the existing object so its textModulesData
+    //     + barcode reflect the new tables + fresh check-in pass token, then
+    //     addMessage so the Android system notification fires.
+    //   nextStatus !== PAID: revoke (state=INACTIVE) the existing object so
+    //     the saved card shows as invalid until the delta payment lands and
+    //     a new pass is issued (at which point the customer re-saves via the
+    //     same Add-to-Google-Wallet flow).
+    // All branches are best-effort. Google Wallet object state is purely
+    // cosmetic — the DDB-backed scanner already rejects via pass status.
+    try {
+      if (
+        nextStatus !== "PAID" &&
+        typeof revokeGoogleWalletObjectForReservation === "function"
+      ) {
+        await revokeGoogleWalletObjectForReservation(reservationId);
+      } else if (
+        nextStatus === "PAID" &&
+        reissuedPass &&
+        typeof patchGoogleWalletObjectForReservation === "function"
+      ) {
+        const reservationForPatch = {
+          ...current,
+          tableId: newTableIds[0],
+          tableIds: newTableIds,
+          tablePrice: newTablePriceSum,
+          tablePrices: newTablePrices,
+          depositAmount: nextDeposit,
+          paymentStatus: nextStatus,
+          paymentTotal: nextDeposit,
+        };
+        await patchGoogleWalletObjectForReservation({
+          reservation: reservationForPatch,
+          checkInPass: reissuedPass,
+        });
+        if (typeof notifyGoogleWalletObjectForReservation === "function") {
+          const tableLabel =
+            newTableIds.length > 1
+              ? `Tables: ${newTableIds.join(", ")}`
+              : `Table: ${newTableIds[0]}`;
+          await notifyGoogleWalletObjectForReservation(reservationId, {
+            header: "Your table changed",
+            body: `${tableLabel}. Show this pass at the door.`,
+          });
+        }
+      }
+    } catch (gwErr) {
+      console.warn("table_change_google_wallet_update_failed", {
+        reservationId,
+        eventDate,
+        message: String(gwErr?.message ?? gwErr ?? ""),
+      });
     }
 
     // Build the response. Mirror the row shape the FE expects so it can

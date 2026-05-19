@@ -58,6 +58,7 @@ import { createReservationsHoldsService } from "./lib/services-reservations-hold
 import { createSquareStandHandoffService } from "./lib/services-square-stand-handoff.mjs";
 import { createPushNotificationsService } from "./lib/services-push-notifications.mjs";
 import { createWalletPassService } from "./lib/services-wallet-pass.mjs";
+import { createGoogleWalletService } from "./lib/services-google-wallet.mjs";
 import { createEventsService } from "./lib/services-events.mjs";
 import { createSquarePaymentsService } from "./lib/services-square-payments.mjs";
 import { createCheckInPassesService } from "./lib/services-checkin-passes.mjs";
@@ -597,6 +598,27 @@ const walletPassService = createWalletPassService({
   assets: WALLET_PASS_ASSETS,
 });
 
+// Google Wallet sibling. Same enable-when-configured pattern as Apple:
+// returns isEnabled()=false until ISSUER_ID + SECRET_ARN are set, in
+// which case the wallet routes 501 cleanly so the FE can fall back to
+// the plain check-in URL.
+const googleWalletService = createGoogleWalletService({
+  secretClient: secretsManager,
+  env: {
+    GOOGLE_WALLET_ISSUER_ID: process.env.GOOGLE_WALLET_ISSUER_ID,
+    GOOGLE_WALLET_SERVICE_ACCOUNT_SECRET_ARN:
+      process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_SECRET_ARN,
+    GOOGLE_WALLET_ORIGINS: process.env.GOOGLE_WALLET_ORIGINS,
+    GOOGLE_WALLET_ISSUER_NAME: process.env.GOOGLE_WALLET_ISSUER_NAME,
+    GOOGLE_WALLET_VENUE_NAME: process.env.GOOGLE_WALLET_VENUE_NAME,
+    GOOGLE_WALLET_VENUE_ADDRESS: process.env.GOOGLE_WALLET_VENUE_ADDRESS,
+    GOOGLE_WALLET_LOGO_URI: process.env.GOOGLE_WALLET_LOGO_URI,
+    GOOGLE_WALLET_HERO_IMAGE_URI: process.env.GOOGLE_WALLET_HERO_IMAGE_URI,
+    WALLET_BACKGROUND_COLOR: process.env.WALLET_BACKGROUND_COLOR,
+  },
+  httpError,
+});
+
 const reservationsHoldsService = createReservationsHoldsService({
   ddb,
   tableNames: {
@@ -625,6 +647,15 @@ const reservationsHoldsService = createReservationsHoldsService({
   // and must be invalidated.
   revokeActivePassesForReservation:
     checkInPassesService.revokeActivePassesForReservation,
+  // Google Wallet sibling. Threaded so cancel-revoke + table-change can
+  // PATCH/INACTIVE-state the saved Google object. All no-ops when the
+  // service isn't configured (isEnabled() returns false).
+  revokeGoogleWalletObjectForReservation:
+    googleWalletService.revokeObjectForReservation,
+  patchGoogleWalletObjectForReservation:
+    googleWalletService.patchObjectForReservation,
+  notifyGoogleWalletObjectForReservation:
+    googleWalletService.notifyObjectForReservation,
   deactivateSquarePaymentLink: squarePaymentsService.deactivatePaymentLink,
   // Threaded so the table-change service can auto-mint a fresh Square
   // link for FREQUENT reservations after a swap drops them back to
@@ -765,6 +796,11 @@ export const handler = async (event) => {
       issuePassForReservation: checkInPassesService.issuePassForReservation,
       generateWalletPass: walletPassService.generatePkpassForReservation,
       walletPassEnabled: walletPassService.isEnabled,
+      // Google Wallet sibling — issued by the same gate (PAID || COURTESY)
+      // and resolves the same check-in pass token; the only difference is
+      // the customer surface (save URL vs .pkpass blob).
+      generateGoogleWalletSaveUrl: googleWalletService.generateSaveUrlForReservation,
+      googleWalletEnabled: googleWalletService.isEnabled,
       publicBookingReturnBaseUrl: PUBLIC_BOOKING_RETURN_BASE_URL,
       publicBookingShortUrlBase: PUBLIC_BOOKING_SHORT_URL_BASE,
       recordPresence: presenceService.recordPresence,
@@ -801,6 +837,8 @@ export const handler = async (event) => {
       issuePassForReservation: checkInPassesService.issuePassForReservation,
       generateWalletPass: walletPassService.generatePkpassForReservation,
       walletPassEnabled: walletPassService.isEnabled,
+      generateGoogleWalletSaveUrl: googleWalletService.generateSaveUrlForReservation,
+      googleWalletEnabled: googleWalletService.isEnabled,
       // payments
       createSquarePayment: squarePaymentsService.createPayment,
       createSquarePaymentLink: squarePaymentsService.createPaymentLink,
@@ -1053,6 +1091,11 @@ export const handler = async (event) => {
         checkInPassesService.getLatestPassForReservation,
       getPassPreviewByToken: checkInPassesService.getPassPreviewByToken,
       verifyAndConsumeCheckInPass: checkInPassesService.verifyAndConsumePass,
+      // Google Wallet save-URL for the staff Pass tab. Same eligibility
+      // gates as the .pkpass route; returns 501 when the service isn't
+      // configured (demo/dev environments without GCP credentials).
+      generateGoogleWalletSaveUrl: googleWalletService.generateSaveUrlForReservation,
+      googleWalletEnabled: googleWalletService.isEnabled,
     });
     if (checkInRouteResponse) return checkInRouteResponse;
 

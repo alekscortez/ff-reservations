@@ -30,6 +30,12 @@ export interface CheckInPassIssueResponse {
   latestPass?: CheckInPass | null;
 }
 
+export interface GoogleWalletSaveResponse {
+  saveUrl: string;
+  classId: string;
+  objectId: string;
+}
+
 export interface CheckInVerifyResult {
   ok: boolean;
   code:
@@ -72,5 +78,16 @@ export class CheckInService {
         scannerDevice: scannerDevice ?? '',
       })
       .pipe(map((res) => res?.result));
+  }
+
+  // Staff Google Wallet save-URL endpoint. Used by the detail-modal Pass
+  // tab so staff can SMS/WhatsApp/copy an Android-installable link for
+  // a customer. Returns 501 when the backend isn't configured — the FE
+  // hides the Google button in that case.
+  generateGoogleWalletSaveUrl(reservationId: string, eventDate: string) {
+    return this.api.post<GoogleWalletSaveResponse>(
+      `/reservations/${encodeURIComponent(reservationId)}/google-wallet-pass`,
+      { eventDate }
+    );
   }
 }

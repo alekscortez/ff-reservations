@@ -140,6 +140,12 @@ function baseCtx({
       pkpassBase64: "AAAA",
       byteLength: 4,
     }),
+    googleWalletEnabled: () => true,
+    generateGoogleWalletSaveUrl: async () => ({
+      saveUrl: "https://pay.google.com/gp/v/save/fake-jwt",
+      classId: "3388.ff-event-2026-05-16",
+      objectId: "3388.res-1",
+    }),
     upsertCrmClient: NOOP_FN,
     appendReservationHistory: appendReservationHistory ?? NOOP_FN,
     getAppSettings: async () =>
@@ -738,6 +744,130 @@ describe("POST /public/reservations/{id}/wallet-pass?t={token}", () => {
     );
     assert.equal(out.statusCode, 200);
     assert.equal(out.body.contentType, "application/vnd.apple.pkpass");
+  });
+});
+
+describe("POST /public/reservations/{id}/google-wallet-pass?t={token}", () => {
+  function googleCtx(overrides = {}) {
+    return baseCtx({
+      ...overrides,
+      methodOverride: "POST",
+      pathOverride: "/public/reservations/res-1/google-wallet-pass",
+    });
+  }
+
+  it("401 when token query param is missing", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: {},
+        bodyOverride: { eventDate: "2026-05-16" },
+      })
+    );
+    assert.equal(out.statusCode, 401);
+    assert.equal(out.body.code, "INVALID_TOKEN");
+  });
+
+  it("400 when eventDate is malformed", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "not-a-date" },
+      })
+    );
+    assert.equal(out.statusCode, 400);
+    assert.equal(out.body.code, "MISSING_EVENT_DATE");
+  });
+
+  it("501 when googleWalletEnabled() returns false", async () => {
+    const j = makeJson();
+    const ctx = googleCtx({
+      json: j.json,
+      queryOverride: { t: "tok" },
+      bodyOverride: { eventDate: "2026-05-16" },
+    });
+    ctx.googleWalletEnabled = () => false;
+    const out = await handlePublicBookingsRoute(ctx);
+    assert.equal(out.statusCode, 501);
+    assert.equal(out.body.code, "GOOGLE_WALLET_NOT_CONFIGURED");
+  });
+
+  it("401 INVALID_TOKEN when customerToken verification fails", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "2026-05-16" },
+        verifyCustomerToken: NEVER_VALID_TOKEN,
+      })
+    );
+    assert.equal(out.statusCode, 401);
+  });
+
+  it("400 RESERVATION_NOT_PAID for ineligible payment status", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "2026-05-16" },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          customerToken: "tok",
+          status: "CONFIRMED",
+          paymentStatus: "PENDING",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 400);
+    assert.equal(out.body.code, "RESERVATION_NOT_PAID");
+  });
+
+  it("happy path: 200 with saveUrl + classId + objectId for PAID", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "2026-05-16" },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          customerToken: "tok",
+          status: "CONFIRMED",
+          paymentStatus: "PAID",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.equal(
+      out.body.saveUrl,
+      "https://pay.google.com/gp/v/save/fake-jwt"
+    );
+    assert.equal(out.body.classId, "3388.ff-event-2026-05-16");
+    assert.equal(out.body.objectId, "3388.res-1");
+  });
+
+  it("COURTESY reservations can save to Google Wallet", async () => {
+    const j = makeJson();
+    const out = await handlePublicBookingsRoute(
+      googleCtx({
+        json: j.json,
+        queryOverride: { t: "tok" },
+        bodyOverride: { eventDate: "2026-05-16" },
+        getReservationById: async () => ({
+          reservationId: "res-1",
+          customerToken: "tok",
+          status: "CONFIRMED",
+          paymentStatus: "COURTESY",
+        }),
+      })
+    );
+    assert.equal(out.statusCode, 200);
+    assert.ok(out.body.saveUrl.startsWith("https://pay.google.com/"));
   });
 });
 

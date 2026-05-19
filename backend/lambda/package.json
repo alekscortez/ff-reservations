@@ -5,6 +5,8 @@
   "description": "Runtime-only dependencies bundled with the Lambda function code. AWS SDK is provided by the Node 22 runtime and is NOT listed here.",
   "type": "module",
   "dependencies": {
+    "google-auth-library": "^9.15.1",
+    "jsonwebtoken": "^9.0.2",
     "passkit-generator": "^3.5.7"
   }
 }

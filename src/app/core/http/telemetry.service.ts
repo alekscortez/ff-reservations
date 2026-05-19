@@ -35,6 +35,7 @@ export type TelemetryEvent =
   | 'r_status_cancelled_seen'
   | 'r_release_clicked'
   | 'r_wallet_clicked'
+  | 'r_google_wallet_clicked'
   // Find-modal flow (Tier S, 2026-05-14). Tracks both Phone and
   // Booking-code lookup paths so we can compare which one customers
   // reach for + measure not-found rate per channel.

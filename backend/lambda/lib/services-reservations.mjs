@@ -69,6 +69,11 @@ export function createReservationsService(
     // the door (scanner only checks pass status, not the reservation's
     // status). Soft-fail on revoke errors: the cancel is source-of-truth.
     revokeActivePassesForReservation,
+    // Same pattern for the Google Wallet sibling — PATCH the saved
+    // object's state to INACTIVE so the saved Android card visually
+    // reflects the cancellation. Purely cosmetic; the DDB-backed
+    // scanner already rejects via the revoked pass status. Soft-fail.
+    revokeGoogleWalletObjectForReservation,
   },
   shared,
   paymentRecording
@@ -708,6 +713,22 @@ export function createReservationsService(
         await revokeActivePassesForReservation(reservationId, user);
       } catch (err) {
         console.warn("checkin_pass_revoke_on_cancel_failed", {
+          reservationId,
+          eventDate,
+          resolutionType,
+          message: String(err?.message ?? err ?? ""),
+        });
+      }
+    }
+
+    // Google Wallet sibling — PATCH the saved object's state to INACTIVE
+    // so the saved Android card reflects the cancellation. Cosmetic-only:
+    // the scanner's gate is the DDB pass row, not the wallet object state.
+    if (typeof revokeGoogleWalletObjectForReservation === "function") {
+      try {
+        await revokeGoogleWalletObjectForReservation(reservationId);
+      } catch (err) {
+        console.warn("google_wallet_revoke_on_cancel_failed", {
           reservationId,
           eventDate,
           resolutionType,

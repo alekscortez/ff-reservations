@@ -1,3 +1,5 @@
+import { isPassEligiblePaymentStatus } from "./services-reservations-shared.mjs";
+
 // Customer self-service routes. All require a customer access token
 // (enforced by API Gateway via the customer-only authorizer + by
 // requireCustomerOwnership at the Lambda layer for defense in depth).
@@ -14,6 +16,7 @@
 //   PUT    /me/reservations/{id}/cancel               — self-cancel (≥24h, credit only)
 //   GET    /me/reservations/{id}/check-in-pass        — re-fetch own pass
 //   POST   /me/reservations/{id}/wallet-pass          — Apple Wallet pkpass (base64)
+//   POST   /me/reservations/{id}/google-wallet-pass   — Google Wallet save URL
 //   GET    /me/credits                                — reschedule credit balance
 //   POST   /me/push-tokens                            — register Expo push token
 //   DELETE /me/push-tokens/{token}                    — unregister push token
@@ -71,6 +74,8 @@ export async function handleMeRoute(ctx) {
     issuePassForReservation,
     generateWalletPass,
     walletPassEnabled,
+    generateGoogleWalletSaveUrl,
+    googleWalletEnabled,
     // payments
     createSquarePayment,
     createSquarePaymentLink,
@@ -651,11 +656,12 @@ export async function handleMeRoute(ctx) {
         cors
       );
     }
-    if (String(reservation?.paymentStatus ?? "").toUpperCase() !== "PAID") {
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
       return json(
         400,
         {
-          message: "Reservation must be paid in full before adding to Apple Wallet",
+          message:
+            "Reservation must be paid or marked courtesy before adding to Apple Wallet",
           code: "RESERVATION_NOT_PAID",
         },
         cors
@@ -701,6 +707,93 @@ export async function handleMeRoute(ctx) {
         contentType: result.contentType,
         pkpassBase64: result.pkpassBase64,
         byteLength: result.byteLength,
+      },
+      cors
+    );
+  }
+
+  // POST /me/reservations/{id}/google-wallet-pass — Android sibling.
+  // Returns the pay.google.com save URL. Same ownership + eligibility
+  // gates as the Apple route above. 501 until GCP credentials are
+  // configured (the mobile app should treat 501 as "Google Wallet not
+  // available" and fall back to a plain pass URL).
+  const meReservationGoogleWalletMatch = path.match(
+    /^\/me\/reservations\/([^/]+)\/google-wallet-pass$/
+  );
+  if (meReservationGoogleWalletMatch && method === "POST") {
+    const sub = requireCustomerOwnership(event);
+    const reservationId = meReservationGoogleWalletMatch[1];
+    const body = (await getBody(event)) ?? {};
+    const eventDate = String(body?.eventDate ?? "").trim();
+    if (!isValidEventDate(eventDate)) {
+      return json(400, { message: "eventDate must be YYYY-MM-DD" }, cors);
+    }
+    const reservation = await getReservationById(eventDate, reservationId);
+    if (!reservation) return json(404, { message: "Reservation not found" }, cors);
+    if (String(reservation?.customerCognitoSub ?? "") !== sub) {
+      return json(403, { message: "Reservation is not yours" }, cors);
+    }
+    if (typeof googleWalletEnabled === "function" && !googleWalletEnabled()) {
+      return json(
+        501,
+        {
+          message: "Google Wallet pass generation is not yet enabled. Coming soon.",
+          code: "GOOGLE_WALLET_NOT_CONFIGURED",
+        },
+        cors
+      );
+    }
+    if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
+      return json(
+        400,
+        { message: "Only confirmed reservations can produce a Wallet pass" },
+        cors
+      );
+    }
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
+      return json(
+        400,
+        {
+          message:
+            "Reservation must be paid or marked courtesy before adding to Google Wallet",
+          code: "RESERVATION_NOT_PAID",
+        },
+        cors
+      );
+    }
+
+    let activePass = await getActivePassForReservation(reservationId, {
+      includeToken: true,
+    });
+    if (!activePass && typeof issuePassForReservation === "function") {
+      const issued = await issuePassForReservation({
+        reservation,
+        issuedBy: actorLabelFromSub(sub),
+        reissue: false,
+      });
+      activePass = issued?.pass ?? null;
+    }
+    if (!activePass?.token) {
+      return json(
+        404,
+        {
+          message: "No check-in pass available yet for this reservation.",
+          code: "PASS_NOT_READY",
+        },
+        cors
+      );
+    }
+
+    const result = await generateGoogleWalletSaveUrl({
+      reservation,
+      checkInPass: activePass,
+    });
+    return json(
+      200,
+      {
+        saveUrl: result.saveUrl,
+        classId: result.classId,
+        objectId: result.objectId,
       },
       cors
     );

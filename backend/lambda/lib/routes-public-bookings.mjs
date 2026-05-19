@@ -240,6 +240,8 @@ export async function handlePublicBookingsRoute(ctx) {
     issuePassForReservation,
     generateWalletPass,
     walletPassEnabled,
+    generateGoogleWalletSaveUrl,
+    googleWalletEnabled,
     // Base URL for /r/{id} customer-facing landing pages on the SPA web
     // domain. Used by GET /p/{slug} when 302'ing the customer back to
     // /r/{id}?t=…&eventDate=… (and to /check-in/pass for ?to=pass).
@@ -1162,6 +1164,131 @@ export async function handlePublicBookingsRoute(ctx) {
         contentType: result.contentType,
         pkpassBase64: result.pkpassBase64,
         byteLength: result.byteLength,
+      },
+      cors
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // POST /public/reservations/{id}/google-wallet-pass?t={token}
+  //
+  // Android sibling of the Apple Wallet endpoint above. Returns the
+  // pay.google.com save URL — the FE renders it as the "Add to Google
+  // Wallet" button on /r when the device is Android. Same eligibility +
+  // token-ownership semantics as the Apple route. 501s cleanly when
+  // GCP credentials aren't set so the FE can fall back to the plain
+  // /check-in/pass HTML page.
+  // ─────────────────────────────────────────────────────────────────────
+  const publicGoogleWalletMatch = path.match(
+    /^\/public\/reservations\/([^/]+)\/google-wallet-pass$/
+  );
+  if (publicGoogleWalletMatch && method === "POST") {
+    const reservationId = publicGoogleWalletMatch[1];
+    const providedToken = String(
+      event?.queryStringParameters?.t ?? ""
+    ).trim();
+    const body = (await getBody(event)) ?? {};
+    const eventDate = String(body?.eventDate ?? "").trim();
+    if (!providedToken) {
+      return json(
+        401,
+        { message: "Token required", code: "INVALID_TOKEN" },
+        cors
+      );
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      return json(
+        400,
+        { message: "eventDate is required", code: "MISSING_EVENT_DATE" },
+        cors
+      );
+    }
+    if (typeof googleWalletEnabled === "function" && !googleWalletEnabled()) {
+      return json(
+        501,
+        {
+          message: "Google Wallet pass generation is not enabled",
+          code: "GOOGLE_WALLET_NOT_CONFIGURED",
+        },
+        cors
+      );
+    }
+
+    let reservation;
+    try {
+      reservation = await getReservationById(eventDate, reservationId);
+    } catch (err) {
+      if (err?.statusCode === 404) {
+        return json(
+          404,
+          {
+            message: "Reservation not found",
+            code: "RESERVATION_NOT_FOUND",
+          },
+          cors
+        );
+      }
+      throw err;
+    }
+    if (!verifyCustomerToken(reservation, providedToken)) {
+      return json(401, { message: "Invalid token", code: "INVALID_TOKEN" }, cors);
+    }
+    if (String(reservation?.status ?? "").toUpperCase() !== "CONFIRMED") {
+      return json(
+        400,
+        {
+          message: "Only confirmed reservations can produce a Wallet pass",
+        },
+        cors
+      );
+    }
+    if (!isPassEligiblePaymentStatus(reservation?.paymentStatus)) {
+      return json(
+        400,
+        {
+          message:
+            "Reservation must be paid or marked courtesy before adding to Google Wallet",
+          code: "RESERVATION_NOT_PAID",
+        },
+        cors
+      );
+    }
+
+    let activePass = null;
+    if (typeof getActivePassForReservation === "function") {
+      activePass = await getActivePassForReservation(reservationId, {
+        includeToken: true,
+      });
+    }
+    if (!activePass && typeof issuePassForReservation === "function") {
+      const issued = await issuePassForReservation({
+        reservation,
+        issuedBy: ANON_ACTOR,
+        reissue: false,
+      });
+      activePass = issued?.pass ?? null;
+    }
+    if (!activePass?.token) {
+      return json(
+        404,
+        {
+          message: "No check-in pass available yet for this reservation",
+          code: "PASS_NOT_READY",
+        },
+        cors
+      );
+    }
+
+    const result = await generateGoogleWalletSaveUrl({
+      reservation,
+      checkInPass: activePass,
+    });
+    return json(
+      200,
+      {
+        saveUrl: result.saveUrl,
+        classId: result.classId,
+        objectId: result.objectId,
       },
       cors
     );
