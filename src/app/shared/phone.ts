@@ -74,3 +74,36 @@ export function inferPhoneCountryFromE164(
   if (e164.startsWith('+1')) return 'US';
   return null;
 }
+
+// Partial as-you-type mask for staff numpad entry. Strips non-digits + any
+// country-code prefix the user pasted, truncates to 10, and emits a
+// readable national-format string. Pure — caller stores raw digits and only
+// uses this for display.
+export function formatPhoneAsYouType(
+  input: string | null | undefined,
+  country: PhoneCountry = 'US'
+): string {
+  let digits = String(input ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (country === 'US' && digits.length === 11 && digits.startsWith('1')) {
+    digits = digits.slice(1);
+  } else if (country === 'MX' && digits.length === 13 && digits.startsWith('521')) {
+    digits = digits.slice(3);
+  } else if (country === 'MX' && digits.length === 12 && digits.startsWith('52')) {
+    digits = digits.slice(2);
+  }
+
+  digits = digits.slice(0, 10);
+
+  if (country === 'MX') {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  }
+
+  if (digits.length < 3) return `(${digits}`;
+  if (digits.length === 3) return `(${digits})`;
+  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}

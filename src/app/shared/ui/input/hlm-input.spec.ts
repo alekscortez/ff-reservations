@@ -9,7 +9,7 @@ import { HlmInput } from './hlm-input';
   template: `<input hlmInput [size]="size" [class]="extra" />`,
 })
 class Host {
-  size: 'default' | 'sm' | 'lg' = 'default';
+  size: 'default' | 'sm' | 'lg' | 'xl' = 'default';
   extra = '';
 }
 
@@ -41,6 +41,12 @@ describe('HlmInput', () => {
   it('lg size applies h-11', () => {
     const cls = inputClass(createHost({ size: 'lg' }));
     expect(cls).toContain('h-11');
+  });
+
+  it('xl size applies h-14 + text-lg (host-stand iPad)', () => {
+    const cls = inputClass(createHost({ size: 'xl' }));
+    expect(cls).toContain('h-14');
+    expect(cls).toContain('text-lg');
   });
 
   it('base classes include border-input + bg-background + focus:border-ring', () => {

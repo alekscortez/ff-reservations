@@ -16,6 +16,9 @@ import { twMerge } from 'tailwind-merge';
  * - default: h-10 (matches the dominant existing pattern)
  * - sm: h-9 (for dense inline rows / table cells)
  * - lg: h-11 (for primary form fields with larger touch targets)
+ * - xl: h-14 (host-stand iPad surfaces — clears Apple HIG 44pt minimum
+ *   even with chunky finger taps; pairs with the reservation-new
+ *   fullscreen layout)
  *
  * The base classes use shadcn semantic tokens (border-input,
  * bg-background, text-foreground, placeholder:text-muted-foreground,
@@ -37,6 +40,7 @@ export const inputVariants = cva(
         default: 'h-10 text-sm',
         sm: 'h-9 text-xs',
         lg: 'h-11 text-sm',
+        xl: 'h-14 text-lg',
       },
     },
     defaultVariants: {

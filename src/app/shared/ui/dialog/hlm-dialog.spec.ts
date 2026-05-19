@@ -22,7 +22,7 @@ import { HlmDialog } from './hlm-dialog';
 })
 class Host {
   open = true;
-  size: 'default' | 'full-on-mobile' | 'sheet' = 'default';
+  size: 'default' | 'full-on-mobile' | 'sheet' | 'fullscreen' = 'default';
   panelClass = '';
   ariaLabel = '';
   ariaLabelledBy = '';
@@ -100,6 +100,25 @@ describe('HlmDialog', () => {
     // shave a bit more so the bottom shadow doesn't clip on short screens.
     expect(panel).toContain('sm:max-h-[calc(100dvh-84px)]');
     expect(panel).toContain('sm:pt-0');
+  });
+
+  it('fullscreen size: panel fills viewport edge-to-edge, no rounding, no width cap', () => {
+    const f = createHost({ size: 'fullscreen' });
+    const wrap = wrapperDiv(f).className;
+    const panel = panelSection(f).className;
+    expect(wrap).toContain('z-[200]');
+    expect(wrap).toContain('flex');
+    // No items-center / justify-center on fullscreen — the panel fills
+    // the wrapper directly via h/w 100%
+    expect(wrap).not.toContain('items-center');
+    expect(panel).toContain('h-[100dvh]');
+    expect(panel).toContain('w-screen');
+    expect(panel).toContain('max-w-none');
+    expect(panel).toContain('rounded-none');
+    // Safe-area insets so the iOS status bar / home indicator do not
+    // overlap controls inside the panel
+    expect(panel).toContain('pt-[env(safe-area-inset-top)]');
+    expect(panel).toContain('pb-[env(safe-area-inset-bottom)]');
   });
 
   it('panelClass merges with size defaults (consumer wins for conflicts)', () => {

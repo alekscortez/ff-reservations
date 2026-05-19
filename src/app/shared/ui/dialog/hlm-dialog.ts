@@ -22,6 +22,11 @@ import { twMerge } from 'tailwind-merge';
  *   // Slide-from-edge sheet (bottom on mobile, top-right on desktop):
  *   <hlm-dialog *ngIf="showQuickActions" (close)="closeQuickActions()" size="sheet">…</hlm-dialog>
  *
+ *   // Edge-to-edge fullscreen (host-stand iPad surfaces). No visible
+ *   // backdrop because the panel fills the viewport — dismiss via an
+ *   // explicit close button inside the panel:
+ *   <hlm-dialog *ngIf="showReservationFullscreen" (close)="closeFlow()" size="fullscreen">…</hlm-dialog>
+ *
  *   // Per-instance panel-shape override (e.g. smaller max-width). The
  *   // panelClass merges into the size's defaults via tailwind-merge,
  *   // last write wins.
@@ -52,6 +57,7 @@ const wrapperVariants = cva('fixed inset-0', {
       'full-on-mobile': 'z-[200] flex items-center justify-center',
       sheet:
         'z-[300] flex items-end justify-center p-0 sm:items-start sm:justify-end sm:p-4 sm:pt-[68px]',
+      fullscreen: 'z-[200] flex',
     },
   },
   defaultVariants: { size: 'default' },
@@ -72,6 +78,13 @@ const panelVariants = cva(
         // so the sticky header consumers add (top-0) doesn't hide under chrome.
         sheet:
           'max-h-[100dvh] w-full rounded-t-2xl border border-brand-100 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-h-[calc(100dvh-84px)] sm:w-[360px] sm:rounded-2xl sm:pt-0',
+        // Edge-to-edge takeover for host-stand iPad. No rounded corners,
+        // no width cap, no centering offset. Consumers control their own
+        // chrome (close button, header). Safe-area insets so the iOS
+        // status bar / home indicator do not overlap controls in any
+        // future iPad with rounded display corners.
+        fullscreen:
+          'h-[100dvh] w-screen max-w-none rounded-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
       },
     },
     defaultVariants: { size: 'default' },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatPhoneAsYouType,
   inferPhoneCountryFromE164,
   normalizePhoneCountry,
   normalizePhoneToDigits,
@@ -95,6 +96,78 @@ describe('normalizePhoneToDigits', () => {
   it('returns empty when input is unparseable', () => {
     expect(normalizePhoneToDigits('garbage')).toBe('');
     expect(normalizePhoneToDigits('')).toBe('');
+  });
+});
+
+describe('formatPhoneAsYouType — US (default)', () => {
+  it('empty input returns empty string', () => {
+    expect(formatPhoneAsYouType('', 'US')).toBe('');
+    expect(formatPhoneAsYouType(null, 'US')).toBe('');
+    expect(formatPhoneAsYouType(undefined, 'US')).toBe('');
+  });
+  it('1 digit emits open paren', () => {
+    expect(formatPhoneAsYouType('9', 'US')).toBe('(9');
+  });
+  it('2 digits stay inside paren', () => {
+    expect(formatPhoneAsYouType('95', 'US')).toBe('(95');
+  });
+  it('exactly 3 digits closes the paren so user sees the area code is done', () => {
+    expect(formatPhoneAsYouType('956', 'US')).toBe('(956)');
+  });
+  it('4 digits → "(956) 1"', () => {
+    expect(formatPhoneAsYouType('9561', 'US')).toBe('(956) 1');
+  });
+  it('6 digits → "(956) 123"', () => {
+    expect(formatPhoneAsYouType('956123', 'US')).toBe('(956) 123');
+  });
+  it('7 digits → "(956) 123-4"', () => {
+    expect(formatPhoneAsYouType('9561234', 'US')).toBe('(956) 123-4');
+  });
+  it('10 digits → "(956) 123-4567"', () => {
+    expect(formatPhoneAsYouType('9561234567', 'US')).toBe('(956) 123-4567');
+  });
+  it('strips any "1" country-code prefix when total is 11 digits', () => {
+    expect(formatPhoneAsYouType('19561234567', 'US')).toBe('(956) 123-4567');
+  });
+  it('truncates extras past 10 digits', () => {
+    expect(formatPhoneAsYouType('95612345678901', 'US')).toBe('(956) 123-4567');
+  });
+  it('strips non-digit characters', () => {
+    expect(formatPhoneAsYouType('(956) 123-4567', 'US')).toBe('(956) 123-4567');
+    expect(formatPhoneAsYouType('+1 956 123 4567', 'US')).toBe('(956) 123-4567');
+    expect(formatPhoneAsYouType('abc956def', 'US')).toBe('(956)');
+  });
+  it('defaults to US when country omitted', () => {
+    expect(formatPhoneAsYouType('9561234567')).toBe('(956) 123-4567');
+  });
+});
+
+describe('formatPhoneAsYouType — MX', () => {
+  it('empty input returns empty string', () => {
+    expect(formatPhoneAsYouType('', 'MX')).toBe('');
+  });
+  it('1-3 digits emitted raw (no paren convention in MX)', () => {
+    expect(formatPhoneAsYouType('8', 'MX')).toBe('8');
+    expect(formatPhoneAsYouType('89', 'MX')).toBe('89');
+    expect(formatPhoneAsYouType('899', 'MX')).toBe('899');
+  });
+  it('4 digits → "899 1"', () => {
+    expect(formatPhoneAsYouType('8991', 'MX')).toBe('899 1');
+  });
+  it('6 digits → "899 105"', () => {
+    expect(formatPhoneAsYouType('899105', 'MX')).toBe('899 105');
+  });
+  it('10 digits → "899 105 4670"', () => {
+    expect(formatPhoneAsYouType('8991054670', 'MX')).toBe('899 105 4670');
+  });
+  it('strips "52" prefix when total is 12 digits', () => {
+    expect(formatPhoneAsYouType('528991054670', 'MX')).toBe('899 105 4670');
+  });
+  it('strips "521" mobile prefix when total is 13 digits', () => {
+    expect(formatPhoneAsYouType('5218991054670', 'MX')).toBe('899 105 4670');
+  });
+  it('truncates extras past 10 digits', () => {
+    expect(formatPhoneAsYouType('89910546709999', 'MX')).toBe('899 105 4670');
   });
 });
 
